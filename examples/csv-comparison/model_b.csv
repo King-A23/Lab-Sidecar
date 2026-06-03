@@ -1,0 +1,6 @@
+epoch,model,seed,val_accuracy,val_loss
+1,model_b,42,0.56,1.18
+2,model_b,42,0.64,0.97
+3,model_b,42,0.72,0.79
+4,model_b,42,0.78,0.67
+5,model_b,42,0.81,0.59

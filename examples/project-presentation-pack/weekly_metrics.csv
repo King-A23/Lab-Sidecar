@@ -1,0 +1,7 @@
+week,model,seed,val_accuracy,val_loss,f1,notes
+1,cnn_baseline,42,0.781,0.642,0.774,initial baseline
+2,cnn_baseline,42,0.804,0.587,0.798,cleaned labels
+3,cnn_augmented,42,0.836,0.512,0.831,added augmentation
+4,cnn_augmented,42,0.849,0.493,0.845,tuned weight decay
+5,transformer_small,42,0.861,0.471,0.858,switched architecture
+6,transformer_small_aug,42,0.884,0.421,0.881,augmentation plus scheduler

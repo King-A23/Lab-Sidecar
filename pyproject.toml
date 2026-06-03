@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lab-sidecar"
+version = "0.1.0"
+description = "Local-first experiment runner and artifact sidecar."
+readme = "PRODUCT_ITERATION_PLAN.md"
+requires-python = ">=3.11"
+dependencies = [
+  "matplotlib>=3.8",
+  "pandas>=2.2",
+  "Pillow>=10.0",
+  "pydantic>=2.7",
+  "python-pptx>=0.6.23",
+  "pyyaml>=6.0",
+  "typer>=0.12",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+
+[project.scripts]
+labsidecar = "lab_sidecar.cli.app:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["lab_sidecar"]

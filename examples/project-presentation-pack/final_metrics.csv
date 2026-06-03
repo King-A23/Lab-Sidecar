@@ -1,0 +1,6 @@
+model,accuracy,f1,latency_ms,params_m,artifact_role
+cnn_baseline,0.804,0.798,4.8,1.2,baseline
+cnn_augmented,0.849,0.845,5.1,1.2,improved_baseline
+transformer_small,0.861,0.858,8.7,2.9,candidate
+transformer_small_aug,0.884,0.881,9.2,2.9,best_accuracy
+transformer_small_aug_quantized,0.872,0.868,5.9,2.9,deployment_candidate

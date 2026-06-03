@@ -1,0 +1,46 @@
+{
+  "project": "course_image_classifier",
+  "metric": "accuracy",
+  "baseline_model": "transformer_small",
+  "unit": {
+    "accuracy": "ratio",
+    "latency_ms": "ms"
+  },
+  "ablations": [
+    {
+      "variant": "baseline",
+      "changes": [],
+      "accuracy": 0.861,
+      "latency_ms": 8.7
+    },
+    {
+      "variant": "with_augmentation",
+      "changes": ["random_crop", "color_jitter"],
+      "accuracy": 0.876,
+      "latency_ms": 8.9
+    },
+    {
+      "variant": "with_scheduler",
+      "changes": ["cosine_lr"],
+      "accuracy": 0.869,
+      "latency_ms": 8.7
+    },
+    {
+      "variant": "augmentation_and_scheduler",
+      "changes": ["random_crop", "color_jitter", "cosine_lr"],
+      "accuracy": 0.884,
+      "latency_ms": 9.2
+    },
+    {
+      "variant": "quantized",
+      "changes": ["int8_dynamic_quantization"],
+      "accuracy": 0.872,
+      "latency_ms": 5.9
+    }
+  ],
+  "recommended_summary": [
+    "The combined augmentation and scheduler variant achieved the best validation accuracy.",
+    "Data augmentation contributed the largest single improvement.",
+    "Quantization reduced latency while keeping accuracy above the original baseline."
+  ]
+}

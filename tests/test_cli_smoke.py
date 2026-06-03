@@ -1,0 +1,1190 @@
+from __future__ import annotations
+
+import csv
+import json
+import os
+import shutil
+import sys
+import time
+from pathlib import Path
+
+import yaml
+from pptx import Presentation
+from typer.testing import CliRunner
+
+from lab_sidecar.cli.app import app
+
+
+runner = CliRunner()
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+
+def copy_examples(workspace: Path) -> None:
+    shutil.copytree(PROJECT_ROOT / "examples", workspace / "examples")
+
+
+def invoke(workspace: Path, args: list[str]):
+    old_cwd = Path.cwd()
+    os.chdir(workspace)
+    try:
+        return runner.invoke(app, args, prog_name="labsidecar", env={}, catch_exceptions=False)
+    finally:
+        os.chdir(old_cwd)
+
+
+def extract_task_id(output: str) -> str:
+    for line in output.splitlines():
+        if line.startswith("Task created: "):
+            return line.split(": ", 1)[1]
+        if line.startswith("Imported as task: "):
+            return line.split(": ", 1)[1]
+    raise AssertionError(f"No task id in output:\n{output}")
+
+
+def read_manifest(workspace: Path, task_id: str) -> dict:
+    path = workspace / ".lab-sidecar" / "tasks" / task_id / "manifest.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def read_csv_rows(path: Path) -> list[dict[str, str]]:
+    with path.open("r", newline="", encoding="utf-8") as fh:
+        return list(csv.DictReader(fh))
+
+
+def assert_non_empty_file(path: Path) -> None:
+    assert path.is_file()
+    assert path.stat().st_size > 0
+
+
+def assert_readable_deck(path: Path, min_slides: int = 5, max_slides: int = 8) -> Presentation:
+    assert_non_empty_file(path)
+    deck = Presentation(path)
+    assert min_slides <= len(deck.slides) <= max_slides
+    for index, slide in enumerate(deck.slides, start=1):
+        text = "\n".join(shape.text for shape in slide.shapes if hasattr(shape, "text"))
+        assert text.strip(), f"slide {index} appears blank"
+        assert any(shape.has_text_frame and shape.text.strip() for shape in slide.shapes), f"slide {index} has no title/text"
+    return deck
+
+
+def wait_for_output(workspace: Path, task_id: str, needle: str, timeout: float = 10.0) -> None:
+    path = workspace / ".lab-sidecar" / "tasks" / task_id / "stdout.log"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if path.exists() and needle in path.read_text(encoding="utf-8", errors="replace"):
+            return
+        time.sleep(0.1)
+    raise AssertionError(f"Timed out waiting for {needle!r} in {path}")
+
+
+def test_init_creates_workspace(tmp_path: Path) -> None:
+    result = invoke(tmp_path, ["init"])
+
+    assert result.exit_code == 0
+    assert (tmp_path / ".lab-sidecar").is_dir()
+    assert (tmp_path / ".lab-sidecar" / "config.yaml").is_file()
+    assert (tmp_path / ".lab-sidecar" / "tasks").is_dir()
+    assert (tmp_path / ".lab-sidecar" / "index.sqlite").is_file()
+
+    second = invoke(tmp_path, ["init"])
+    assert second.exit_code == 2
+
+    forced = invoke(tmp_path, ["init", "--force"])
+    assert forced.exit_code == 0
+
+
+def test_simple_success_task_and_queries(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    result = invoke(tmp_path, ["run", command])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    manifest = read_manifest(tmp_path, task_id)
+
+    assert manifest["schema_version"] == "1"
+    assert manifest["task_id"] == task_id
+    assert manifest["mode"] == "run"
+    assert manifest["status"] == "completed"
+    assert manifest["working_dir"] == "."
+    assert manifest["command"] == command
+    assert manifest["source_path"] is None
+    assert manifest["exit_code"] == 0
+    assert set(["task_dir", "stdout", "stderr"]).issubset(manifest["paths"])
+    assert manifest["artifacts"]
+    assert (task_path / "manifest.json").is_file()
+    assert (task_path / "stdout.log").is_file()
+    assert (task_path / "stderr.log").is_file()
+    assert (task_path / "reproduce" / "command.txt").is_file()
+    assert (task_path / "reproduce" / "env.json").is_file()
+
+    status = invoke(tmp_path, ["status", task_id])
+    assert status.exit_code == 0
+    assert "Status: completed" in status.output
+    assert "Exit code: 0" in status.output
+
+    logs = invoke(tmp_path, ["logs", task_id, "--tail", "20"])
+    assert logs.exit_code == 0
+    assert "Best val_accuracy=0.86" in logs.output
+    assert "== stderr" in logs.output
+
+    artifacts = invoke(tmp_path, ["artifacts", task_id])
+    assert artifacts.exit_code == 0
+    assert "[log]" in artifacts.output
+    assert "stdout.log" in artifacts.output
+
+    (tmp_path / ".lab-sidecar" / "index.sqlite").unlink()
+    assert invoke(tmp_path, ["status", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["logs", task_id, "--stream", "stdout", "--tail", "5"]).exit_code == 0
+    assert invoke(tmp_path, ["artifacts", task_id]).exit_code == 0
+
+
+def test_simple_failure_task(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    command = f'"{sys.executable}" examples/simple-failure/fail.py'
+    result = invoke(tmp_path, ["run", command])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    manifest = read_manifest(tmp_path, task_id)
+
+    assert manifest["status"] == "failed"
+    assert manifest["exit_code"] != 0
+    assert manifest["failure_summary"]
+    assert "FileNotFoundError" in manifest["failure_summary"]
+    assert (task_path / "stderr.log").is_file()
+    assert "FileNotFoundError" in (task_path / "stderr.log").read_text(encoding="utf-8")
+
+    status = invoke(tmp_path, ["status", task_id])
+    assert status.exit_code == 0
+    assert "Status: failed" in status.output
+    assert "Failure summary:" in status.output
+
+    logs = invoke(tmp_path, ["logs", task_id, "--stream", "stderr", "--tail", "20"])
+    assert logs.exit_code == 0
+    assert "FileNotFoundError" in logs.output
+
+
+def test_each_task_has_independent_directory(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    first = extract_task_id(invoke(tmp_path, ["run", command]).output)
+    second = extract_task_id(invoke(tmp_path, ["run", command]).output)
+
+    assert first != second
+    assert (tmp_path / ".lab-sidecar" / "tasks" / first).is_dir()
+    assert (tmp_path / ".lab-sidecar" / "tasks" / second).is_dir()
+
+
+def test_background_run_status_logs_and_cancel(tmp_path: Path) -> None:
+    script = tmp_path / "long_task.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "for i in range(30):",
+                "    print(f'tick={i}', flush=True)",
+                "    time.sleep(0.5)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    command = f'"{sys.executable}" long_task.py'
+    result = invoke(tmp_path, ["run", command, "--background"])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    manifest = read_manifest(tmp_path, task_id)
+    assert manifest["status"] == "running"
+    assert manifest["worker_pid"]
+
+    wait_for_output(tmp_path, task_id, "tick=0")
+
+    status = invoke(tmp_path, ["status", task_id])
+    assert status.exit_code == 0
+    assert "Status: running" in status.output
+
+    logs = invoke(tmp_path, ["logs", task_id, "--stream", "stdout", "--tail", "5"])
+    assert logs.exit_code == 0
+    assert "tick=0" in logs.output
+
+    cancel = invoke(tmp_path, ["cancel", task_id])
+    assert cancel.exit_code == 0
+    assert "Status: cancelled" in cancel.output
+
+    status_after_cancel = invoke(tmp_path, ["status", task_id])
+    assert status_after_cancel.exit_code == 0
+    assert "Status: cancelled" in status_after_cancel.output
+    cancelled_manifest = read_manifest(tmp_path, task_id)
+    assert cancelled_manifest["status"] == "cancelled"
+    assert cancelled_manifest["pid"] is None
+    assert cancelled_manifest["worker_pid"] is None
+
+
+def test_cancel_non_running_task_returns_state_error(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command]).output)
+
+    result = invoke(tmp_path, ["cancel", task_id])
+    assert result.exit_code == 4
+    assert "is not running" in result.output
+    assert "Current status: completed" in result.output
+
+
+def test_ingest_existing_directory(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "examples" / "csv-comparison"
+    before = sorted(path.name for path in source.iterdir())
+
+    result = invoke(tmp_path, ["ingest", "examples/csv-comparison", "--name", "csv import"])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    manifest = read_manifest(tmp_path, task_id)
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    refs_path = task_path / "raw" / "source_refs.json"
+    refs = json.loads(refs_path.read_text(encoding="utf-8"))
+
+    assert manifest["schema_version"] == "1"
+    assert manifest["mode"] == "ingest"
+    assert manifest["status"] == "completed"
+    assert manifest["command"] is None
+    assert manifest["source_path"] == "examples/csv-comparison"
+    assert manifest["working_dir"] == "."
+    assert manifest["exit_code"] == 0
+    assert manifest["name"] == "csv import"
+    assert (task_path / "stdout.log").is_file()
+    assert (task_path / "stderr.log").is_file()
+    assert refs_path.is_file()
+    assert refs["source_path"] == "examples/csv-comparison"
+    assert refs["path_kind"] == "relative"
+    assert refs["source_type"] == "directory"
+    assert refs["child_count"] == len(before)
+    assert "examples/csv-comparison/baseline.csv" in refs["candidate_files"]
+    assert sorted(path.name for path in source.iterdir()) == before
+
+    status = invoke(tmp_path, ["status", task_id])
+    assert status.exit_code == 0
+    assert "Status: completed" in status.output
+
+    artifacts = invoke(tmp_path, ["artifacts", task_id])
+    assert artifacts.exit_code == 0
+    assert "[raw]" in artifacts.output
+    assert "raw/source_refs.json" in artifacts.output
+
+    (tmp_path / ".lab-sidecar" / "index.sqlite").unlink()
+    assert invoke(tmp_path, ["status", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["artifacts", task_id]).exit_code == 0
+
+
+def test_ingest_existing_file(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "examples" / "algorithm-benchmark" / "results.json"
+    before = source.read_text(encoding="utf-8")
+
+    result = invoke(tmp_path, ["ingest", "examples/algorithm-benchmark/results.json"])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    manifest = read_manifest(tmp_path, task_id)
+    refs = json.loads(
+        (
+            tmp_path
+            / ".lab-sidecar"
+            / "tasks"
+            / task_id
+            / "raw"
+            / "source_refs.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert manifest["mode"] == "ingest"
+    assert manifest["source_path"] == "examples/algorithm-benchmark/results.json"
+    assert manifest["exit_code"] == 0
+    assert refs["source_type"] == "file"
+    assert refs["path_kind"] == "relative"
+    assert refs["size_bytes"] == source.stat().st_size
+    assert refs["is_candidate"] is True
+    assert source.read_text(encoding="utf-8") == before
+
+
+def test_ingest_missing_path_and_uninitialized_workspace(tmp_path: Path) -> None:
+    missing = invoke(tmp_path, ["ingest", "missing-results"])
+    assert missing.exit_code == 2
+    assert "workspace is not initialized" in missing.output
+
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    missing_after_init = invoke(tmp_path, ["ingest", "missing-results"])
+    assert missing_after_init.exit_code == 2
+    assert "does not exist" in missing_after_init.output
+
+
+def test_cli_exit_codes_for_missing_tasks_and_uninitialized_run(tmp_path: Path) -> None:
+    run_without_init = invoke(tmp_path, ["run", f'"{sys.executable}" -c "print(1)"'])
+    assert run_without_init.exit_code == 2
+    assert "workspace is not initialized" in run_without_init.output
+
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    missing_status = invoke(tmp_path, ["status", "task_missing"])
+    assert missing_status.exit_code == 3
+
+    missing_logs = invoke(tmp_path, ["logs", "task_missing"])
+    assert missing_logs.exit_code == 3
+
+    missing_artifacts = invoke(tmp_path, ["artifacts", "task_missing"])
+    assert missing_artifacts.exit_code == 3
+
+    missing_cancel = invoke(tmp_path, ["cancel", "task_missing"])
+    assert missing_cancel.exit_code == 3
+
+
+def test_logs_missing_artifact_returns_exit_code_5(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command]).output)
+
+    (tmp_path / ".lab-sidecar" / "tasks" / task_id / "stdout.log").unlink()
+
+    result = invoke(tmp_path, ["logs", task_id, "--stream", "stdout"])
+    assert result.exit_code == 5
+    assert "log files are not available" in result.output
+
+
+def test_collect_csv_comparison_ingest_generates_normalized_metrics(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 0
+    assert "Collected metrics for" in result.output
+    assert "Detected fields:" in result.output
+
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    csv_path = task_path / "metrics" / "normalized_metrics.csv"
+    json_path = task_path / "metrics" / "normalized_metrics.json"
+    summary_path = task_path / "metrics" / "collection-summary.json"
+
+    assert csv_path.is_file()
+    assert json_path.is_file()
+    assert summary_path.is_file()
+
+    rows = read_csv_rows(csv_path)
+    assert rows
+    assert {"source_file", "epoch", "model", "seed", "val_accuracy", "val_loss"}.issubset(rows[0])
+    assert {Path(row["source_file"]).name for row in rows} == {
+        "baseline.csv",
+        "model_a.csv",
+        "model_b.csv",
+    }
+
+    json_rows = json.loads(json_path.read_text(encoding="utf-8"))
+    assert len(json_rows) == len(rows)
+    assert "source_file" in json_rows[0]
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["task_status"] == "completed"
+    assert summary["row_count"] == len(rows)
+    assert {"epoch", "model", "seed", "val_accuracy", "val_loss"}.issubset(summary["detected_fields"])
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}
+    assert artifacts["metrics_normalized_csv"]["type"] == "table"
+    assert artifacts["metrics_normalized_json"]["type"] == "table"
+    assert artifacts["metrics_collection_summary"]["type"] == "config"
+
+
+def test_collect_json_algorithm_benchmark_ingest_generates_normalized_metrics(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(
+        invoke(tmp_path, ["ingest", "examples/algorithm-benchmark/results.json"]).output
+    )
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    rows = read_csv_rows(task_path / "metrics" / "normalized_metrics.csv")
+
+    assert rows
+    assert {
+        "source_file",
+        "benchmark_name",
+        "algorithm",
+        "input_size",
+        "seed",
+        "runtime_ms",
+        "memory_mb",
+    }.issubset(rows[0])
+    assert rows[0]["source_file"].endswith("examples/algorithm-benchmark/results.json")
+
+    json_rows = json.loads((task_path / "metrics" / "normalized_metrics.json").read_text(encoding="utf-8"))
+    assert len(json_rows) == len(rows)
+    assert json_rows[0]["source_file"].endswith("examples/algorithm-benchmark/results.json")
+
+    summary = json.loads((task_path / "metrics" / "collection-summary.json").read_text(encoding="utf-8"))
+    assert {"algorithm", "seed", "runtime_ms", "memory_mb"}.issubset(summary["detected_fields"])
+
+
+def test_collect_missing_task_returns_exit_code_3(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    result = invoke(tmp_path, ["collect", "task_missing"])
+
+    assert result.exit_code == 3
+    assert "was not found" in result.output
+
+
+def test_collect_without_supported_metrics_returns_exit_code_5(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "notes-only"
+    source.mkdir()
+    (source / "notes.txt").write_text("no metrics here\n", encoding="utf-8")
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "notes-only"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 5
+    assert "no supported metrics files" in result.output
+    summary_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "metrics" / "collection-summary.json"
+    assert summary_path.is_file()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["candidate_count"] == 0
+    assert summary["row_count"] == 0
+
+
+def test_collect_after_deleting_sqlite_uses_manifest_and_source_refs(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    index_path = tmp_path / ".lab-sidecar" / "index.sqlite"
+    index_path.unlink()
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 0
+    assert index_path.is_file()
+    csv_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "metrics" / "normalized_metrics.csv"
+    assert csv_path.is_file()
+    assert read_csv_rows(csv_path)
+
+
+def test_figures_csv_comparison_after_collect_generates_png_svg_and_spec(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["figures", task_id])
+
+    assert result.exit_code == 0
+    assert "Generated" in result.output
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    figures_dir = task_path / "figures"
+    png_files = sorted(figures_dir.glob("*.png"))
+    svg_files = sorted(figures_dir.glob("*.svg"))
+
+    assert png_files
+    assert svg_files
+    assert len(png_files) == len(svg_files)
+    for path in [*png_files, *svg_files]:
+        assert_non_empty_file(path)
+        assert path.suffix in {".png", ".svg"}
+
+    spec_path = figures_dir / "figure-spec.yaml"
+    summary_path = figures_dir / "figure-summary.json"
+    assert_non_empty_file(spec_path)
+    assert_non_empty_file(summary_path)
+
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    assert spec["source_metrics"].endswith("metrics/normalized_metrics.csv")
+    assert spec["figures"]
+    assert all(item["chart_type"] == "line" for item in spec["figures"])
+    assert len(spec["figures"]) <= 2
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["figure_count"] == len(png_files)
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_types = {artifact["artifact_id"]: artifact["type"] for artifact in manifest["artifacts"]}
+    assert any(kind == "figure" for kind in artifact_types.values())
+    assert artifact_types["figures_spec"] == "config"
+    assert artifact_types["figures_summary"] == "config"
+
+
+def test_figures_algorithm_benchmark_after_collect_generates_bar_chart(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(
+        invoke(tmp_path, ["ingest", "examples/algorithm-benchmark/results.json"]).output
+    )
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["figures", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    figures_dir = task_path / "figures"
+    assert_non_empty_file(figures_dir / "bar_runtime_ms_by_algorithm.png")
+    assert_non_empty_file(figures_dir / "bar_runtime_ms_by_algorithm.svg")
+    spec = yaml.safe_load((figures_dir / "figure-spec.yaml").read_text(encoding="utf-8"))
+    assert len(spec["figures"]) == 1
+    assert spec["figures"][0]["chart_type"] == "bar"
+    assert spec["figures"][0]["x"] == "algorithm"
+    assert spec["figures"][0]["y"] == "runtime_ms"
+
+
+def test_figures_before_collect_returns_exit_code_5(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+
+    result = invoke(tmp_path, ["figures", task_id])
+
+    assert result.exit_code == 5
+    assert "metrics are not ready" in result.output
+    assert "collect" in result.output
+
+
+def test_figures_missing_task_returns_exit_code_3(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    result = invoke(tmp_path, ["figures", "task_missing"])
+
+    assert result.exit_code == 3
+    assert "was not found" in result.output
+
+
+def test_figures_after_deleting_sqlite_uses_manifest_and_metrics(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    index_path = tmp_path / ".lab-sidecar" / "index.sqlite"
+    index_path.unlink()
+
+    result = invoke(tmp_path, ["figures", task_id])
+
+    assert result.exit_code == 0
+    assert index_path.is_file()
+    figures_dir = tmp_path / ".lab-sidecar" / "tasks" / task_id / "figures"
+    assert any(path.suffix == ".png" and path.stat().st_size > 0 for path in figures_dir.iterdir())
+
+
+def test_figures_with_spec_generates_requested_line_chart(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    spec_path = tmp_path / "figure.yaml"
+    spec_path.write_text(
+        "\n".join(
+            [
+                "figure_id: accuracy_curve",
+                "chart_type: line",
+                "title: Validation Accuracy over Epoch",
+                "x: epoch",
+                "y: val_accuracy",
+                "group_by: source_file",
+                "output:",
+                "  - figures/accuracy_curve.png",
+                "  - figures/accuracy_curve.svg",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "figure.yaml"])
+
+    assert result.exit_code == 0
+    figures_dir = tmp_path / ".lab-sidecar" / "tasks" / task_id / "figures"
+    assert_non_empty_file(figures_dir / "accuracy_curve.png")
+    assert_non_empty_file(figures_dir / "accuracy_curve.svg")
+
+    generated_spec = yaml.safe_load((figures_dir / "figure-spec.yaml").read_text(encoding="utf-8"))
+    assert generated_spec["spec_input_path"] == "figure.yaml"
+    assert generated_spec["figures"][0]["figure_id"] == "accuracy_curve"
+    assert generated_spec["figures"][0]["group_by"] == "source_file"
+
+    summary = json.loads((figures_dir / "figure-summary.json").read_text(encoding="utf-8"))
+    assert summary["metrics_path"].endswith("metrics/normalized_metrics.csv")
+    assert summary["spec_path"] == "figure.yaml"
+    assert summary["generated_figures"][0]["png_path"].endswith("figures/accuracy_curve.png")
+    assert summary["skipped_candidates"] == []
+    assert summary["errors"] == []
+
+
+def test_figures_with_spec_generates_requested_bar_chart(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(
+        invoke(tmp_path, ["ingest", "examples/algorithm-benchmark/results.json"]).output
+    )
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    spec_path = tmp_path / "bar.yaml"
+    spec_path.write_text(
+        "\n".join(
+            [
+                "figure_id: runtime_by_algorithm",
+                "chart_type: bar",
+                "title: Runtime by Algorithm",
+                "x: algorithm",
+                "y: runtime_ms",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "bar.yaml"])
+
+    assert result.exit_code == 0
+    figures_dir = tmp_path / ".lab-sidecar" / "tasks" / task_id / "figures"
+    assert_non_empty_file(figures_dir / "runtime_by_algorithm.png")
+    assert_non_empty_file(figures_dir / "runtime_by_algorithm.svg")
+    summary = json.loads((figures_dir / "figure-summary.json").read_text(encoding="utf-8"))
+    assert summary["generated_figures"][0]["chart_type"] == "bar"
+    assert summary["generated_figures"][0]["x"] == "algorithm"
+    assert summary["generated_figures"][0]["y"] == "runtime_ms"
+
+
+def test_figures_missing_spec_returns_exit_code_2(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "missing.yaml"])
+
+    assert result.exit_code == 2
+    assert "figure spec is invalid" in result.output
+    assert "does not exist" in result.output
+
+
+def test_figures_invalid_spec_yaml_returns_exit_code_2(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "bad.yaml").write_text("figure_id: [unterminated\n", encoding="utf-8")
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "bad.yaml"])
+
+    assert result.exit_code == 2
+    assert "could not be parsed" in result.output
+
+
+def test_figures_spec_missing_metrics_field_returns_exit_code_5(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "missing-field.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: missing_metric",
+                "chart_type: line",
+                "title: Missing Metric",
+                "x: epoch",
+                "y: does_not_exist",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "missing-field.yaml"])
+
+    assert result.exit_code == 5
+    assert "does_not_exist" in result.output
+    summary_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "figures" / "figure-summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["generated_figures"] == []
+    assert summary["errors"]
+    assert "does_not_exist" in summary["skipped_candidates"][0]["reason"]
+
+
+def test_figures_auto_runtime_alias_uses_runtime_ms(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(
+        invoke(tmp_path, ["ingest", "examples/algorithm-benchmark/results.json"]).output
+    )
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["figures", task_id])
+
+    assert result.exit_code == 0
+    spec_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "figures" / "figure-spec.yaml"
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    assert spec["figures"][0]["y"] == "runtime_ms"
+
+
+def test_figures_auto_rejects_bar_chart_with_too_many_categories(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "many-categories.csv"
+    with source.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=["model", "accuracy"])
+        writer.writeheader()
+        for index in range(13):
+            writer.writerow({"model": f"model_{index}", "accuracy": 0.8 + index / 100})
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "many-categories.csv"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["figures", task_id])
+
+    assert result.exit_code == 5
+    assert "limit is 12" in result.output
+    summary = json.loads(
+        (
+            tmp_path
+            / ".lab-sidecar"
+            / "tasks"
+            / task_id
+            / "figures"
+            / "figure-summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert summary["generated_figures"] == []
+    assert summary["skipped_candidates"]
+    assert "limit is 12" in summary["skipped_candidates"][0]["reason"]
+
+
+def test_figures_repeated_run_does_not_duplicate_manifest_artifacts(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = [artifact["artifact_id"] for artifact in manifest["artifacts"]]
+    assert len(artifact_ids) == len(set(artifact_ids))
+
+
+def test_figures_with_spec_after_deleting_sqlite_uses_manifest_and_metrics(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "figure.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: accuracy_curve",
+                "chart_type: line",
+                "title: Validation Accuracy over Epoch",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    index_path = tmp_path / ".lab-sidecar" / "index.sqlite"
+    index_path.unlink()
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "figure.yaml"])
+
+    assert result.exit_code == 0
+    assert index_path.is_file()
+    assert_non_empty_file(
+        tmp_path
+        / ".lab-sidecar"
+        / "tasks"
+        / task_id
+        / "figures"
+        / "accuracy_curve.png"
+    )
+
+
+def test_report_completed_ingest_after_collect_and_figures_generates_markdown(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["report", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    report_path = task_path / "reports" / "report-fragment.md"
+    summary_path = task_path / "reports" / "report-summary.json"
+    assert_non_empty_file(report_path)
+    assert_non_empty_file(summary_path)
+
+    text = report_path.read_text(encoding="utf-8")
+    assert task_id in text
+    assert "status" in text
+    assert "completed" in text
+    assert "指标行数" in text
+    assert "val_accuracy" in text
+    assert "../figures/" in text
+    assert "working_dir" in text
+    assert "source_path" in text
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["template"] == "zh-lab"
+    assert summary["provenance"]["task_id"] == task_id
+    assert summary["metrics"]["row_count"] > 0
+    assert summary["figures"]["figure_count"] > 0
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}
+    assert artifacts["report_fragment_md"]["type"] == "report"
+    assert artifacts["report_fragment_md"]["path"] == "reports/report-fragment.md"
+    assert artifacts["report_summary_json"]["type"] == "config"
+
+
+def test_report_with_metrics_but_no_figures_generates_with_hint(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["report", task_id])
+
+    assert result.exit_code == 0
+    report_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "reports" / "report-fragment.md"
+    text = report_path.read_text(encoding="utf-8")
+    assert "尚未生成图表" in text
+    assert f"labsidecar figures {task_id}" in text
+
+
+def test_report_completed_ingest_without_metrics_returns_exit_code_5(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+
+    result = invoke(tmp_path, ["report", task_id])
+
+    assert result.exit_code == 5
+    assert "requires collected metrics" in result.output
+    assert "collect" in result.output
+
+
+def test_report_failed_run_generates_failure_report_without_metrics(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" examples/simple-failure/fail.py'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command]).output)
+
+    result = invoke(tmp_path, ["report", task_id])
+
+    assert result.exit_code == 0
+    report_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "reports" / "report-fragment.md"
+    text = report_path.read_text(encoding="utf-8")
+    assert "失败" in text
+    assert "failure_summary" in text
+    assert "FileNotFoundError" in text
+    assert "stderr.log 尾部" in text
+    assert "reproduce/command.txt" in text
+    assert "不写成成功实验结果分析" in text
+
+
+def test_report_cancelled_task_generates_cancelled_report(tmp_path: Path) -> None:
+    script = tmp_path / "cancel_me.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "print('ready', flush=True)",
+                "time.sleep(30)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" cancel_me.py'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command, "--background"]).output)
+    wait_for_output(tmp_path, task_id, "ready")
+    assert invoke(tmp_path, ["cancel", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["report", task_id])
+
+    assert result.exit_code == 0
+    report_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "reports" / "report-fragment.md"
+    text = report_path.read_text(encoding="utf-8")
+    assert "取消" in text
+    assert "cancelled" in text
+    assert "cancellation note" in text
+    assert "started_at" in text
+    assert "finished_at" in text
+    assert "不写成成功实验结果分析" in text
+
+
+def test_report_invalid_template_returns_exit_code_2(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["report", task_id, "--template", "bad-template"])
+
+    assert result.exit_code == 2
+    assert "template is invalid" in result.output
+
+
+def test_report_missing_task_returns_exit_code_3(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    result = invoke(tmp_path, ["report", "task_missing"])
+
+    assert result.exit_code == 3
+    assert "was not found" in result.output
+
+
+def test_report_after_deleting_sqlite_uses_manifest_metrics_and_figures(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    index_path = tmp_path / ".lab-sidecar" / "index.sqlite"
+    index_path.unlink()
+
+    result = invoke(tmp_path, ["report", task_id, "--template", "en-paper"])
+
+    assert result.exit_code == 0
+    assert index_path.is_file()
+    report_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "reports" / "report-fragment.md"
+    text = report_path.read_text(encoding="utf-8")
+    assert "Experimental Summary Fragment" in text
+    assert "../figures/" in text
+
+
+def test_report_repeated_run_does_not_duplicate_manifest_artifacts(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id, "--template", "zh-summary"]).exit_code == 0
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = [artifact["artifact_id"] for artifact in manifest["artifacts"]]
+    assert len(artifact_ids) == len(set(artifact_ids))
+    assert artifact_ids.count("report_fragment_md") == 1
+    assert artifact_ids.count("report_summary_json") == 1
+
+
+def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    assert "Presentation draft created:" in result.output
+    assert "Template: zh-summary" in result.output
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    pptx_path = task_path / "slides" / "presentation-draft.pptx"
+    summary_path = task_path / "slides" / "slides-summary.json"
+    assert_non_empty_file(pptx_path)
+    assert_non_empty_file(summary_path)
+
+    deck = assert_readable_deck(pptx_path)
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["template"] == "zh-summary"
+    assert summary["slide_count"] == len(deck.slides)
+    assert len(summary["slides"]) == len(deck.slides)
+    assert all({"slide_index", "title", "purpose", "source_artifacts"}.issubset(slide) for slide in summary["slides"])
+    assert summary["included_metrics"]["row_count"] > 0
+    assert summary["included_metrics"]["numeric"]
+    assert "val_accuracy" in {item["column"] for item in summary["included_metrics"]["numeric"]}
+    assert summary["included_figures"]
+    assert "warnings" in summary
+    assert summary["metrics"]["row_count"] > 0
+    assert summary["figures"]
+    assert "reports/report-fragment.md" in summary["source_artifacts"]
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}
+    assert artifacts["slides_presentation_draft_pptx"]["type"] == "presentation"
+    assert artifacts["slides_presentation_draft_pptx"]["path"] == "slides/presentation-draft.pptx"
+    assert artifacts["slides_summary_json"]["type"] == "config"
+    assert artifacts["slides_summary_json"]["path"] == "slides/slides-summary.json"
+
+
+def test_slides_completed_without_artifacts_returns_exit_code_5(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 5
+    assert "slides generation requires metrics, figures, or report artifacts" in result.output
+    assert "collect" in result.output
+
+
+def test_slides_failed_task_generates_diagnostic_ppt(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" examples/simple-failure/fail.py'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command]).output)
+
+    result = invoke(tmp_path, ["slides", task_id, "--template", "en-summary"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    pptx_path = task_path / "slides" / "presentation-draft.pptx"
+    summary_path = task_path / "slides" / "slides-summary.json"
+    assert_non_empty_file(pptx_path)
+    assert_non_empty_file(summary_path)
+    deck = assert_readable_deck(pptx_path)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["task_status"] == "failed"
+    assert summary["template"] == "en-summary"
+    assert "stderr.log" in summary["source_artifacts"]
+    assert any("Failure" in slide["title"] or "Failed" in slide["title"] for slide in summary["slides"])
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "FileNotFoundError" in deck_text
+    assert "failed" in deck_text
+
+
+def test_slides_cancelled_task_generates_cancelled_diagnostic_ppt(tmp_path: Path) -> None:
+    script = tmp_path / "cancel_me.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "print('ready', flush=True)",
+                "time.sleep(30)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" cancel_me.py'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command, "--background"]).output)
+    wait_for_output(tmp_path, task_id, "ready")
+    assert invoke(tmp_path, ["cancel", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    pptx_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "slides" / "presentation-draft.pptx"
+    summary_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "slides" / "slides-summary.json"
+    deck = assert_readable_deck(pptx_path)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["task_status"] == "cancelled"
+    assert any("取消" in slide["title"] or "Cancellation" in slide["title"] for slide in summary["slides"])
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "cancelled" in deck_text
+    assert "cancellation" in deck_text.lower()
+
+
+def test_slides_with_four_figures_creates_multiple_figure_slides(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+
+    for index, (metric, group_by) in enumerate(
+        [
+            ("val_accuracy", "model"),
+            ("val_loss", "model"),
+            ("val_accuracy", "seed"),
+            ("val_loss", "seed"),
+        ],
+        start=1,
+    ):
+        spec_path = tmp_path / f"figure_{index}.yaml"
+        spec_path.write_text(
+            "\n".join(
+                [
+                    f"figure_id: multi_{index}",
+                    "chart_type: line",
+                    f"title: Multi Figure {index}",
+                    "x: epoch",
+                    f"y: {metric}",
+                    f"group_by: {group_by}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        assert invoke(tmp_path, ["figures", task_id, "--spec", str(spec_path)]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    pptx_path = task_path / "slides" / "presentation-draft.pptx"
+    deck = assert_readable_deck(pptx_path, min_slides=7, max_slides=8)
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    assert len(summary["included_figures"]) == 4
+    figure_slides = [slide for slide in summary["slides"] if "figure" in slide["purpose"]]
+    assert len(figure_slides) == 2
+    assert all(len([source for source in slide["source_artifacts"] if source.endswith(".png")]) <= 2 for slide in figure_slides)
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "figure_id" not in deck_text.lower()
+    assert "multi_1" in deck_text
+    assert "chart_type" not in deck_text.lower()
+
+
+def test_slides_repeated_run_does_not_duplicate_manifest_artifacts(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+
+    assert invoke(tmp_path, ["slides", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["slides", task_id, "--template", "en-summary"]).exit_code == 0
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = [artifact["artifact_id"] for artifact in manifest["artifacts"]]
+    assert len(artifact_ids) == len(set(artifact_ids))
+    assert artifact_ids.count("slides_presentation_draft_pptx") == 1
+    assert artifact_ids.count("slides_summary_json") == 1
+
+
+def test_slides_after_deleting_sqlite_uses_manifest_artifacts(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+    index_path = tmp_path / ".lab-sidecar" / "index.sqlite"
+    index_path.unlink()
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    assert index_path.is_file()
+    pptx_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "slides" / "presentation-draft.pptx"
+    assert_readable_deck(pptx_path)

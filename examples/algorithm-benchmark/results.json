@@ -1,0 +1,27 @@
+{
+  "benchmark_name": "sorting_benchmark",
+  "unit": {
+    "runtime_ms": "ms",
+    "memory_mb": "MB"
+  },
+  "runs": [
+    {"algorithm": "quick_sort", "input_size": 1000, "seed": 1, "runtime_ms": 1.8, "memory_mb": 8.1},
+    {"algorithm": "quick_sort", "input_size": 1000, "seed": 2, "runtime_ms": 1.9, "memory_mb": 8.0},
+    {"algorithm": "quick_sort", "input_size": 1000, "seed": 3, "runtime_ms": 1.7, "memory_mb": 8.2},
+    {"algorithm": "merge_sort", "input_size": 1000, "seed": 1, "runtime_ms": 2.4, "memory_mb": 9.5},
+    {"algorithm": "merge_sort", "input_size": 1000, "seed": 2, "runtime_ms": 2.3, "memory_mb": 9.4},
+    {"algorithm": "merge_sort", "input_size": 1000, "seed": 3, "runtime_ms": 2.5, "memory_mb": 9.6},
+    {"algorithm": "heap_sort", "input_size": 1000, "seed": 1, "runtime_ms": 3.1, "memory_mb": 7.8},
+    {"algorithm": "heap_sort", "input_size": 1000, "seed": 2, "runtime_ms": 3.0, "memory_mb": 7.7},
+    {"algorithm": "heap_sort", "input_size": 1000, "seed": 3, "runtime_ms": 3.2, "memory_mb": 7.8},
+    {"algorithm": "quick_sort", "input_size": 5000, "seed": 1, "runtime_ms": 10.5, "memory_mb": 12.1},
+    {"algorithm": "quick_sort", "input_size": 5000, "seed": 2, "runtime_ms": 10.8, "memory_mb": 12.0},
+    {"algorithm": "quick_sort", "input_size": 5000, "seed": 3, "runtime_ms": 10.6, "memory_mb": 12.2},
+    {"algorithm": "merge_sort", "input_size": 5000, "seed": 1, "runtime_ms": 12.7, "memory_mb": 14.4},
+    {"algorithm": "merge_sort", "input_size": 5000, "seed": 2, "runtime_ms": 12.5, "memory_mb": 14.3},
+    {"algorithm": "merge_sort", "input_size": 5000, "seed": 3, "runtime_ms": 12.9, "memory_mb": 14.5},
+    {"algorithm": "heap_sort", "input_size": 5000, "seed": 1, "runtime_ms": 16.1, "memory_mb": 11.9},
+    {"algorithm": "heap_sort", "input_size": 5000, "seed": 2, "runtime_ms": 15.8, "memory_mb": 11.8},
+    {"algorithm": "heap_sort", "input_size": 5000, "seed": 3, "runtime_ms": 16.2, "memory_mb": 12.0}
+  ]
+}
