@@ -20,9 +20,13 @@ from lab_sidecar.core.paths import resolve_workspace_path
 from lab_sidecar.storage.sqlite_index import upsert_task
 
 
-SUPPORTED_SLIDE_TEMPLATES = {"zh-summary", "en-summary"}
+SUPPORTED_SLIDE_TEMPLATES = {"zh-summary", "en-summary", "zh-project"}
 UNKNOWN_ZH = "未自动推断"
 UNKNOWN_EN = "Not automatically inferred"
+ZH_FONT_FAMILY = "Microsoft YaHei"
+ZH_FALLBACK_FONTS = ["Microsoft YaHei", "SimSun", "Calibri"]
+EN_FONT_FAMILY = "Calibri"
+EN_FALLBACK_FONTS = ["Calibri", "Arial"]
 MAX_FIGURES = 4
 MAX_FIGURES_PER_SLIDE = 2
 MAX_NUMERIC_COLUMNS = 6
@@ -30,6 +34,14 @@ MAX_KEY_COLUMNS = 10
 MAX_REPORT_BULLETS = 5
 MAX_LOG_LINES = 8
 MAX_LOG_CHARS = 860
+MAX_FIELD_DISPLAY_CHARS = 118
+MAX_CAPTION_CHARS = 145
+MAX_TABLE_COLUMNS = 8
+MAX_TABLE_ROWS = 6
+MAX_CELL_CHARS = 42
+COMPARISON_GROUP_COLUMNS = ["variant", "model", "method", "algorithm", "source_file"]
+HIGHER_IS_BETTER_HINTS = ["accuracy", "acc", "f1", "precision", "recall", "auc", "score"]
+LOWER_IS_BETTER_HINTS = ["loss", "runtime", "latency", "time", "memory", "error"]
 
 
 class InvalidSlidesTemplateError(RuntimeError):
@@ -61,16 +73,23 @@ class FigureItem:
     x: str
     y: str
     group_by: str
+    source_metrics: str
 
-    def caption(self, task_path: Path) -> str:
-        parts = [self.figure_id, self.chart_type]
-        if self.x:
-            parts.append(f"x={self.x}")
-        if self.y:
-            parts.append(f"y={self.y}")
-        if self.group_by:
-            parts.append(f"group_by={self.group_by}")
-        return " | ".join(part for part in parts if part)
+    def full_caption(self, unknown: str) -> str:
+        chart_type = self.chart_type if self.chart_type in {"line", "bar", "table", "unknown"} else "unknown"
+        parts = [
+            self.figure_id or unknown,
+            f"type={chart_type}",
+            f"x={self.x or unknown}",
+            f"y={self.y or unknown}",
+            f"group_by={self.group_by or unknown}",
+            f"source={self.source_metrics or unknown}",
+        ]
+        return " | ".join(parts)
+
+    def display_caption(self, task_path: Path, unknown: str) -> str:
+        caption = self.full_caption(unknown)
+        return _short_text(caption, MAX_CAPTION_CHARS)
 
     def to_summary(self, task_path: Path) -> dict[str, str]:
         return {
@@ -80,6 +99,7 @@ class FigureItem:
             "x": self.x,
             "y": self.y,
             "group_by": self.group_by,
+            "source_metrics": self.source_metrics,
         }
 
 
@@ -97,6 +117,33 @@ class SlideRecord:
             "purpose": self.purpose,
             "source_artifacts": self.source_artifacts,
         }
+
+
+@dataclass
+class DisplayText:
+    display: str
+    full: str
+    truncated: bool = False
+
+
+class TextTracker:
+    def __init__(self) -> None:
+        self.truncations: list[dict[str, Any]] = []
+
+    def fit(self, key: str, value: Any, limit: int) -> DisplayText:
+        full = _normalize_inline_text(value)
+        if len(full) <= limit:
+            return DisplayText(display=full, full=full, truncated=False)
+        display = full[: limit - 3].rstrip() + "..."
+        self.truncations.append(
+            {
+                "key": key,
+                "display": display,
+                "full": full,
+                "limit": limit,
+            }
+        )
+        return DisplayText(display=display, full=full, truncated=True)
 
 
 class SlidesGenerationService:
@@ -143,18 +190,25 @@ class SlidesGenerationService:
         )
 
     def _build_context(self, record: TaskRecord, task_path: Path, template: str) -> dict[str, Any]:
+        text_tracker = TextTracker()
         metrics_path = task_path / "metrics" / "normalized_metrics.csv"
         report_path = task_path / "reports" / "report-fragment.md"
         figure_summary_path = task_path / "figures" / "figure-summary.json"
         source_refs_path = task_path / "raw" / "source_refs.json"
         stdout_path = resolve_workspace_path(record.paths.stdout, self.root)
         stderr_path = resolve_workspace_path(record.paths.stderr, self.root)
-        figure_items, figure_warnings = self._find_png_figures(record, task_path, figure_summary_path)
+        figure_items, figure_warnings, figure_metadata = self._find_png_figures(record, task_path, figure_summary_path)
         is_diagnostic = record.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}
         metrics_summary = self._metrics_summary(metrics_path)
-        report_excerpt = self._report_excerpt(report_path, template)
-        stdout_tail = _bounded_log_tail(stdout_path)
-        stderr_tail = _bounded_log_tail(stderr_path)
+        unknown = UNKNOWN_ZH if template.startswith("zh") else UNKNOWN_EN
+        metrics_table = self._metrics_table_preview(metrics_path, unknown)
+        key_comparison = self._key_comparison(metrics_path, unknown)
+        caption_truncations = self._caption_truncations(figure_items, unknown)
+        report_excerpt = self._report_excerpt(report_path, template, text_tracker)
+        stdout_tail = _bounded_log_tail(stdout_path, "stdout_tail", text_tracker)
+        stderr_tail = _bounded_log_tail(stderr_path, "stderr_tail", text_tracker)
+        project_goal = self._project_goal_excerpt(record, task_path, text_tracker)
+        fields = self._display_fields(record, text_tracker)
         source_artifacts = self._source_artifacts(
             task_path=task_path,
             metrics_path=metrics_path,
@@ -164,8 +218,10 @@ class SlidesGenerationService:
             stdout_path=stdout_path,
             stderr_path=stderr_path,
             figure_items=figure_items,
+            project_goal_path=project_goal.get("path_abs"),
         )
         warnings = list(figure_warnings)
+        warnings.extend(figure_metadata["warnings"])
         if metrics_summary.get("numeric_omitted_count", 0):
             warnings.append(f"omitted {metrics_summary['numeric_omitted_count']} numeric metric column(s) from slides")
         if metrics_summary.get("omitted_key_column_count", 0):
@@ -174,23 +230,50 @@ class SlidesGenerationService:
         return {
             "template": template,
             "language": "zh" if template.startswith("zh") else "en",
-            "unknown": UNKNOWN_ZH if template.startswith("zh") else UNKNOWN_EN,
+            "unknown": unknown,
             "is_diagnostic": is_diagnostic,
+            "is_project_template": template == "zh-project",
             "has_completed_inputs": metrics_path.exists() or bool(figure_items) or report_path.exists(),
             "record": record,
             "task_path": task_path,
+            "fields": fields,
             "metrics_path": metrics_path if metrics_path.exists() else None,
             "metrics_summary": metrics_summary,
+            "metrics_table": metrics_table,
+            "table_truncations": _table_truncations(metrics_table),
+            "key_comparison": key_comparison,
+            "key_comparisons": [key_comparison] if key_comparison.get("present") else [],
             "figure_items": figure_items,
+            "figure_warnings": figure_metadata["warnings"],
+            "figure_skipped_candidates": figure_metadata["skipped_candidates"],
+            "caption_truncations": caption_truncations,
             "figure_summary_path": figure_summary_path if figure_summary_path.exists() else None,
             "report_path": report_path if report_path.exists() else None,
             "report_excerpt": report_excerpt,
+            "project_goal": project_goal,
             "source_refs_path": source_refs_path if source_refs_path.exists() else None,
             "stdout_tail": stdout_tail,
             "stderr_tail": stderr_tail,
             "source_artifacts": source_artifacts,
             "warnings": warnings,
+            "text_truncations": text_tracker.truncations,
+            "font_family": ZH_FONT_FAMILY if template.startswith("zh") else EN_FONT_FAMILY,
+            "font_fallbacks": ZH_FALLBACK_FONTS if template.startswith("zh") else EN_FALLBACK_FONTS,
         }
+
+    def _display_fields(self, record: TaskRecord, text_tracker: TextTracker) -> dict[str, Any]:
+        raw = {
+            "command": record.command or UNKNOWN_ZH,
+            "source_path": record.source_path or UNKNOWN_ZH,
+            "working_dir": record.working_dir or UNKNOWN_ZH,
+            "failure_summary": record.failure_summary or UNKNOWN_ZH,
+            "artifact_dir": record.paths.task_dir,
+        }
+        display = {
+            key: text_tracker.fit(key, value, MAX_FIELD_DISPLAY_CHARS).display
+            for key, value in raw.items()
+        }
+        return {"display": display, "full": raw}
 
     def _metrics_summary(self, metrics_path: Path) -> dict[str, Any]:
         base = {
@@ -239,7 +322,146 @@ class SlidesGenerationService:
             "numeric_omitted_count": max(0, len(numeric) - MAX_NUMERIC_COLUMNS),
         }
 
-    def _report_excerpt(self, report_path: Path, template: str) -> list[str]:
+    def _metrics_table_preview(self, metrics_path: Path, unknown: str) -> dict[str, Any]:
+        base = {
+            "present": False,
+            "source_metrics": "metrics/normalized_metrics.csv",
+            "columns": [],
+            "shown_columns": [],
+            "hidden_columns": [],
+            "rows": [],
+            "displayed_row_count": 0,
+            "total_row_count": 0,
+            "total_column_count": 0,
+            "truncated": False,
+            "omitted_row_count": 0,
+            "omitted_column_count": 0,
+            "truncated_cells_count": 0,
+        }
+        if not metrics_path.exists():
+            return base
+        try:
+            df = pd.read_csv(metrics_path)
+        except (OSError, pd.errors.EmptyDataError):
+            return base
+        if df.empty:
+            return {
+                **base,
+                "present": True,
+                "total_row_count": 0,
+                "total_column_count": len(df.columns),
+                "columns": [str(column) for column in df.columns[:MAX_TABLE_COLUMNS]],
+                "shown_columns": [str(column) for column in df.columns[:MAX_TABLE_COLUMNS]],
+                "hidden_columns": [str(column) for column in df.columns[MAX_TABLE_COLUMNS:]],
+            }
+
+        selected_columns = _select_table_columns(df)
+        preview_df = df[selected_columns].head(MAX_TABLE_ROWS)
+        rows: list[dict[str, str]] = []
+        truncated_cells_count = 0
+        for _, row in preview_df.iterrows():
+            display_row: dict[str, str] = {}
+            for column in selected_columns:
+                full_value = _format_cell_value(row[column], unknown, limit=None)
+                display_value = _format_cell_value(row[column], unknown, limit=MAX_CELL_CHARS)
+                if display_value != full_value:
+                    truncated_cells_count += 1
+                display_row[str(column)] = display_value
+            rows.append(display_row)
+        omitted_rows = max(0, len(df) - len(rows))
+        all_columns = [str(column) for column in df.columns]
+        hidden_columns = [column for column in all_columns if column not in selected_columns]
+        omitted_columns = len(hidden_columns)
+        return {
+            "present": True,
+            "source_metrics": "metrics/normalized_metrics.csv",
+            "columns": [str(column) for column in selected_columns],
+            "shown_columns": [str(column) for column in selected_columns],
+            "hidden_columns": hidden_columns,
+            "rows": rows,
+            "displayed_row_count": len(rows),
+            "total_row_count": int(len(df)),
+            "total_column_count": int(len(df.columns)),
+            "truncated": bool(omitted_rows or omitted_columns or truncated_cells_count),
+            "omitted_row_count": omitted_rows,
+            "omitted_column_count": omitted_columns,
+            "truncated_cells_count": truncated_cells_count,
+        }
+
+    def _key_comparison(self, metrics_path: Path, unknown: str) -> dict[str, Any]:
+        empty = {
+            "present": False,
+            "metric": None,
+            "direction": None,
+            "group_column": None,
+            "best_item": None,
+            "baseline_item": None,
+            "delta": None,
+            "top_items": [],
+            "source_metrics": "metrics/normalized_metrics.csv",
+            "reason": "metrics unavailable",
+        }
+        if not metrics_path.exists():
+            return empty
+        try:
+            df = pd.read_csv(metrics_path)
+        except (OSError, pd.errors.EmptyDataError):
+            return empty
+        if df.empty:
+            return {**empty, "reason": "metrics empty"}
+
+        group_column = _first_present(set(str(column) for column in df.columns), COMPARISON_GROUP_COLUMNS)
+        if not group_column:
+            return {**empty, "reason": "comparison group column not found"}
+        metric, direction = _select_comparison_metric(df)
+        if not metric or not direction:
+            return {**empty, "group_column": group_column, "reason": "priority numeric metric not found"}
+
+        grouped = _aggregate_metric_by_group(df, group_column, metric)
+        if not grouped:
+            return {**empty, "group_column": group_column, "metric": metric, "direction": direction, "reason": "no numeric comparison values"}
+        reverse = direction == "higher"
+        sorted_items = sorted(grouped, key=lambda item: item["value"], reverse=reverse)
+        best = sorted_items[0]
+        baseline = _find_baseline_item(grouped)
+        delta = None
+        if baseline:
+            delta = _json_float(best["value"] - baseline["value"])
+        top_items = [
+            {"label": item["label"], "value": item["value"], "display_value": _format_number(item["value"], unknown)}
+            for item in sorted_items[:3]
+        ]
+        return {
+            "present": True,
+            "metric": metric,
+            "direction": direction,
+            "group_column": group_column,
+            "best_item": {"label": best["label"], "value": best["value"], "display_value": _format_number(best["value"], unknown)},
+            "baseline_item": {"label": baseline["label"], "value": baseline["value"], "display_value": _format_number(baseline["value"], unknown)} if baseline else None,
+            "delta": delta,
+            "display_delta": _format_delta(delta, unknown) if delta is not None else None,
+            "top_items": top_items,
+            "source_metrics": "metrics/normalized_metrics.csv",
+            "reason": None,
+        }
+
+    def _caption_truncations(self, figure_items: list[FigureItem], unknown: str) -> list[dict[str, Any]]:
+        truncations: list[dict[str, Any]] = []
+        for item in figure_items:
+            full = item.full_caption(unknown)
+            display = _short_text(full, MAX_CAPTION_CHARS)
+            if display != full:
+                truncations.append(
+                    {
+                        "figure_id": item.figure_id,
+                        "display": display,
+                        "full": full,
+                        "limit": MAX_CAPTION_CHARS,
+                    }
+                )
+        return truncations
+
+    def _report_excerpt(self, report_path: Path, template: str, text_tracker: TextTracker) -> list[str]:
         if not report_path.exists():
             return []
         text = report_path.read_text(encoding="utf-8", errors="replace")
@@ -248,30 +470,74 @@ class SlidesGenerationService:
             line = _clean_markdown_line(raw_line)
             if not line:
                 continue
-            lines.append(_short_text(line, 125))
+            lines.append(text_tracker.fit(f"report_excerpt[{len(lines)}]", line, 125).display)
             if len(lines) >= MAX_REPORT_BULLETS:
                 break
         return lines or [UNKNOWN_ZH if template.startswith("zh") else UNKNOWN_EN]
 
-    def _find_png_figures(self, record: TaskRecord, task_path: Path, figure_summary_path: Path) -> tuple[list[FigureItem], list[str]]:
+    def _project_goal_excerpt(self, record: TaskRecord, task_path: Path, text_tracker: TextTracker) -> dict[str, Any]:
+        source_refs_path = task_path / "raw" / "source_refs.json"
+        goal_path: Path | None = None
+        if source_refs_path.exists():
+            refs = _read_json(source_refs_path)
+            candidates = refs.get("candidate_files") or []
+            source_path = refs.get("source_path")
+            possible_paths = [*candidates]
+            if source_path:
+                source = _resolve_task_or_workspace_path(str(source_path), self.root, task_path)
+                if source.is_dir():
+                    possible_paths.append((source / "project_goal.md").as_posix())
+            for path_text in possible_paths:
+                path = _resolve_task_or_workspace_path(str(path_text), self.root, task_path)
+                if path.name.lower() == "project_goal.md" and path.exists():
+                    goal_path = path
+                    break
+        if not goal_path:
+            return {"present": False, "path": None, "path_abs": None, "excerpt": UNKNOWN_ZH, "full": UNKNOWN_ZH}
+
+        full = goal_path.read_text(encoding="utf-8", errors="replace")
+        clean_lines = [_clean_markdown_line(line) for line in full.splitlines()]
+        excerpt = " ".join(line for line in clean_lines if line)
+        display = text_tracker.fit("project_goal", excerpt or UNKNOWN_ZH, 220)
+        return {
+            "present": True,
+            "path": _portable_source_path(goal_path, self.root, task_path),
+            "path_abs": goal_path,
+            "excerpt": display.display,
+            "full": excerpt,
+        }
+
+    def _find_png_figures(
+        self,
+        record: TaskRecord,
+        task_path: Path,
+        figure_summary_path: Path,
+    ) -> tuple[list[FigureItem], list[str], dict[str, list[Any]]]:
         items: list[FigureItem] = []
         warnings: list[str] = []
+        figure_metadata: dict[str, list[Any]] = {"warnings": [], "skipped_candidates": []}
         if figure_summary_path.exists():
             data = _read_json(figure_summary_path)
+            figure_metadata["warnings"] = list(data.get("warnings") or [])
+            figure_metadata["skipped_candidates"] = list(data.get("skipped_candidates") or [])
             for raw_item in data.get("generated_figures") or data.get("figures") or []:
                 path_text = raw_item.get("png_path") or raw_item.get("png")
                 if not path_text:
                     continue
                 path = _resolve_task_or_workspace_path(path_text, self.root, task_path)
                 if path.exists() and path.suffix.lower() == ".png":
+                    chart_type = str(raw_item.get("chart_type") or "unknown")
+                    if chart_type not in {"line", "bar", "table"}:
+                        chart_type = "unknown"
                     items.append(
                         FigureItem(
                             figure_id=str(raw_item.get("figure_id") or path.stem),
-                            chart_type=str(raw_item.get("chart_type") or "figure"),
+                            chart_type=chart_type,
                             path=path,
                             x=str(raw_item.get("x") or ""),
                             y=str(raw_item.get("y") or ""),
                             group_by=str(raw_item.get("group_by") or ""),
+                            source_metrics=str(raw_item.get("source_metrics") or raw_item.get("metrics_path") or ""),
                         )
                     )
 
@@ -281,19 +547,19 @@ class SlidesGenerationService:
                 continue
             path = _resolve_task_or_workspace_path(artifact.path, self.root, task_path)
             if path.exists() and path.resolve() not in known_paths:
-                items.append(FigureItem(path.stem, "figure", path, "", "", ""))
+                items.append(FigureItem(path.stem, "unknown", path, "", "", "", ""))
                 known_paths.add(path.resolve())
 
         figures_dir = task_path / "figures"
         if figures_dir.exists():
             for path in sorted(figures_dir.glob("*.png")):
                 if path.resolve() not in known_paths:
-                    items.append(FigureItem(path.stem, "figure", path, "", "", ""))
+                    items.append(FigureItem(path.stem, "unknown", path, "", "", "", ""))
                     known_paths.add(path.resolve())
 
         if len(items) > MAX_FIGURES:
             warnings.append(f"limited figures to first {MAX_FIGURES} PNG artifact(s); omitted {len(items) - MAX_FIGURES}")
-        return items[:MAX_FIGURES], warnings
+        return items[:MAX_FIGURES], warnings, figure_metadata
 
     def _source_artifacts(
         self,
@@ -305,6 +571,7 @@ class SlidesGenerationService:
         stdout_path: Path,
         stderr_path: Path,
         figure_items: list[FigureItem],
+        project_goal_path: Path | None,
     ) -> list[str]:
         candidates = [
             task_path / "manifest.json",
@@ -316,9 +583,11 @@ class SlidesGenerationService:
             stdout_path,
             stderr_path,
             task_path / "reproduce" / "command.txt",
+            project_goal_path,
             *[item.path for item in figure_items],
         ]
-        return [_task_relative(path, task_path) for path in _unique_paths([path for path in candidates if path.exists()])]
+        existing = [path for path in candidates if path is not None and path.exists()]
+        return [_portable_source_path(path, self.root, task_path) for path in _unique_paths(existing)]
 
     def _build_summary(
         self,
@@ -342,6 +611,8 @@ class SlidesGenerationService:
             "task_id": record.task_id,
             "task_status": record.status.value,
             "template": context["template"],
+            "font_family": context["font_family"],
+            "font_fallbacks": context["font_fallbacks"],
             "generated_at": _now_iso(),
             "pptx_path": _task_relative(pptx_path, task_path),
             "summary_path": _task_relative(summary_path, task_path),
@@ -349,13 +620,79 @@ class SlidesGenerationService:
             "included_figures": included_figures,
             "included_metrics": included_metrics,
             "warnings": context["warnings"],
+            "figure_warnings": context["figure_warnings"],
+            "figure_skipped_candidates": context["figure_skipped_candidates"],
+            "text_truncations": context["text_truncations"],
+            "table_truncations": context["table_truncations"],
+            "key_comparisons": context["key_comparisons"],
+            "caption_truncations": context["caption_truncations"],
+            "qa_checks": self._build_qa_checks(record, context, presentation),
             "slides": [slide.to_dict() for slide in context.get("slides", [])],
             "report_excerpt": context["report_excerpt"],
+            "project_goal": {
+                "present": context["project_goal"]["present"],
+                "path": context["project_goal"]["path"],
+                "excerpt": context["project_goal"]["excerpt"],
+                "full": context["project_goal"]["full"],
+            },
+            "full_text_fields": context["fields"]["full"],
             "source_artifacts": context["source_artifacts"],
             # Backward-compatible aliases for Phase 4.1 tests/users.
             "slide_titles": [slide.title for slide in context.get("slides", [])],
             "metrics": context["metrics_summary"],
+            "metrics_table": context["metrics_table"],
             "figures": [item.to_summary(task_path)["path"] for item in context["figure_items"]],
+        }
+
+    def _build_qa_checks(self, record: TaskRecord, context: dict[str, Any], presentation: Presentation) -> dict[str, Any]:
+        slide_records: list[SlideRecord] = context.get("slides", [])
+        empty_slide_indices: list[int] = []
+        title_failures: list[int] = []
+        for index, slide in enumerate(presentation.slides, start=1):
+            texts = [
+                shape.text.strip()
+                for shape in slide.shapes
+                if hasattr(shape, "text") and shape.text and shape.text.strip()
+            ]
+            content_texts = [text for text in texts if not text.startswith("Lab-Sidecar |")]
+            if not content_texts:
+                empty_slide_indices.append(index)
+        for slide_record in slide_records:
+            if not slide_record.title.strip():
+                title_failures.append(slide_record.slide_index)
+
+        virtual_artifacts = [item.artifact_id for item in record.artifacts if item.artifact_id not in {"slides_presentation_draft_pptx", "slides_summary_json"}]
+        virtual_artifacts.extend(["slides_presentation_draft_pptx", "slides_summary_json"])
+        metrics_table = context["metrics_table"]
+        caption_displays = [item.display_caption(context["task_path"], context["unknown"]) for item in context["figure_items"]]
+        return {
+            "slide_count": {
+                "value": len(presentation.slides),
+                "passed": len(presentation.slides) == len(slide_records),
+            },
+            "empty_slide_check": {
+                "passed": not empty_slide_indices,
+                "empty_slide_indices": empty_slide_indices,
+            },
+            "title_check": {
+                "passed": not title_failures and len(slide_records) == len(presentation.slides),
+                "missing_title_slide_indices": title_failures,
+            },
+            "artifact_duplicate_check": {
+                "passed": len(virtual_artifacts) == len(set(virtual_artifacts)),
+                "artifact_count_after_upsert": len(virtual_artifacts),
+            },
+            "table_overflow_guard": {
+                "passed": len(metrics_table.get("shown_columns") or []) <= MAX_TABLE_COLUMNS and metrics_table.get("displayed_row_count", 0) <= MAX_TABLE_ROWS,
+                "shown_columns": metrics_table.get("shown_columns") or [],
+                "hidden_columns": metrics_table.get("hidden_columns") or [],
+                "truncated_cells_count": metrics_table.get("truncated_cells_count", 0),
+            },
+            "caption_overflow_guard": {
+                "passed": all(len(text) <= MAX_CAPTION_CHARS for text in caption_displays),
+                "max_caption_chars": MAX_CAPTION_CHARS,
+                "truncated_caption_count": len(context.get("caption_truncations") or []),
+            },
         }
 
     def _upsert_artifacts(self, record: TaskRecord, source_artifacts: list[str]) -> None:
@@ -395,6 +732,8 @@ class _PresentationBuilder:
         self.warn = RGBColor(185, 28, 28)
         self.bg = RGBColor(248, 250, 252)
         self.muted = RGBColor(100, 116, 139)
+        self.font_family = context["font_family"]
+        self.mono_font = "Consolas"
 
     def build(self) -> Presentation:
         if self.context["is_diagnostic"]:
@@ -405,18 +744,36 @@ class _PresentationBuilder:
 
     def _build_completed(self) -> None:
         record: TaskRecord = self.context["record"]
-        source = record.command or record.source_path or self.unknown
+        fields = self.context["fields"]["display"]
+        source = fields["command"] if record.command else fields["source_path"]
         self._title_slide(
-            "实验结果演示草稿" if self.zh else "Experiment Results Draft",
+            self._deck_title(),
             [f"task_id: {record.task_id}", f"{'来源' if self.zh else 'Source'}: {source}"],
             "task overview",
             ["manifest.json"],
         )
+        if self.context["is_project_template"]:
+            self._build_project_completed()
+            return
         self._settings_slide()
         self._metrics_slide()
+        self._metrics_table_slide()
         self._figure_slides()
         self._result_summary_slide()
         self._reproduce_slide()
+
+    def _build_project_completed(self) -> None:
+        self._project_overview_slide()
+        self._metrics_slide()
+        self._metrics_table_slide()
+        self._figure_slides()
+        self._project_key_results_slide()
+        self._project_conclusion_reproduce_slide()
+
+    def _deck_title(self) -> str:
+        if self.context["template"] == "zh-project":
+            return "项目汇报草稿"
+        return "实验结果演示草稿" if self.zh else "Experiment Results Draft"
 
     def _build_diagnostic(self) -> None:
         record: TaskRecord = self.context["record"]
@@ -449,16 +806,57 @@ class _PresentationBuilder:
 
     def _settings_slide(self) -> None:
         record: TaskRecord = self.context["record"]
+        fields = self.context["fields"]["display"]
         title = "实验设置" if self.zh else "Experiment Settings"
         rows = [
             ("mode", record.mode),
             ("status", record.status.value),
-            ("command", record.command or self.unknown),
-            ("source_path", record.source_path or self.unknown),
-            ("working_dir", record.working_dir or self.unknown),
+            ("command", fields["command"]),
+            ("source_path", fields["source_path"]),
+            ("working_dir", fields["working_dir"]),
             ("exit_code", record.exit_code if record.exit_code is not None else self.unknown),
         ]
         self._table_slide(title, rows, "manifest settings and provenance", ["manifest.json"], note="来源: manifest.json" if self.zh else "Source: manifest.json")
+
+    def _project_overview_slide(self) -> None:
+        title = "项目概览与来源"
+        goal = self.context["project_goal"]
+        metrics = self.context["metrics_summary"]
+        slide = self._blank_slide(title, "summarize project goal, settings, and source artifacts", ["manifest.json", "raw/source_refs.json", goal["path"] or ""])
+        self._add_title(slide, title)
+        self._callout_row(
+            slide,
+            [
+                ("mode", self.context["record"].mode),
+                ("status", self.context["record"].status.value),
+                ("rows", str(metrics["row_count"])),
+            ],
+            y=Inches(1.14),
+        )
+        self._add_info_blocks(
+            slide,
+            [
+                f"项目目标: {goal['excerpt'] if goal['present'] else self.unknown}",
+                f"来源目录: {self.context['fields']['display']['source_path']}",
+                f"artifact: {self.context['fields']['display']['artifact_dir']}",
+                f"图表/报告: {len(self.context['figure_items'])} figure(s), {'reports/report-fragment.md' if self.context['report_path'] else self.unknown}",
+                "单 task 静态草稿；完整 provenance 写入 slides-summary.json。",
+            ],
+            top=Inches(2.75),
+        )
+
+    def _data_sources_slide(self) -> None:
+        title = "数据与来源"
+        metrics = self.context["metrics_summary"]
+        rows = [
+            ("source_path", self.context["fields"]["display"]["source_path"]),
+            ("metrics_file", metrics["path"] if metrics["present"] else self.unknown),
+            ("rows", metrics["row_count"]),
+            ("key_columns", ", ".join(metrics["key_columns"]) or self.unknown),
+            ("figures", len(self.context["figure_items"])),
+            ("report", "reports/report-fragment.md" if self.context["report_path"] else self.unknown),
+        ]
+        self._table_slide(title, rows, "summarize project source artifacts", ["manifest.json", "raw/source_refs.json", "metrics/normalized_metrics.csv"])
 
     def _metrics_slide(self) -> None:
         metrics = self.context["metrics_summary"]
@@ -508,6 +906,135 @@ class _PresentationBuilder:
                 cell.text = _short_text(value, 34)
                 self._style_cell(cell)
 
+    def _metrics_table_slide(self) -> None:
+        table_data = self.context["metrics_table"]
+        title = "指标表格预览" if self.zh else "Metrics Table Preview"
+        slide = self._blank_slide(title, "preview selected rows and columns from normalized metrics", ["metrics/normalized_metrics.csv"])
+        self._add_title(slide, title)
+        if not table_data["present"] or not table_data["columns"]:
+            self._empty_visual(slide, self.unknown, "metrics/normalized_metrics.csv not found")
+            return
+
+        self._callout_row(
+            slide,
+            [
+                ("rows", str(table_data["total_row_count"])),
+                ("columns", str(table_data["total_column_count"])),
+                ("shown", f"{table_data['displayed_row_count']}x{len(table_data['columns'])}"),
+            ],
+            y=Inches(1.08),
+        )
+        self._grid_table(
+            slide,
+            table_data["columns"],
+            table_data["rows"],
+            Inches(0.72),
+            Inches(2.55),
+            Inches(11.85),
+            Inches(3.7),
+            font_size=7.3,
+        )
+        note = f"source: {table_data['source_metrics']}"
+        if table_data["truncated"]:
+            note += f" | truncated rows={table_data['omitted_row_count']}, columns={table_data['omitted_column_count']}"
+        self._caption(slide, note, Inches(0.75), Inches(6.5), Inches(11.75))
+
+    def _key_comparison_slide(self) -> None:
+        comparison = self.context["key_comparison"]
+        title = "关键对比" if self.zh else "Key Comparison"
+        slide = self._blank_slide(title, "summarize best, baseline, and top metric comparisons", ["metrics/normalized_metrics.csv"])
+        self._add_title(slide, title)
+        if not comparison.get("present"):
+            self._empty_visual(slide, self.unknown, comparison.get("reason") or "comparison unavailable")
+            return
+
+        best = comparison["best_item"]
+        baseline = comparison.get("baseline_item")
+        delta = comparison.get("display_delta") or self.unknown
+        self._callout_row(
+            slide,
+            [
+                ("metric", comparison["metric"]),
+                ("best", f"{_short_text(best['label'], 24)} = {best['display_value']}"),
+                ("delta", delta),
+            ],
+            y=Inches(1.08),
+        )
+        rows = [
+            ("direction", comparison["direction"]),
+            ("group", comparison["group_column"]),
+            ("baseline", f"{baseline['label']} = {baseline['display_value']}" if baseline else self.unknown),
+            ("source", comparison["source_metrics"]),
+        ]
+        self._mini_kv_panel(slide, rows, Inches(0.75), Inches(2.55), Inches(4.15), Inches(3.25))
+        top_rows = [
+            {"rank": str(index), comparison["group_column"]: item["label"], comparison["metric"]: item["display_value"]}
+            for index, item in enumerate(comparison["top_items"], start=1)
+        ]
+        self._grid_table(
+            slide,
+            ["rank", comparison["group_column"], comparison["metric"]],
+            top_rows,
+            Inches(5.25),
+            Inches(2.55),
+            Inches(7.25),
+            Inches(2.65),
+            font_size=9,
+        )
+        self._caption(slide, "规则推断，仅使用 metrics/normalized_metrics.csv；无法可靠判断时保留未自动推断。" if self.zh else "Rule-based; uses metrics/normalized_metrics.csv only.", Inches(5.25), Inches(5.55), Inches(7.1))
+
+    def _project_key_results_slide(self) -> None:
+        comparison = self.context["key_comparison"]
+        title = "关键对比与消融"
+        slide = self._blank_slide(title, "combine key comparison and ablation summary", ["metrics/normalized_metrics.csv"])
+        self._add_title(slide, title)
+        if not comparison.get("present"):
+            metrics = self.context["metrics_summary"]
+            group_column = _first_present(set(metrics.get("columns") or []), ["variant", "model", "method", "algorithm", "artifact_role"])
+            bullets = [
+                f"分组字段: {group_column or self.unknown}",
+                f"数值指标: {', '.join(item['column'] for item in (metrics.get('numeric') or [])[:4]) or self.unknown}",
+                f"对比结论: {self.unknown}",
+                "未识别到可安全排序的主指标；请基于原始 metrics 补充解释。",
+            ]
+            self._add_info_blocks(slide, bullets, top=Inches(1.2))
+            return
+
+        best = comparison["best_item"]
+        baseline = comparison.get("baseline_item")
+        delta = comparison.get("display_delta") or self.unknown
+        self._callout_row(
+            slide,
+            [
+                ("metric", comparison["metric"]),
+                ("best", f"{_short_text(best['label'], 24)} = {best['display_value']}"),
+                ("delta", delta),
+            ],
+            y=Inches(1.08),
+        )
+        rows = [
+            ("group", comparison["group_column"]),
+            ("direction", "越高越好" if comparison["direction"] == "higher" else "越低越好"),
+            ("baseline", f"{baseline['label']} = {baseline['display_value']}" if baseline else self.unknown),
+            ("source", "metrics/normalized_metrics.csv"),
+        ]
+        self._mini_kv_panel(slide, rows, Inches(0.75), Inches(2.52), Inches(4.1), Inches(2.85))
+        top_rows = [
+            {"rank": str(index), comparison["group_column"]: item["label"], comparison["metric"]: item["display_value"]}
+            for index, item in enumerate(comparison["top_items"], start=1)
+        ]
+        self._grid_table(
+            slide,
+            ["rank", comparison["group_column"], comparison["metric"]],
+            top_rows,
+            Inches(5.25),
+            Inches(2.52),
+            Inches(7.25),
+            Inches(2.65),
+            font_size=8.8,
+        )
+        self._caption(slide, "baseline 或 delta 不可靠时保持未自动推断；完整字段见 slides-summary.json。", Inches(5.25), Inches(5.5), Inches(7.1))
+
     def _figure_slides(self) -> None:
         figure_items: list[FigureItem] = self.context["figure_items"]
         title_base = "图表" if self.zh else "Figures"
@@ -527,13 +1054,51 @@ class _PresentationBuilder:
             self._add_title(slide, title)
             if len(chunk) == 1:
                 item = chunk[0]
-                self._add_picture_fit(slide, item.path, Inches(0.9), Inches(1.25), Inches(11.55), Inches(5.2))
-                self._caption(slide, item.caption(self.context["task_path"]), Inches(0.9), Inches(6.55), Inches(11.4))
+                self._add_picture_fit(slide, item.path, Inches(0.9), Inches(1.25), Inches(11.55), Inches(5.05))
+                self._caption(slide, item.display_caption(self.context["task_path"], self.unknown), Inches(0.9), Inches(6.38), Inches(11.4), height=Inches(0.52))
             else:
                 x_positions = [Inches(0.68), Inches(6.82)]
                 for index, item in enumerate(chunk):
-                    self._add_picture_fit(slide, item.path, x_positions[index], Inches(1.32), Inches(5.78), Inches(4.85))
-                    self._caption(slide, item.caption(self.context["task_path"]), x_positions[index], Inches(6.3), Inches(5.76))
+                    self._add_picture_fit(slide, item.path, x_positions[index], Inches(1.32), Inches(5.78), Inches(4.68))
+                    self._caption(slide, item.display_caption(self.context["task_path"], self.unknown), x_positions[index], Inches(6.12), Inches(5.76), height=Inches(0.64))
+
+    def _ablation_or_key_results_slide(self) -> None:
+        title = "消融/对比摘要"
+        metrics = self.context["metrics_summary"]
+        comparison = self.context["key_comparison"]
+        columns = set(metrics.get("columns") or [])
+        source = ["metrics/normalized_metrics.csv"]
+        slide = self._blank_slide(title, "summarize variants, models, or methods when available", source)
+        self._add_title(slide, title)
+        group_column = _first_present(columns, ["variant", "model", "method", "algorithm", "artifact_role"])
+        numeric = metrics.get("numeric") or []
+        if not group_column or not numeric:
+            self._empty_visual(slide, self.unknown, "variant/model/method not found")
+            return
+        if comparison.get("present"):
+            best = comparison["best_item"]
+            baseline = comparison.get("baseline_item")
+            bullets = [
+                f"分组字段: {comparison['group_column']}",
+                f"优先指标: {comparison['metric']} ({comparison['direction']})",
+                f"最佳项: {best['label']} = {best['display_value']}",
+                f"基线项: {baseline['label']} = {baseline['display_value']}" if baseline else f"基线项: {self.unknown}",
+                f"delta: {comparison.get('display_delta') or self.unknown}",
+            ]
+            self._add_info_blocks(slide, bullets, top=Inches(1.2))
+            top_rows = [
+                {"rank": str(index), comparison["group_column"]: item["label"], comparison["metric"]: item["display_value"]}
+                for index, item in enumerate(comparison["top_items"], start=1)
+            ]
+            self._grid_table(slide, ["rank", comparison["group_column"], comparison["metric"]], top_rows, Inches(0.82), Inches(5.35), Inches(11.15), Inches(1.05), font_size=8.3)
+            return
+        bullets = [
+            f"分组字段: {group_column}",
+            f"数值指标: {', '.join(item['column'] for item in numeric[:4])}",
+            f"指标行数: {metrics['row_count']}",
+            "更细的消融解释需由用户基于原始 artifact 补充。",
+        ]
+        self._add_info_blocks(slide, bullets, top=Inches(1.35))
 
     def _result_summary_slide(self) -> None:
         title = "结果摘要" if self.zh else "Result Summary"
@@ -548,13 +1113,32 @@ class _PresentationBuilder:
         self._add_title(slide, title)
         self._add_info_blocks(slide, [*bullets, suffix])
 
+    def _project_conclusion_reproduce_slide(self) -> None:
+        record: TaskRecord = self.context["record"]
+        fields = self.context["fields"]["display"]
+        title = "结论与复现"
+        sources = ["manifest.json", "metrics/normalized_metrics.csv"]
+        if self.context["report_path"]:
+            sources.append("reports/report-fragment.md")
+        slide = self._blank_slide(title, "combine conclusion and reproducibility details", sources)
+        self._add_title(slide, title)
+        bullets = (self.context["report_excerpt"] or [self.unknown])[:3]
+        self._add_info_blocks(slide, [*bullets, "结论只来自已有 artifact；未自动推断的内容需用户补充。"], top=Inches(1.15))
+        rows = [
+            ("command/source", fields["command"] if record.command else fields["source_path"]),
+            ("artifact_dir", fields["artifact_dir"]),
+            ("exit_code", record.exit_code if record.exit_code is not None else self.unknown),
+        ]
+        self._mini_kv_panel(slide, rows, Inches(0.82), Inches(5.12), Inches(11.15), Inches(1.55))
+
     def _failed_summary_slide(self) -> None:
         record: TaskRecord = self.context["record"]
+        fields = self.context["fields"]["display"]
         title = "失败诊断" if self.zh else "Failure Diagnostics"
         bullets = [
             f"status: {record.status.value}",
             f"exit_code: {record.exit_code if record.exit_code is not None else self.unknown}",
-            f"failure_summary: {_short_text(record.failure_summary or self.unknown, 210)}",
+            f"failure_summary: {fields['failure_summary']}",
             "该任务不会被写成成功实验结果。" if self.zh else "This task is not summarized as a successful experiment.",
         ]
         slide = self._blank_slide(title, "diagnose failed task", ["manifest.json", "stderr.log"], danger=True)
@@ -580,25 +1164,28 @@ class _PresentationBuilder:
 
     def _logs_slide(self) -> None:
         title = "日志尾部" if self.zh else "Log Tail"
+        stderr_lines = self.context["stderr_tail"] or [self.unknown]
+        stdout_lines = self.context["stdout_tail"] or [self.unknown]
         lines = [
             "stderr.log:",
-            *(self.context["stderr_tail"] or [self.unknown]),
+            *stderr_lines[:10],
             "",
             "stdout.log:",
-            *(self.context["stdout_tail"] or [self.unknown]),
+            *stdout_lines[:7],
         ]
         slide = self._blank_slide(title, "show bounded stdout/stderr tails", ["stderr.log", "stdout.log"])
         self._add_title(slide, title)
-        self._text_panel(slide, lines[:22], Inches(0.75), Inches(1.25), Inches(11.85), Inches(5.35), font_size=8)
+        self._text_panel(slide, lines, Inches(0.75), Inches(1.25), Inches(11.85), Inches(5.35), font_size=8)
 
     def _reproduce_slide(self) -> None:
         record: TaskRecord = self.context["record"]
+        fields = self.context["fields"]["display"]
         title = "复现信息" if self.zh else "Reproducibility"
         rows = [
-            ("command", record.command or self.unknown),
-            ("source_path", record.source_path or self.unknown),
-            ("working_dir", record.working_dir or self.unknown),
-            ("artifact_dir", record.paths.task_dir),
+            ("command", fields["command"]),
+            ("source_path", fields["source_path"]),
+            ("working_dir", fields["working_dir"]),
+            ("artifact_dir", fields["artifact_dir"]),
             ("source_refs", "raw/source_refs.json" if self.context["source_refs_path"] else self.unknown),
             ("generated_from", ", ".join(self.context["source_artifacts"][:6]) or self.unknown),
         ]
@@ -685,6 +1272,7 @@ class _PresentationBuilder:
             paragraph.text = _short_text(bullet, 160)
             paragraph.level = 0
             paragraph.font.size = Pt(font_size)
+            paragraph.font.name = self.font_family
             paragraph.font.color.rgb = self.primary
 
     def _text_panel(self, slide, lines: list[str], left, top, width, height, font_size: int = 9) -> None:
@@ -693,7 +1281,35 @@ class _PresentationBuilder:
         panel.fill.fore_color.rgb = RGBColor(15, 23, 42)
         panel.line.color.rgb = RGBColor(51, 65, 85)
         box = slide.shapes.add_textbox(left + Inches(0.18), top + Inches(0.15), width - Inches(0.36), height - Inches(0.3))
-        self._set_text(box, "\n".join(_short_text(line, 150) for line in lines), size=font_size, color=RGBColor(226, 232, 240), font_name="Consolas")
+        self._set_text(box, "\n".join(_short_text(line, 150) for line in lines), size=font_size, color=RGBColor(226, 232, 240), font_name=self.mono_font)
+
+    def _mini_kv_panel(self, slide, rows: list[tuple[str, Any]], left, top, width, height) -> None:
+        panel = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
+        panel.fill.solid()
+        panel.fill.fore_color.rgb = RGBColor(241, 245, 249)
+        panel.line.color.rgb = RGBColor(226, 232, 240)
+        y = top + Inches(0.18)
+        for key, value in rows[:5]:
+            box = slide.shapes.add_textbox(left + Inches(0.18), y, width - Inches(0.36), Inches(0.38))
+            self._set_text(box, f"{key}: {_short_text(value, 62)}", size=10, color=self.primary)
+            y += Inches(0.5)
+
+    def _grid_table(self, slide, columns: list[str], rows: list[dict[str, Any]], left, top, width, height, font_size: float = 8.5) -> None:
+        row_count = max(1, len(rows)) + 1
+        col_count = max(1, len(columns))
+        table = slide.shapes.add_table(row_count, col_count, left, top, width, height).table
+        for col_index, column_width in enumerate(_column_widths(columns, rows, int(width))):
+            table.columns[col_index].width = column_width
+        for col_index, header in enumerate(columns):
+            cell = table.cell(0, col_index)
+            cell.text = _short_text(header, 24)
+            self._style_cell(cell, bold=True, fill=RGBColor(226, 232, 240), font_size=font_size)
+        for row_index, row in enumerate(rows or [{columns[0]: self.unknown}], start=1):
+            for col_index, column in enumerate(columns):
+                cell = table.cell(row_index, col_index)
+                cell.text = _short_text(row.get(column, self.unknown), MAX_CELL_CHARS)
+                align = PP_ALIGN.RIGHT if _is_numeric_column(column, rows) else PP_ALIGN.LEFT
+                self._style_cell(cell, font_size=font_size, align=align)
 
     def _table_slide(self, title: str, rows: list[tuple[str, Any]], purpose: str, sources: list[str], note: str | None = None) -> None:
         slide = self._blank_slide(title, purpose, sources)
@@ -714,17 +1330,18 @@ class _PresentationBuilder:
         if note:
             self._caption(slide, note, Inches(0.75), Inches(6.55), Inches(11.8))
 
-    def _style_cell(self, cell, bold: bool = False, fill: RGBColor | None = None) -> None:
+    def _style_cell(self, cell, bold: bool = False, fill: RGBColor | None = None, font_size: float = 9.5, align: PP_ALIGN = PP_ALIGN.LEFT) -> None:
         if fill:
             cell.fill.solid()
             cell.fill.fore_color.rgb = fill
         cell.margin_left = Inches(0.04)
         cell.margin_right = Inches(0.04)
         for paragraph in cell.text_frame.paragraphs:
-            paragraph.font.size = Pt(9.5)
+            paragraph.font.size = Pt(font_size)
+            paragraph.font.name = self.font_family
             paragraph.font.bold = bold
             paragraph.font.color.rgb = self.primary
-            paragraph.alignment = PP_ALIGN.LEFT
+            paragraph.alignment = align
 
     def _add_picture_fit(self, slide, path: Path, left, top, width, height) -> None:
         from PIL import Image
@@ -745,8 +1362,8 @@ class _PresentationBuilder:
             draw_top = top
         slide.shapes.add_picture(str(path), draw_left, draw_top, width=draw_width, height=draw_height)
 
-    def _caption(self, slide, text: str, left, top, width) -> None:
-        box = slide.shapes.add_textbox(left, top, width, Inches(0.35))
+    def _caption(self, slide, text: str, left, top, width, height=Inches(0.35)) -> None:
+        box = slide.shapes.add_textbox(left, top, width, height)
         self._set_text(box, _short_text(text, 145), size=8.5, color=self.muted)
 
     def _empty_visual(self, slide, title: str, detail: str) -> None:
@@ -763,7 +1380,7 @@ class _PresentationBuilder:
         size: float,
         color: RGBColor,
         bold: bool = False,
-        font_name: str = "Calibri",
+        font_name: str | None = None,
         align: PP_ALIGN = PP_ALIGN.LEFT,
     ) -> None:
         frame = shape.text_frame
@@ -772,8 +1389,9 @@ class _PresentationBuilder:
         paragraph = frame.paragraphs[0]
         paragraph.text = text
         paragraph.alignment = align
+        selected_font = font_name or self.font_family
         for run in paragraph.runs:
-            run.font.name = font_name
+            run.font.name = selected_font
             run.font.size = Pt(size)
             run.font.bold = bold
             run.font.color.rgb = color
@@ -787,19 +1405,36 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _bounded_log_tail(path: Path) -> list[str]:
+def _bounded_log_tail(path: Path, key: str, text_tracker: TextTracker) -> list[str]:
     if not path.exists():
         return []
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-MAX_LOG_LINES:]
+    all_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    lines = all_lines[-MAX_LOG_LINES:]
     bounded: list[str] = []
     used = 0
-    for line in lines:
-        text = _short_text(line, 150)
+    line_count_truncated = len(all_lines) > MAX_LOG_LINES
+    char_count_truncated = False
+    for index, line in enumerate(lines):
+        display = text_tracker.fit(f"{key}[{index}]", line, 150)
+        text = display.display
         if used + len(text) > MAX_LOG_CHARS:
             bounded.append("... truncated ...")
+            char_count_truncated = True
             break
         bounded.append(text)
         used += len(text)
+    if line_count_truncated:
+        bounded.insert(0, "... earlier lines truncated ...")
+    if line_count_truncated or char_count_truncated:
+        text_tracker.truncations.append(
+            {
+                "key": key,
+                "display": "\n".join(bounded),
+                "full": "\n".join(all_lines),
+                "limit": MAX_LOG_CHARS,
+                "max_lines": MAX_LOG_LINES,
+            }
+        )
     return bounded
 
 
@@ -829,6 +1464,18 @@ def _task_relative(path: Path, task_path: Path) -> str:
     return path.resolve().relative_to(task_path.resolve()).as_posix()
 
 
+def _portable_source_path(path: Path, root: Path, task_path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(task_path.resolve()).as_posix()
+    except ValueError:
+        pass
+    try:
+        return resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
 def _unique_paths(paths: list[Path]) -> list[Path]:
     seen: set[Path] = set()
     result: list[Path] = []
@@ -855,23 +1502,186 @@ def _json_float(value: Any) -> float | None:
 def _format_number(value: Any, unknown: str = UNKNOWN_ZH) -> str:
     if value is None:
         return unknown
+    if isinstance(value, int):
+        return str(value)
     if isinstance(value, float):
-        return f"{value:.6g}"
+        if pd.isna(value):
+            return unknown
+        if value.is_integer():
+            return str(int(value))
+        return f"{value:.4f}".rstrip("0").rstrip(".")
     return str(value)
 
 
+def _format_delta(value: float | None, unknown: str = UNKNOWN_ZH) -> str:
+    if value is None:
+        return unknown
+    sign = "+" if value > 0 else ""
+    return f"{sign}{_format_number(value, unknown)}"
+
+
+def _format_cell_value(value: Any, unknown: str = UNKNOWN_ZH, limit: int | None = MAX_CELL_CHARS) -> str:
+    if pd.isna(value):
+        return unknown
+    if isinstance(value, (int, float)):
+        return _format_number(float(value), unknown)
+    text = str(value)
+    try:
+        numeric = float(text)
+    except ValueError:
+        return _short_text(text, limit) if limit else _normalize_inline_text(text)
+    return _format_number(numeric, unknown)
+
+
+def _column_widths(columns: list[str], rows: list[dict[str, Any]], total_width: int) -> list[int]:
+    weights: list[float] = []
+    for column in columns:
+        lower = column.lower()
+        if _is_numeric_column(column, rows):
+            weight = 0.75
+        elif any(token in lower for token in ["path", "source", "file", "command", "dir"]):
+            weight = 1.65
+        elif any(token in lower for token in ["variant", "model", "method", "algorithm"]):
+            weight = 1.35
+        else:
+            weight = 1.0
+        weights.append(weight)
+    total = sum(weights) or 1.0
+    widths = [max(int(total_width * weight / total), Inches(0.72)) for weight in weights]
+    diff = total_width - sum(widths)
+    if widths:
+        widths[-1] += diff
+    return widths
+
+
+def _is_numeric_column(column: str, rows: list[dict[str, Any]]) -> bool:
+    lower = column.lower()
+    if any(token in lower for token in ["accuracy", "acc", "f1", "loss", "latency", "runtime", "time", "memory", "score", "rank", "seed", "epoch", "step"]):
+        return True
+    values = [str(row.get(column, "")).strip() for row in rows[:4]]
+    values = [value for value in values if value and value not in {UNKNOWN_ZH, UNKNOWN_EN}]
+    if not values:
+        return False
+    numeric = 0
+    for value in values:
+        try:
+            float(value)
+        except ValueError:
+            continue
+        numeric += 1
+    return numeric == len(values)
+
+
+def _select_table_columns(df: pd.DataFrame) -> list[str]:
+    columns = [str(column) for column in df.columns]
+    selected: list[str] = []
+    for candidate in [*COMPARISON_GROUP_COLUMNS, "epoch", "step", "seed", "split", "dataset"]:
+        if candidate in columns and candidate not in selected:
+            selected.append(candidate)
+    numeric_columns = [
+        str(column)
+        for column in df.columns
+        if pd.to_numeric(df[column], errors="coerce").notna().sum() > 0 and str(column) not in selected
+    ]
+    priority_numeric = sorted(numeric_columns, key=_metric_priority)
+    for column in priority_numeric:
+        if column not in selected:
+            selected.append(column)
+        if len(selected) >= MAX_TABLE_COLUMNS:
+            break
+    for column in columns:
+        if len(selected) >= min(MAX_TABLE_COLUMNS, max(4, len(columns))):
+            break
+        if column not in selected:
+            selected.append(column)
+    return selected[:MAX_TABLE_COLUMNS]
+
+
+def _metric_priority(column: str) -> tuple[int, str]:
+    lower = column.lower()
+    for index, hint in enumerate([*HIGHER_IS_BETTER_HINTS, *LOWER_IS_BETTER_HINTS]):
+        if hint in lower:
+            return (index, lower)
+    return (99, lower)
+
+
+def _select_comparison_metric(df: pd.DataFrame) -> tuple[str | None, str | None]:
+    numeric_columns = [str(column) for column in df.columns if pd.to_numeric(df[column], errors="coerce").notna().sum() > 0]
+    for hint in HIGHER_IS_BETTER_HINTS:
+        for column in numeric_columns:
+            if hint in column.lower():
+                return column, "higher"
+    for hint in LOWER_IS_BETTER_HINTS:
+        for column in numeric_columns:
+            if hint in column.lower():
+                return column, "lower"
+    return None, None
+
+
+def _aggregate_metric_by_group(df: pd.DataFrame, group_column: str, metric: str) -> list[dict[str, Any]]:
+    work = df[[group_column, metric]].copy()
+    work[metric] = pd.to_numeric(work[metric], errors="coerce")
+    work = work.dropna(subset=[metric])
+    if work.empty:
+        return []
+    grouped = work.groupby(group_column, dropna=False)[metric].mean().reset_index()
+    items: list[dict[str, Any]] = []
+    for _, row in grouped.iterrows():
+        label = str(row[group_column])
+        items.append({"label": label, "value": _json_float(row[metric])})
+    return [item for item in items if item["value"] is not None]
+
+
+def _find_baseline_item(items: list[dict[str, Any]]) -> dict[str, Any] | None:
+    for item in items:
+        label = str(item["label"]).lower()
+        if "baseline" in label or label in {"base", "control"}:
+            return item
+    return None
+
+
+def _table_truncations(table_data: dict[str, Any]) -> list[dict[str, Any]]:
+    if not table_data.get("truncated"):
+        return []
+    return [
+        {
+            "source_metrics": table_data["source_metrics"],
+            "shown_columns": table_data["shown_columns"],
+            "hidden_columns": table_data["hidden_columns"],
+            "displayed_rows": table_data["displayed_row_count"],
+            "total_rows": table_data["total_row_count"],
+            "displayed_columns": len(table_data["columns"]),
+            "total_columns": table_data["total_column_count"],
+            "omitted_row_count": table_data["omitted_row_count"],
+            "omitted_column_count": table_data["omitted_column_count"],
+            "truncated_cells_count": table_data.get("truncated_cells_count", 0),
+        }
+    ]
+
+
 def _short_text(value: Any, limit: int) -> str:
-    text = str(value).replace("\r", " ").replace("\n", " ")
-    text = re.sub(r"\s+", " ", text).strip()
+    text = _normalize_inline_text(value)
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + "..."
+
+
+def _normalize_inline_text(value: Any) -> str:
+    text = str(value).replace("\r", " ").replace("\n", " ")
+    return re.sub(r"\s+", " ", text).strip()
 
 
 def _first_non_empty(lines: list[str]) -> str | None:
     for line in reversed(lines):
         if line.strip():
             return line
+    return None
+
+
+def _first_present(values: set[str], candidates: list[str]) -> str | None:
+    for candidate in candidates:
+        if candidate in values:
+            return candidate
     return None
 
 

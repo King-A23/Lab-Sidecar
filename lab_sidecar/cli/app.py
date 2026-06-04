@@ -283,7 +283,7 @@ def report(
 @app.command()
 def slides(
     task_id: str = typer.Argument(..., help="Task id to generate a static PPTX draft for."),
-    template: str = typer.Option("zh-summary", "--template", help="zh-summary or en-summary."),
+    template: str = typer.Option("zh-summary", "--template", help="zh-summary, en-summary, or zh-project."),
 ) -> None:
     """Generate a static editable PPTX draft from task artifacts."""
     root = _root()

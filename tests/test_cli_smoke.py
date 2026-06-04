@@ -413,6 +413,31 @@ def test_collect_csv_comparison_ingest_generates_normalized_metrics(tmp_path: Pa
     assert artifacts["metrics_collection_summary"]["type"] == "config"
 
 
+def test_collect_run_working_dir_output_without_wrapper(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    stale_path = tmp_path / "stale.csv"
+    stale_path.write_text("epoch,accuracy\n1,0.01\n", encoding="utf-8")
+    old_time = time.time() - 30
+    os.utime(stale_path, (old_time, old_time))
+
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    rows = read_csv_rows(task_path / "metrics" / "normalized_metrics.csv")
+    assert rows
+    assert {Path(row["source_file"]).name for row in rows} == {"metrics.csv"}
+    summary = json.loads((task_path / "metrics" / "collection-summary.json").read_text(encoding="utf-8"))
+    assert {
+        (Path(candidate["source_file"]).name, candidate["origin"])
+        for candidate in summary["candidates"]
+    } == {("metrics.csv", "run_working_dir")}
+
+
 def test_collect_json_algorithm_benchmark_ingest_generates_normalized_metrics(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     assert invoke(tmp_path, ["init"]).exit_code == 0
@@ -471,6 +496,56 @@ def test_collect_without_supported_metrics_returns_exit_code_5(tmp_path: Path) -
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["candidate_count"] == 0
     assert summary["row_count"] == 0
+
+
+def test_collect_bad_and_empty_inputs_record_diagnostics_without_outputs(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "bad-inputs"
+    source.mkdir()
+    (source / "bad.json").write_text('{"epoch": 1, "accuracy": ', encoding="utf-8")
+    (source / "empty.csv").write_text("", encoding="utf-8")
+    (source / "missing_metric_columns.csv").write_text("name,notes\nalpha,no metric columns\n", encoding="utf-8")
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "bad-inputs"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 5
+    assert "no supported metrics files" in result.output
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary_path = task_path / "metrics" / "collection-summary.json"
+    assert summary_path.is_file()
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["candidate_count"] == 3
+    assert summary["row_count"] == 0
+    assert not summary["output_files"]
+    skipped = {(Path(item["source_file"]).name, item["reason"]) for item in summary["skipped_files"]}
+    assert ("bad.json", "parse_failed") in skipped
+    assert ("empty.csv", "no_detected_metrics") in skipped
+    assert ("missing_metric_columns.csv", "no_detected_metrics") in skipped
+    assert any("Failed to parse bad-inputs/bad.json" in warning for warning in summary["warnings"])
+    assert not (task_path / "metrics" / "normalized_metrics.csv").exists()
+    assert not (task_path / "metrics" / "normalized_metrics.json").exists()
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}
+    assert "metrics_collection_summary" in artifacts
+    assert "metrics_normalized_csv" not in artifacts
+    assert "metrics_normalized_json" not in artifacts
+
+
+def test_collect_repeated_bad_input_does_not_duplicate_summary_artifact(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "bad-json"
+    source.mkdir()
+    (source / "results.json").write_text("{not valid json", encoding="utf-8")
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "bad-json"]).output)
+
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 5
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 5
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = [artifact["artifact_id"] for artifact in manifest["artifacts"]]
+    assert artifact_ids.count("metrics_collection_summary") == 1
 
 
 def test_collect_after_deleting_sqlite_uses_manifest_and_source_refs(tmp_path: Path) -> None:
@@ -1024,6 +1099,10 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     assert "val_accuracy" in {item["column"] for item in summary["included_metrics"]["numeric"]}
     assert summary["included_figures"]
     assert "warnings" in summary
+    assert summary["qa_checks"]["slide_count"]["passed"] is True
+    assert summary["qa_checks"]["empty_slide_check"]["passed"] is True
+    assert summary["qa_checks"]["title_check"]["passed"] is True
+    assert summary["qa_checks"]["artifact_duplicate_check"]["passed"] is True
     assert summary["metrics"]["row_count"] > 0
     assert summary["figures"]
     assert "reports/report-fragment.md" in summary["source_artifacts"]
@@ -1143,7 +1222,7 @@ def test_slides_with_four_figures_creates_multiple_figure_slides(tmp_path: Path)
 
     assert result.exit_code == 0
     pptx_path = task_path / "slides" / "presentation-draft.pptx"
-    deck = assert_readable_deck(pptx_path, min_slides=7, max_slides=8)
+    deck = assert_readable_deck(pptx_path, min_slides=8, max_slides=9)
     summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
     assert len(summary["included_figures"]) == 4
     figure_slides = [slide for slide in summary["slides"] if "figure" in slide["purpose"]]
@@ -1188,3 +1267,299 @@ def test_slides_after_deleting_sqlite_uses_manifest_artifacts(tmp_path: Path) ->
     assert index_path.is_file()
     pptx_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "slides" / "presentation-draft.pptx"
     assert_readable_deck(pptx_path)
+
+
+def test_slides_long_command_and_paths_are_truncated_in_summary(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    manifest_path = task_path / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    long_command = "py -3 train.py " + " ".join(f"--very-long-option-{index}=value-{index}" for index in range(40))
+    long_source = str(tmp_path / ("nested-" + "x" * 160) / ("source-" + "y" * 120))
+    long_working_dir = str(tmp_path / ("working-" + "z" * 180))
+    manifest["command"] = long_command
+    manifest["source_path"] = long_source
+    manifest["working_dir"] = long_working_dir
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    assert_readable_deck(task_path / "slides" / "presentation-draft.pptx")
+    assert summary["full_text_fields"]["command"] == long_command
+    assert summary["full_text_fields"]["source_path"] == long_source
+    assert summary["full_text_fields"]["working_dir"] == long_working_dir
+    truncated_keys = {item["key"] for item in summary["text_truncations"]}
+    assert {"command", "source_path", "working_dir"}.issubset(truncated_keys)
+
+
+def test_slides_failed_task_long_stderr_is_truncated_and_recorded(tmp_path: Path) -> None:
+    script = tmp_path / "long_stderr.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "for index in range(40):",
+                "    print('stderr-line-' + str(index) + '-' + ('x' * 180), file=sys.stderr)",
+                "raise SystemExit(1)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["run", f'"{sys.executable}" long_stderr.py']).output)
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    deck = assert_readable_deck(task_path / "slides" / "presentation-draft.pptx")
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "... earlier lines truncated ..." in deck_text
+    stderr_truncations = [item for item in summary["text_truncations"] if item["key"] == "stderr_tail"]
+    assert stderr_truncations
+    assert "stderr-line-0" in stderr_truncations[0]["full"]
+    assert "stderr-line-39" in stderr_truncations[0]["full"]
+
+
+def test_slides_zh_project_template_generates_project_deck(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/project-presentation-pack"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id, "--template", "zh-project"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    deck = assert_readable_deck(task_path / "slides" / "presentation-draft.pptx", min_slides=7, max_slides=9)
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    assert summary["template"] == "zh-project"
+    assert summary["font_family"] == "Microsoft YaHei"
+    assert "SimSun" in summary["font_fallbacks"]
+    assert summary["project_goal"]["present"] is True
+    slide_titles = {slide["title"] for slide in summary["slides"]}
+    assert {"项目概览与来源", "关键对比与消融", "结论与复现"}.issubset(slide_titles)
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "项目汇报草稿" in deck_text
+    assert len(deck.slides) == summary["slide_count"]
+
+
+def test_slides_caption_missing_fields_uses_unknown_placeholder(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    figure_summary_path = task_path / "figures" / "figure-summary.json"
+    figure_summary = json.loads(figure_summary_path.read_text(encoding="utf-8"))
+    figure_summary["warnings"] = ["synthetic warning for missing metadata"]
+    figure_summary["skipped_candidates"] = [{"figure_id": "missing_meta", "reason": "metadata intentionally absent"}]
+    for item in figure_summary["generated_figures"]:
+        item.pop("x", None)
+        item.pop("y", None)
+        item.pop("group_by", None)
+        item.pop("source_metrics", None)
+    figure_summary_path.write_text(json.dumps(figure_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    deck = assert_readable_deck(task_path / "slides" / "presentation-draft.pptx")
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "x=未自动推断" in deck_text
+    assert "y=未自动推断" in deck_text
+    assert "group_by=未自动推断" in deck_text
+    assert "source=未自动推断" in deck_text
+    assert summary["figure_warnings"] == ["synthetic warning for missing metadata"]
+    assert summary["figure_skipped_candidates"][0]["figure_id"] == "missing_meta"
+
+
+def test_slides_metrics_table_truncates_many_rows_and_columns(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    data_dir = tmp_path / "wide-results"
+    data_dir.mkdir()
+    csv_path = data_dir / "metrics.csv"
+    headers = ["model", "variant", "accuracy", "f1", "latency_ms", "loss", "memory_mb", "runtime_s", "extra_a", "extra_b"]
+    rows = []
+    for index in range(12):
+        rows.append(
+            {
+                "model": f"model_{index}",
+                "variant": f"v{index}",
+                "accuracy": str(0.70 + index / 100),
+                "f1": str(0.60 + index / 100),
+                "latency_ms": str(30 + index),
+                "loss": str(1.0 - index / 100),
+                "memory_mb": str(100 + index),
+                "runtime_s": str(5 + index),
+                "extra_a": str(index),
+                "extra_b": str(index * 2),
+            }
+        )
+    with csv_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=headers)
+        writer.writeheader()
+        writer.writerows(rows)
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", str(data_dir)]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    deck = assert_readable_deck(task_path / "slides" / "presentation-draft.pptx", min_slides=6, max_slides=8)
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    assert summary["metrics_table"]["displayed_row_count"] <= 6
+    assert len(summary["metrics_table"]["columns"]) <= 8
+    assert summary["metrics_table"]["shown_columns"]
+    assert summary["metrics_table"]["hidden_columns"]
+    assert "truncated_cells_count" in summary["metrics_table"]
+    assert summary["table_truncations"]
+    assert summary["table_truncations"][0]["source_metrics"] == "metrics/normalized_metrics.csv"
+    assert summary["table_truncations"][0]["shown_columns"]
+    assert summary["table_truncations"][0]["hidden_columns"]
+    assert "truncated_cells_count" in summary["table_truncations"][0]
+    assert summary["qa_checks"]["table_overflow_guard"]["passed"] is True
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "指标表格预览" in deck_text
+
+
+def test_slides_key_comparison_identifies_best_and_baseline_delta(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    data_dir = tmp_path / "comparison-results"
+    data_dir.mkdir()
+    csv_path = data_dir / "metrics.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "model,accuracy,latency_ms",
+                "baseline,0.80,30",
+                "candidate_a,0.86,35",
+                "candidate_b,0.84,25",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", str(data_dir)]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id, "--template", "zh-project"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    deck = assert_readable_deck(task_path / "slides" / "presentation-draft.pptx", min_slides=7, max_slides=9)
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    comparison = summary["key_comparisons"][0]
+    assert comparison["metric"] == "accuracy"
+    assert comparison["direction"] == "higher"
+    assert comparison["best_item"]["label"] == "candidate_a"
+    assert comparison["baseline_item"]["label"] == "baseline"
+    assert comparison["delta"] is not None
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "关键对比" in deck_text
+    assert "candidate_a" in deck_text
+
+
+def test_slides_key_comparison_without_baseline_does_not_invent_delta(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    data_dir = tmp_path / "no-baseline-results"
+    data_dir.mkdir()
+    (data_dir / "metrics.csv").write_text(
+        "\n".join(
+            [
+                "method,f1,loss",
+                "alpha,0.75,0.45",
+                "beta,0.82,0.39",
+                "gamma,0.79,0.41",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", str(data_dir)]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id, "--template", "zh-project"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    assert_readable_deck(task_path / "slides" / "presentation-draft.pptx", min_slides=7, max_slides=9)
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    comparison = summary["key_comparisons"][0]
+    assert comparison["best_item"]["label"] == "beta"
+    assert comparison["baseline_item"] is None
+    assert comparison["delta"] is None
+
+
+def test_slides_zh_project_summary_contains_key_comparison_metadata(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/project-presentation-pack"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id, "--template", "zh-project"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    assert_readable_deck(task_path / "slides" / "presentation-draft.pptx", min_slides=7, max_slides=9)
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    assert summary["key_comparisons"]
+    comparison = summary["key_comparisons"][0]
+    assert comparison["source_metrics"] == "metrics/normalized_metrics.csv"
+    assert comparison["best_item"]
+    assert any("关键对比" in slide["title"] for slide in summary["slides"])
+
+
+def test_slides_long_caption_truncation_is_recorded(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    figure_summary_path = task_path / "figures" / "figure-summary.json"
+    figure_summary = json.loads(figure_summary_path.read_text(encoding="utf-8"))
+    figure_summary["generated_figures"][0]["figure_id"] = "figure_" + ("very_long_" * 30)
+    figure_summary["generated_figures"][0]["group_by"] = "group_" + ("very_long_" * 30)
+    figure_summary["generated_figures"][0]["source_metrics"] = "metrics/" + ("very_long_path_" * 30) + "normalized_metrics.csv"
+    figure_summary_path.write_text(json.dumps(figure_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    assert_readable_deck(task_path / "slides" / "presentation-draft.pptx", min_slides=6, max_slides=8)
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    assert summary["caption_truncations"]
+    assert "very_long" in summary["caption_truncations"][0]["full"]
+    assert summary["qa_checks"]["caption_overflow_guard"]["passed"] is True
+
+
+def test_slides_repeated_run_after_table_enhancements_does_not_duplicate_manifest_artifacts(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/project-presentation-pack"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+
+    assert invoke(tmp_path, ["slides", task_id, "--template", "zh-project"]).exit_code == 0
+    assert invoke(tmp_path, ["slides", task_id, "--template", "zh-project"]).exit_code == 0
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = [artifact["artifact_id"] for artifact in manifest["artifacts"]]
+    assert artifact_ids.count("slides_presentation_draft_pptx") == 1
+    assert artifact_ids.count("slides_summary_json") == 1
