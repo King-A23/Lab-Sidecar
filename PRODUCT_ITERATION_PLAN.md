@@ -544,6 +544,11 @@ labsidecar artifacts <task_id>
 - PPT 中图表清晰、文字不过载。
 - 简单算法动画可以作为视频插入 PPT。
 - 输出文件可以被用户继续编辑。
+- 静态 PPTX 收敛后，按 `docs/real-sample-visual-acceptance-checklist.md` 完成至少一个真实样例视觉验收。
+
+Phase 4.1 静态 PPTX 真实样例视觉验收已于 2026-06-04 完成，覆盖 `examples/project-presentation-pack/`、`examples/simple-success/`、`examples/csv-comparison/` 和 `examples/simple-failure/`，blocking 为 0。验收记录见 `docs/phase-4-real-sample-visual-acceptance.md`。
+
+Phase 4.2 于 2026-06-04 完成最小产品可用性收敛：动画 artifact 暂缓，优先修复直接 `run -> collect -> figures -> report -> slides` 链路。`collect` 现在可在 run 工作目录顶层识别任务开始后生成的 CSV/JSON，并记录来源 `run_working_dir`；不递归扫描 workspace 或 `.lab-sidecar`。验收记录见 `docs/phase-4-2-direct-run-collect-acceptance.md`，blocking 为 0。
 
 ### Phase 5：MCP Sidecar Integration
 
@@ -574,6 +579,47 @@ labsidecar artifacts <task_id>
 - Claude Desktop、Codex 或其他 MCP 客户端可以调用 Lab-Sidecar。
 - 长任务不会污染主对话上下文。
 - 主 Agent 能根据 artifact 生成最终回答或报告。
+
+Phase 5 于 2026-06-04 完成最小 MCP-facing 工具适配层：`lab_sidecar.mcp` 暴露 `run_experiment`、`inspect_results`、`make_figures`、`generate_report_fragment`、`generate_slides`，并复用既有 runner/collectors/figures/reports/slides service。默认响应只返回摘要和 artifact 列表，不返回完整 stdout/stderr、metrics rows、报告正文或 PPT 内容；`run_experiment` 增加 workspace 与危险命令安全闸门。初始阶段验收采用本地工具层等价 smoke，未宣称真实 stdio MCP 客户端验收完成。Public alpha readiness 于 2026-06-05 增加 `.[mcp]` optional extra，pin `mcp==1.27.2`，并完成真实 stdio MCP client/server smoke；smoke 使用 `run_experiment(background=True)` 返回 `task_id`，再轮询 `inspect_results` 并调用后续 4 个工具。验收记录见 `docs/phase-5-mcp-sidecar-acceptance.md` 和 `docs/public-alpha-readiness-acceptance.md`。
+
+### Phase 6：真实产品效果检验与安全可用性收敛
+
+目标：在完整链路打通后，用真实或高仿真的课程/实验项目检验 Lab-Sidecar 是否已经达到“安全、可用、可复现、值得长期使用”的产品状态。
+
+建议周期：1-2 周。
+
+#### 6.24 核心功能与验证范围
+
+围绕真实使用闭环做验收，不再扩大功能面：
+
+- 使用至少 3 个真实或高仿真项目跑通 `run -> collect -> figures -> report -> slides`。
+- 至少覆盖成功实验、失败实验、多结果对比、课程项目汇报四类场景。
+- 验证 CLI 直用体验，也验证 MCP/主 Agent 调用时的上下文隔离效果。
+- 检查所有生成物是否能被用户直接打开、编辑、复现和追溯。
+- 记录每次验收的输入、命令、生成目录、关键 artifact、人工观察结论和问题清单。
+- PPTX 视觉验收沿用 `docs/real-sample-visual-acceptance-checklist.md`，不临时放宽页数、溢出和可追溯标准。
+
+#### 6.25 安全与可靠性检查
+
+Phase 6 的重点不是增加新能力，而是确认产品默认行为足够保守：
+
+- 默认只在用户指定 workspace 内读写。
+- 不自动删除、覆盖或移动用户原始文件。
+- 对潜在危险命令给出明确提示或阻断策略。
+- 失败任务必须保留 stderr、退出码、运行命令和可诊断摘要。
+- 生成报告和 PPT 时，所有数值、图表和结论都必须能回溯到 artifact。
+- 对空数据、坏 CSV、坏 JSON、缺失图表、缺失字体、PPT 渲染失败等情况给出可理解错误。
+- 长任务、中断任务和重复运行不会破坏已有任务目录或索引。
+
+#### 6.26 真实效果验收标准
+
+- 一个新用户可以在 10 分钟内完成本地初始化和第一个样例运行。
+- 至少 3 个验收项目完整产出指标、图表、报告片段和 PPT 草稿。
+- 生成的 Markdown、图表和 PPT 可以直接用于课程实验汇报的一轮人工修改。
+- 主 Agent 通过摘要和 artifact 列表即可完成说明，不需要读取完整日志。
+- 所有高风险行为都有保守默认值，不会静默破坏用户数据。
+- `pytest`、CLI smoke、真实样例验收和人工视觉检查均通过。
+- 剩余问题被分为 blocking / follow-up / out-of-scope，blocking 项清零后才视为产品可用。
 
 ## 7. 核心数据协议
 

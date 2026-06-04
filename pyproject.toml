@@ -22,6 +22,9 @@ dependencies = [
 dev = [
   "pytest>=8.0",
 ]
+mcp = [
+  "mcp==1.27.2",
+]
 
 [project.scripts]
 labsidecar = "lab_sidecar.cli.app:main"

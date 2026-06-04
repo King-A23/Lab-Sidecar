@@ -8,6 +8,12 @@ Lab-Sidecar is a local-first CLI experiment runner for capturing commands, logs,
 py -3 -m pip install -e ".[dev]"
 ```
 
+Optional MCP stdio support is pinned behind an extra:
+
+```powershell
+py -3 -m pip install -e ".[mcp]"
+```
+
 If the `labsidecar` console script is not on `PATH` on Windows, use the module entrypoint:
 
 ```powershell
@@ -34,6 +40,7 @@ py -3 -m lab_sidecar.cli.app report <task_id>
 py -3 -m lab_sidecar.cli.app report <task_id> --template zh-summary
 py -3 -m lab_sidecar.cli.app slides <task_id>
 py -3 -m lab_sidecar.cli.app slides <task_id> --template en-summary
+py -3 -m lab_sidecar.cli.app slides <task_id> --template zh-project
 ```
 
 ## Minimal Workflow
@@ -61,6 +68,8 @@ py -3 -m lab_sidecar.cli.app report <task_id>
 py -3 -m lab_sidecar.cli.app slides <task_id>
 py -3 -m lab_sidecar.cli.app status <task_id>
 ```
+
+For run-mode tasks, `collect` scans the task directory and the run working directory top level for CSV/JSON files created after the task starts. It does not recursively scan the workspace or `.lab-sidecar`.
 
 Run a long task in the background:
 
@@ -96,20 +105,58 @@ Supported templates:
 
 - `zh-summary` default Chinese static summary deck
 - `en-summary` English static summary deck
+- `zh-project` compressed Chinese static course/project presentation deck for single-task project material packs, targeting 7-9 slides
 
-Phase 4.1 only generates a static, editable PPTX draft from existing manifest, metrics, figures, report, and log artifacts. Completed tasks need at least one of metrics, figures, or report artifacts; failed or cancelled tasks can generate diagnostic slides from manifest and logs.
+Phase 4.1 only generates a static, editable PPTX draft from existing manifest, metrics, figures, report, and log artifacts. Completed tasks need at least one of metrics, figures, or report artifacts; failed or cancelled tasks can generate diagnostic slides from manifest and logs. It does not modify the user source directory.
 
 Current static deck contents include:
 
 - title and experiment settings slides based on `manifest.json`
 - a metrics summary slide with row count, key columns, and numeric min/mean/max/final values
+- a bounded metrics table preview that selects important columns, formats numbers consistently, and records row/column truncation metadata
+- a rule-based key comparison page for project-style decks when metrics contain fields such as `variant`, `model`, `method`, `algorithm`, or `source_file`
 - up to four PNG figures, split across multiple figure slides with at most two figures per slide
-- figure captions with `figure_id`, chart type, x/y fields, and group field when available
+- figure captions with `figure_id`, chart type, x/y/group fields, and source metrics, using `未自动推断` or `Not automatically inferred` when metadata is missing
 - a report summary slide using `reports/report-fragment.md` when present
 - a reproducibility slide with command, source path, working directory, and artifact directory
 - failed/cancelled diagnostic decks with status, exit code or cancellation note, bounded stderr/stdout tails, and reproducibility details
+- for `zh-project`, compressed project overview/source, metrics summary, metrics table, figures, key comparison/ablation, and conclusion/reproducibility slides
 
-`slides-summary.json` records the generated slide count, included figures, included metrics, warnings, and per-slide purpose/source artifact metadata. The command does not create animation, video, GIF, Web UI, MCP integration, or AI-polished content.
+Long commands, paths, failure summaries, and stdout/stderr tails are bounded in the PPTX to avoid overflowing slide content. The full original values and truncation records are kept in `slides-summary.json` under fields such as `full_text_fields` and `text_truncations`.
+
+Metrics table preview uses simple layout guards: numeric columns are narrower and right-aligned, text/path columns get more width but still have cell-level truncation. `slides-summary.json` records `shown_columns`, `hidden_columns`, and `truncated_cells_count` so the full table provenance remains inspectable.
+
+Key comparison is deterministic rule inference, not AI analysis: accuracy/F1-like metrics are treated as higher-is-better, while loss/runtime/latency/time/memory-like metrics are treated as lower-is-better. If a baseline cannot be recognized, `baseline_item` and `delta` remain null and the deck displays `未自动推断`.
+
+`slides-summary.json` records the generated slide count, template, font family/fallbacks, included figures, included metrics, table truncations, key comparisons, caption truncations, figure warnings/skipped candidates, source artifacts, truncation metadata, and per-slide purpose/source artifact metadata. It also includes `qa_checks` for slide count consistency, empty slide/title checks, artifact duplicate checks, table overflow guards, and caption overflow guards. The command does not create animation, video, GIF, Web UI, MCP integration, or AI-polished content.
+
+Phase 4.1 static PPTX real-sample visual acceptance passed on 2026-06-04 with 0 blocking issues. The record is `docs/phase-4-real-sample-visual-acceptance.md`.
+
+Phase 4.2 direct run collection acceptance passed on 2026-06-04 with 0 blocking issues. Animation output is deferred; the record is `docs/phase-4-2-direct-run-collect-acceptance.md`.
+
+## MCP Tool Adapter
+
+Phase 5 adds an experimental local MCP-facing adapter in `lab_sidecar.mcp`. The adapter exposes the planned tool contract without reimplementing core behavior:
+
+- `run_experiment`
+- `inspect_results`
+- `make_figures`
+- `generate_report_fragment`
+- `generate_slides`
+
+The tools call the existing runner, collector, figure, report, and slides services. Responses default to bounded summaries and artifact lists; they do not return full stdout, stderr, metrics rows, report bodies, or PPT contents. `run_experiment` applies a conservative workspace and command safety gate before calling the runner.
+
+The MCP-facing safety gate applies to `LabSidecarMCPTools.run_experiment`. The CLI `run` command remains a user-explicit local command execution path and does not apply the MCP confirmation/blocking policy.
+
+The optional stdio server entrypoint is:
+
+```powershell
+py -3 -m lab_sidecar.mcp.server
+```
+
+Host setup notes are in `docs/mcp-host-config.md`. Public alpha readiness pinned `mcp==1.27.2` and completed a real stdio MCP client smoke with `scripts/mcp_stdio_smoke.py`. The smoke uses `run_experiment(background=True)` so command execution returns a `task_id`, then polls `inspect_results` before calling the figure, report, and slides tools.
+
+In environments without the optional `mcp` Python package, use `LabSidecarMCPTools` directly for local smoke tests and host integration work.
 
 ## Current Scope
 
@@ -117,7 +164,6 @@ The current scope does not include:
 
 - Web UI
 - FastAPI
-- MCP
 - AI automatic analysis
 - Animation, video, GIF, Manim, or Remotion output
 
