@@ -4,6 +4,8 @@ Date: 2026-06-04 19:35 +08:00
 
 Scope: Phase 6 real product effect, safety, usability, reproducibility, and context-isolation convergence. This phase does not expand feature scope beyond validating the current CLI-first and MCP-facing local workflow.
 
+Design-goals note, added during Phase 1 gap baseline on 2026-06-05: this record is an early high-fidelity public-alpha validation record. It is not final proof that the complete V1 design goal in `PRODUCT_ITERATION_PLAN.md` is finished. The controlling completion plan and remaining gaps are tracked in `docs/design-goals-completion-plan.md` and `docs/design-goals-gap-matrix.md`.
+
 Temporary acceptance workspace:
 
 ```text
