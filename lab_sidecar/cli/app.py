@@ -22,7 +22,7 @@ from lab_sidecar.reports.service import (
     ReportMetricsRequiredError,
     ReportWriteError,
 )
-from lab_sidecar.runner.service import RunnerService, tail_lines
+from lab_sidecar.runner.service import RunnerService, list_task_ids, tail_lines
 from lab_sidecar.slides.service import (
     InvalidSlidesTemplateError,
     SlidesArtifactsRequiredError,
@@ -140,6 +140,39 @@ def cancel(task_id: str) -> None:
 
     typer.echo(f"Cancellation requested: {record.task_id}")
     typer.echo(f"Status: {record.status.value}")
+
+
+@app.command("list")
+def list_tasks(
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of task records to show."),
+) -> None:
+    """List recent Lab-Sidecar tasks from manifest files."""
+    root = _root()
+    task_ids = list_task_ids(root)
+    if not task_ids:
+        typer.echo("No tasks found.")
+        return
+
+    for task_id in reversed(task_ids[-limit:]):
+        try:
+            record = RunnerService(root).refresh(task_id)
+        except FileNotFoundError:
+            continue
+        label = f" - {record.name}" if record.name else ""
+        typer.echo(f"{record.task_id}\t{record.status.value}\t{record.updated_at}{label}")
+
+
+@app.command("open")
+def open_task(task_id: str) -> None:
+    """Print the task artifact directory path."""
+    root = _root()
+    try:
+        record = load_task(root, task_id)
+    except FileNotFoundError:
+        _fail(f"Error: task '{task_id}' was not found.", code=3)
+
+    task_path = resolve_workspace_path(record.paths.task_dir, root)
+    typer.echo(task_path)
 
 
 @app.command()

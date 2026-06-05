@@ -13,6 +13,7 @@ from pptx import Presentation
 from typer.testing import CliRunner
 
 from lab_sidecar.cli.app import app
+from lab_sidecar.runner.process import terminate_process_tree
 
 
 runner = CliRunner()
@@ -230,6 +231,171 @@ def test_background_run_status_logs_and_cancel(tmp_path: Path) -> None:
     assert cancelled_manifest["status"] == "cancelled"
     assert cancelled_manifest["pid"] is None
     assert cancelled_manifest["worker_pid"] is None
+
+
+def test_background_completed_task_refreshes_to_completed(tmp_path: Path) -> None:
+    script = tmp_path / "quick_success.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "print('quick-start', flush=True)",
+                "time.sleep(0.2)",
+                "print('quick-done', flush=True)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    task_id = extract_task_id(invoke(tmp_path, ["run", f'"{sys.executable}" quick_success.py', "--background"]).output)
+
+    deadline = time.time() + 10
+    status = None
+    while time.time() < deadline:
+        status = invoke(tmp_path, ["status", task_id])
+        assert status.exit_code == 0
+        if "Status: completed" in status.output:
+            break
+        time.sleep(0.2)
+
+    assert status is not None
+    assert "Status: completed" in status.output
+    manifest = read_manifest(tmp_path, task_id)
+    assert manifest["status"] == "completed"
+    assert manifest["exit_code"] == 0
+    assert manifest["pid"] is None
+    assert manifest["worker_pid"] is None
+    logs = invoke(tmp_path, ["logs", task_id, "--stream", "stdout", "--tail", "5"])
+    assert logs.exit_code == 0
+    assert "quick-done" in logs.output
+
+
+def test_background_failed_task_refreshes_to_failed(tmp_path: Path) -> None:
+    script = tmp_path / "quick_failure.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "print('about to fail', file=sys.stderr, flush=True)",
+                "raise RuntimeError('phase2 background failure')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    task_id = extract_task_id(invoke(tmp_path, ["run", f'"{sys.executable}" quick_failure.py', "--background"]).output)
+
+    deadline = time.time() + 10
+    status = None
+    while time.time() < deadline:
+        status = invoke(tmp_path, ["status", task_id])
+        assert status.exit_code == 0
+        if "Status: failed" in status.output:
+            break
+        time.sleep(0.2)
+
+    assert status is not None
+    assert "Status: failed" in status.output
+    assert "phase2 background failure" in status.output
+    manifest = read_manifest(tmp_path, task_id)
+    assert manifest["status"] == "failed"
+    assert manifest["exit_code"] != 0
+    assert manifest["pid"] is None
+    assert manifest["worker_pid"] is None
+    assert "phase2 background failure" in manifest["failure_summary"]
+
+
+def test_background_completed_task_after_deleting_sqlite_uses_manifest(tmp_path: Path) -> None:
+    script = tmp_path / "quick_success.py"
+    script.write_text("print('sqlite-free-complete', flush=True)\n", encoding="utf-8")
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["run", f'"{sys.executable}" quick_success.py', "--background"]).output)
+
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        if read_manifest(tmp_path, task_id)["status"] == "completed":
+            break
+        time.sleep(0.2)
+
+    index_path = tmp_path / ".lab-sidecar" / "index.sqlite"
+    index_path.unlink()
+    status = invoke(tmp_path, ["status", task_id])
+
+    assert status.exit_code == 0
+    assert "Status: completed" in status.output
+    assert invoke(tmp_path, ["logs", task_id, "--tail", "5"]).exit_code == 0
+    assert invoke(tmp_path, ["artifacts", task_id]).exit_code == 0
+    assert index_path.is_file()
+
+
+def test_stale_background_worker_is_marked_failed_with_diagnostics(tmp_path: Path) -> None:
+    script = tmp_path / "long_task.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "print('stale-ready', flush=True)",
+                "time.sleep(30)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["run", f'"{sys.executable}" long_task.py', "--background"]).output)
+    wait_for_output(tmp_path, task_id, "stale-ready")
+
+    manifest = read_manifest(tmp_path, task_id)
+    worker_pid = manifest["worker_pid"]
+    assert worker_pid
+    terminate_process_tree(worker_pid)
+    child_pid = manifest["pid"]
+    if child_pid:
+        terminate_process_tree(child_pid)
+
+    manifest_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "manifest.json"
+    manifest["pid"] = None
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    deadline = time.time() + 10
+    status = None
+    while time.time() < deadline:
+        status = invoke(tmp_path, ["status", task_id])
+        assert status.exit_code == 0
+        if "Status: failed" in status.output:
+            break
+        time.sleep(0.2)
+
+    assert status is not None
+    assert "Status: failed" in status.output
+    manifest = read_manifest(tmp_path, task_id)
+    assert manifest["status"] == "failed"
+    assert manifest["pid"] is None
+    assert manifest["worker_pid"] is None
+    assert "background task recovery marked this task failed" in manifest["failure_summary"]
+    stderr_text = (tmp_path / ".lab-sidecar" / "tasks" / task_id / "stderr.log").read_text(encoding="utf-8")
+    assert "background task recovery marked this task failed" in stderr_text
+
+
+def test_list_and_open_use_manifest_task_state(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command, "--name", "list-open-smoke"]).output)
+
+    listed = invoke(tmp_path, ["list"])
+    opened = invoke(tmp_path, ["open", task_id])
+
+    assert listed.exit_code == 0
+    assert task_id in listed.output
+    assert "completed" in listed.output
+    assert "list-open-smoke" in listed.output
+    assert opened.exit_code == 0
+    assert str(tmp_path / ".lab-sidecar" / "tasks" / task_id) in opened.output
 
 
 def test_cancel_non_running_task_returns_state_error(tmp_path: Path) -> None:

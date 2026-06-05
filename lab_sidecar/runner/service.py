@@ -78,11 +78,13 @@ class RunnerService:
     def refresh(self, task_id: str) -> TaskRecord:
         record = load_task(self.root, task_id)
         if record.status != TaskStatus.RUNNING:
+            upsert_task(self.root, record)
             return record
 
         if record.pid:
             probe = probe_process(record.pid)
             if probe.is_running:
+                upsert_task(self.root, record)
                 return record
             if probe.exit_code is not None:
                 return finalize_task(
@@ -95,12 +97,14 @@ class RunnerService:
         if record.worker_pid:
             probe = probe_process(record.worker_pid)
             if probe.is_running:
+                upsert_task(self.root, record)
                 return record
             refreshed = load_task(self.root, task_id)
             if refreshed.status != TaskStatus.RUNNING:
+                upsert_task(self.root, refreshed)
                 return refreshed
 
-        return record
+        return mark_stale_running_task_failed(self.root, task_id)
 
     def cancel(self, task_id: str) -> TaskRecord:
         record = self.refresh(task_id)
@@ -231,13 +235,20 @@ class RunnerService:
             record.failure_summary = str(exc)
             record.status = TaskStatus.FAILED
             record.finished_at = now_iso()
+            record.updated_at = now_iso()
+            write_manifest(manifest_path(self.root, record.task_id), record)
+            upsert_task(self.root, record)
+            return record
         else:
-            record.worker_pid = process.pid
-            record.status = TaskStatus.RUNNING
-        record.updated_at = now_iso()
-        write_manifest(manifest_path(self.root, record.task_id), record)
-        upsert_task(self.root, record)
-        return record
+            current = load_task(self.root, record.task_id)
+            if current.status != TaskStatus.RUNNING:
+                return current
+            current.worker_pid = process.pid
+            current.status = TaskStatus.RUNNING
+            current.updated_at = now_iso()
+            write_manifest(manifest_path(self.root, current.task_id), current)
+            upsert_task(self.root, current)
+            return current
 
     def _initial_record(
         self,
@@ -364,6 +375,52 @@ def finalize_task(root: Path, task_id: str, exit_code: int, clear_worker: bool =
     write_manifest(manifest_path(root, task_id), record)
     upsert_task(root, record)
     return record
+
+
+def mark_stale_running_task_failed(root: Path, task_id: str) -> TaskRecord:
+    record = load_task(root, task_id)
+    if record.status != TaskStatus.RUNNING:
+        return record
+
+    task_path = resolve_workspace_path(record.paths.task_dir, root)
+    stderr_path = resolve_workspace_path(record.paths.stderr, root)
+    worker_err_path = task_path / "worker.err.log"
+    worker_tail = _tail_existing_lines(worker_err_path, 8)
+    finished = now_iso()
+    diagnostic_lines = [
+        "",
+        f"Lab-Sidecar: background task recovery marked this task failed at {finished}.",
+        "Reason: manifest still said running, but no active child or worker process could be verified.",
+    ]
+    if record.pid is not None:
+        diagnostic_lines.append(f"Recorded child pid: {record.pid}")
+    if record.worker_pid is not None:
+        diagnostic_lines.append(f"Recorded worker pid: {record.worker_pid}")
+    if worker_tail:
+        diagnostic_lines.append("worker.err.log tail:")
+        diagnostic_lines.extend(worker_tail)
+
+    diagnostic = "\n".join(diagnostic_lines).rstrip() + "\n"
+    with stderr_path.open("a", encoding="utf-8") as fh:
+        fh.write(diagnostic)
+
+    record.status = TaskStatus.FAILED
+    record.exit_code = None
+    record.failure_summary = "\n".join(line for line in diagnostic_lines if line).strip()
+    record.finished_at = finished
+    record.updated_at = finished
+    record.pid = None
+    record.worker_pid = None
+    write_manifest(manifest_path(root, task_id), record)
+    upsert_task(root, record)
+    return record
+
+
+def _tail_existing_lines(path: Path, count: int) -> list[str]:
+    if count <= 0 or not path.exists():
+        return []
+    return path.read_text(encoding="utf-8", errors="replace").splitlines()[-count:]
+
 
 def list_task_ids(root: Path) -> list[str]:
     directory = tasks_dir(root)
