@@ -179,10 +179,20 @@ def collect(
             "Hint: check whether the task directory still exists under .lab-sidecar/tasks/.",
             code=3,
         )
-    except NoMetricsFoundError:
+    except NoMetricsFoundError as exc:
+        candidate_count = int(exc.summary.get("candidate_count", 0))
+        summary_path = ".lab-sidecar/tasks/<task_id>/metrics/collection-summary.json"
+        if candidate_count == 0:
+            _fail(
+                f"Error: no CSV/JSON metric candidates were found for task '{task_id}'.\n"
+                "Hint: ingest a directory or file containing CSV/JSON results, or run a command that writes CSV/JSON output.\n"
+                f"Diagnostics: {summary_path}",
+                code=5,
+            )
         _fail(
-            f"Error: no supported metrics files were found for task '{task_id}'.\n"
-            "Hint: provide a mapping file with --config or ingest a CSV/JSON results file.",
+            f"Error: CSV/JSON candidates were found, but no metrics could be collected for task '{task_id}'.\n"
+            "Hint: check parse warnings, empty files, and metric column names in the collection summary.\n"
+            f"Diagnostics: {summary_path}",
             code=5,
         )
 

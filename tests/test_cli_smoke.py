@@ -490,7 +490,8 @@ def test_collect_without_supported_metrics_returns_exit_code_5(tmp_path: Path) -
     result = invoke(tmp_path, ["collect", task_id])
 
     assert result.exit_code == 5
-    assert "no supported metrics files" in result.output
+    assert "no CSV/JSON metric candidates were found" in result.output
+    assert "collection-summary.json" in result.output
     summary_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "metrics" / "collection-summary.json"
     assert summary_path.is_file()
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -510,7 +511,8 @@ def test_collect_bad_and_empty_inputs_record_diagnostics_without_outputs(tmp_pat
     result = invoke(tmp_path, ["collect", task_id])
 
     assert result.exit_code == 5
-    assert "no supported metrics files" in result.output
+    assert "CSV/JSON candidates were found, but no metrics could be collected" in result.output
+    assert "collection-summary.json" in result.output
     task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
     summary_path = task_path / "metrics" / "collection-summary.json"
     assert summary_path.is_file()

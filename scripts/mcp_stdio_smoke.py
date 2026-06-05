@@ -146,12 +146,14 @@ def _prepare_workspace(path: Path) -> Path:
     workspace = path.resolve()
     if workspace.exists():
         marker_path = workspace / MARKER_FILE
-        if not marker_path.is_file():
+        has_existing_content = any(workspace.iterdir())
+        if has_existing_content and not marker_path.is_file():
             raise RuntimeError(
                 f"refusing to remove existing workspace without {MARKER_FILE} marker: {workspace}"
             )
-        shutil.rmtree(workspace)
-    workspace.mkdir(parents=True)
+        if has_existing_content:
+            shutil.rmtree(workspace)
+    workspace.mkdir(parents=True, exist_ok=True)
     (workspace / MARKER_FILE).write_text("temporary Lab-Sidecar MCP stdio smoke workspace\n", encoding="utf-8")
     shutil.copytree(PROJECT_ROOT / "examples", workspace / "examples")
     init_workspace(workspace)

@@ -2,6 +2,20 @@
 
 Lab-Sidecar is a local-first CLI experiment runner for capturing commands, logs, task status, and reproducible report and presentation artifact records.
 
+## Quick Smoke
+
+```powershell
+py -3 -m pip install -e ".[dev,mcp]"
+py -3 -m lab_sidecar.cli.app init
+py -3 -m lab_sidecar.cli.app run "py -3 examples/simple-success/train.py --output metrics.csv"
+py -3 -m lab_sidecar.cli.app collect <task_id>
+py -3 -m lab_sidecar.cli.app figures <task_id>
+py -3 -m lab_sidecar.cli.app report <task_id>
+py -3 -m lab_sidecar.cli.app slides <task_id>
+```
+
+See `docs/public-alpha-quickstart.md` for the full 10-minute path, `docs/public-alpha-release-notes.md` for current limits, and `docs/mcp-host-config.md` for MCP stdio setup.
+
 ## Install
 
 ```powershell
