@@ -85,6 +85,7 @@ def test_mcp_direct_success_chain_uses_summaries_and_artifacts(tmp_path: Path) -
     assert inspect_result["summary"]["metrics"]["row_count"] == 5
     assert inspect_result["summary"]["metrics"]["processed_files"][0]["source_file"] == "metrics.csv"
     assert "log_tail" not in inspect_result["summary"]
+    assert inspect_result["omitted"]["log_tail"] == "omitted_by_default"
 
     figures_result = tools.make_figures(task_id)
     assert figures_result["summary"]["figure_count"] == 2
@@ -99,6 +100,55 @@ def test_mcp_direct_success_chain_uses_summaries_and_artifacts(tmp_path: Path) -
     artifact_paths = {artifact["path"] for artifact in slides_result["artifacts"]}
     assert "slides/presentation-draft.pptx" in artifact_paths
     assert "slides/slides-summary.json" in artifact_paths
+
+
+def test_mcp_inspect_log_tail_is_opt_in_and_bounded(tmp_path: Path) -> None:
+    script = tmp_path / "many_lines.py"
+    script.write_text(
+        "\n".join(
+            [
+                "for index in range(30):",
+                "    print(f'line-{index}', flush=True)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    init_workspace(tmp_path)
+    tools = LabSidecarMCPTools(tmp_path)
+    result = tools.run_experiment(f'"{sys.executable}" many_lines.py', background=False)
+    task_id = result["task_id"]
+
+    default_inspect = tools.inspect_results(task_id, collect_metrics=False)
+    assert "log_tail" not in default_inspect["summary"]
+    assert default_inspect["omitted"]["log_tail"] == "omitted_by_default"
+
+    with_tail = tools.inspect_results(task_id, collect_metrics=False, include_log_tail=True, log_tail_lines=100)
+    tail = with_tail["summary"]["log_tail"]["stdout"]
+    assert with_tail["omitted"]["log_tail"] == "bounded_tail_returned"
+    assert len(tail) == 20
+    assert tail[0] == "line-10"
+    assert tail[-1] == "line-29"
+    assert "line-0" not in str(with_tail)
+
+
+def test_mcp_report_preview_is_omitted_by_default_and_bounded(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    init_workspace(tmp_path)
+    tools = LabSidecarMCPTools(tmp_path)
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = tools.run_experiment(command, background=False)["task_id"]
+
+    default_report = tools.generate_report_fragment(task_id)
+    assert default_report["summary"]["preview"] is None
+    assert default_report["omitted"]["report_markdown"] == "omitted_by_default"
+
+    preview_report = tools.generate_report_fragment(task_id, preview_chars=5000)
+    preview = preview_report["summary"]["preview"]
+    assert isinstance(preview, str)
+    assert 0 < len(preview) <= 2000
+    assert preview_report["omitted"]["report_markdown"] == "bounded_preview_returned"
+    assert preview.startswith("#")
 
 
 def test_mcp_failed_task_returns_failure_summary_without_full_stderr(tmp_path: Path) -> None:
@@ -145,7 +195,9 @@ def test_mcp_background_long_task_returns_task_id_without_log_body(tmp_path: Pat
         time.sleep(0.1)
     assert inspect["task_status"] == "running"
 
-    tools_root = tmp_path
-    from lab_sidecar.runner.service import RunnerService
+    cancel = tools.cancel_experiment(task_id)
 
-    RunnerService(tools_root).cancel(task_id)
+    assert cancel["task_status"] == "cancelled"
+    assert "ready" not in str(cancel)
+    inspected = tools.inspect_results(task_id, collect_metrics=False)
+    assert inspected["task_status"] == "cancelled"

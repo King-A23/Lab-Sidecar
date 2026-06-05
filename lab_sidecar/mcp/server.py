@@ -22,6 +22,7 @@ def create_server(root: str | Path | None = None) -> Any:
 
     server.tool()(tools.run_experiment)
     server.tool()(tools.inspect_results)
+    server.tool()(tools.cancel_experiment)
     server.tool()(tools.make_figures)
     server.tool()(tools.generate_report_fragment)
     server.tool()(tools.generate_slides)

@@ -96,6 +96,18 @@ class LabSidecarMCPTools:
             summary=summary,
             artifacts=artifact_list(record),
             warnings=warnings,
+            omitted={
+                "log_tail": "omitted_by_default" if not include_log_tail else "bounded_tail_returned",
+            },
+        )
+
+    def cancel_experiment(self, task_id: str) -> dict[str, Any]:
+        record = RunnerService(self.root).cancel(task_id)
+        return base_response(
+            record,
+            summary=task_summary(self.root, record),
+            artifacts=artifact_list(record),
+            next_actions=[f"inspect_results {record.task_id}"],
         )
 
     def make_figures(

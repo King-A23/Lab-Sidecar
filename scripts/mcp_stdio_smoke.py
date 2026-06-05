@@ -20,6 +20,23 @@ def _example_command(workspace: Path) -> str:
     return f'"{sys.executable}" "{script}" --output metrics.csv'
 
 
+def _cancel_command(workspace: Path) -> str:
+    script = workspace / "cancel_me.py"
+    if not script.exists():
+        script.write_text(
+            "\n".join(
+                [
+                    "import time",
+                    "print('cancel-ready', flush=True)",
+                    "time.sleep(30)",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    return f'"{sys.executable}" "{script}"'
+
+
 async def _run_smoke(workspace: Path) -> dict[str, Any]:
     try:
         from mcp import ClientSession, StdioServerParameters
@@ -60,6 +77,23 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
                     timeout=60,
                 )
                 slides_result = await _call_tool(session, "generate_slides", {"task_id": task_id}, timeout=90)
+                cancel_run_result = await _call_tool(
+                    session,
+                    "run_experiment",
+                    {
+                        "command": _cancel_command(workspace),
+                        "background": True,
+                    },
+                    timeout=30,
+                )
+                cancel_task_id = cancel_run_result["task_id"]
+                await asyncio.sleep(1)
+                cancel_result = await _call_tool(
+                    session,
+                    "cancel_experiment",
+                    {"task_id": cancel_task_id},
+                    timeout=30,
+                )
                 blocked_result = await _call_tool(
                     session,
                     "run_experiment",
@@ -73,6 +107,7 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
     expected = {
         "run_experiment",
         "inspect_results",
+        "cancel_experiment",
         "make_figures",
         "generate_report_fragment",
         "generate_slides",
@@ -92,6 +127,10 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         raise RuntimeError("generate_report_fragment returned a report preview by default")
     if slides_result.get("summary", {}).get("slide_count", 0) < 1:
         raise RuntimeError(f"generate_slides did not generate slides: {slides_result}")
+    if cancel_run_result.get("task_status") != "running":
+        raise RuntimeError(f"cancel smoke task did not start in background: {cancel_run_result}")
+    if cancel_result.get("task_status") != "cancelled":
+        raise RuntimeError(f"cancel_experiment did not cancel task: {cancel_result}")
     if blocked_result.get("summary", {}).get("status") != "blocked":
         raise RuntimeError(f"destructive command was not blocked: {blocked_result}")
 
@@ -107,6 +146,8 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         "report_path": report_result["summary"]["report_path"],
         "slide_count": slides_result["summary"]["slide_count"],
         "slide_qa_checks": slides_result["summary"].get("qa_checks", {}),
+        "cancel_task_id": cancel_task_id,
+        "cancel_status": cancel_result["task_status"],
         "blocked_command_status": blocked_result["summary"]["status"],
         "omitted_contract": slides_result["omitted"],
         "artifact_count": len(slides_result["artifacts"]),
