@@ -9,7 +9,7 @@ from lab_sidecar.core.config import init_workspace
 from lab_sidecar.core.manifest import load_task
 from lab_sidecar.core.paths import config_path, resolve_workspace_path, sqlite_path, state_dir
 from lab_sidecar.core.models import TaskStatus
-from lab_sidecar.collectors.service import MetricsCollectionService, NoMetricsFoundError
+from lab_sidecar.collectors.service import MetricsCollectionService, MetricsConfigLoadError, NoMetricsFoundError
 from lab_sidecar.figures.service import (
     FigureGenerationService,
     FigureSpecLoadError,
@@ -212,20 +212,31 @@ def collect(
             "Hint: check whether the task directory still exists under .lab-sidecar/tasks/.",
             code=3,
         )
+    except MetricsConfigLoadError as exc:
+        _fail(
+            f"Error: metrics config is invalid.\nReason: {exc}",
+            code=2,
+        )
     except NoMetricsFoundError as exc:
         candidate_count = int(exc.summary.get("candidate_count", 0))
+        warnings = exc.summary.get("warnings")
+        warning_text = ""
+        if isinstance(warnings, list) and warnings:
+            warning_text = "\nDiagnostics warnings:\n" + "\n".join(f"- {warning}" for warning in warnings)
         summary_path = ".lab-sidecar/tasks/<task_id>/metrics/collection-summary.json"
         if candidate_count == 0:
             _fail(
                 f"Error: no CSV/JSON metric candidates were found for task '{task_id}'.\n"
                 "Hint: ingest a directory or file containing CSV/JSON results, or run a command that writes CSV/JSON output.\n"
-                f"Diagnostics: {summary_path}",
+                f"Diagnostics: {summary_path}"
+                f"{warning_text}",
                 code=5,
             )
         _fail(
             f"Error: CSV/JSON candidates were found, but no metrics could be collected for task '{task_id}'.\n"
             "Hint: check parse warnings, empty files, and metric column names in the collection summary.\n"
-            f"Diagnostics: {summary_path}",
+            f"Diagnostics: {summary_path}"
+            f"{warning_text}",
             code=5,
         )
 

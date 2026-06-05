@@ -778,6 +778,175 @@ def test_collect_after_deleting_sqlite_uses_manifest_and_source_refs(tmp_path: P
     assert read_csv_rows(csv_path)
 
 
+def test_collect_with_config_maps_nonstandard_fields_selects_sources_and_records_units(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "configured-results"
+    source.mkdir()
+    (source / "run_a.csv").write_text(
+        "\n".join(
+            [
+                "iter,algo,trial,score_pct,time_ms",
+                "1,baseline,1,0.70,45",
+                "2,baseline,1,0.75,43",
+                "1,candidate,1,0.80,35",
+                "2,candidate,1,0.86,31",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (source / "unrelated.csv").write_text("epoch,accuracy\n1,0.01\n", encoding="utf-8")
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "configured-results"]).output)
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - configured-results/run_a.csv",
+                "fields:",
+                "  epoch: iter",
+                "  method: algo",
+                "  seed: trial",
+                "  accuracy: score_pct",
+                "  latency_ms:",
+                "    source: time_ms",
+                "    unit: ms",
+                "units:",
+                "  accuracy: ratio",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    rows = read_csv_rows(task_path / "metrics" / "normalized_metrics.csv")
+    assert len(rows) == 4
+    assert {"source_file", "epoch", "method", "seed", "accuracy", "latency_ms"}.issubset(rows[0])
+    assert {Path(row["source_file"]).name for row in rows} == {"run_a.csv"}
+    assert {row["method"] for row in rows} == {"baseline", "candidate"}
+
+    summary = json.loads((task_path / "metrics" / "collection-summary.json").read_text(encoding="utf-8"))
+    assert summary["config_path"] == "metrics.yaml"
+    assert summary["candidate_count"] == 1
+    assert summary["candidates"][0]["origin"] == "config"
+    assert summary["processed_files"][0]["mapped_fields"] == ["epoch", "method", "seed", "accuracy", "latency_ms"]
+    assert summary["units"] == {"accuracy": "ratio", "latency_ms": "ms"}
+    assert Path(summary["processed_files"][0]["source_file"]).name == "run_a.csv"
+    assert "unrelated.csv" not in json.dumps(summary)
+
+
+def test_collect_with_config_missing_field_fails_with_diagnostics(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "configured-results"
+    source.mkdir()
+    (source / "run_a.csv").write_text("iter,algo,score_pct\n1,baseline,0.70\n", encoding="utf-8")
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "configured-results"]).output)
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - configured-results/run_a.csv",
+                "fields:",
+                "  epoch: iter",
+                "  accuracy: score_pct",
+                "  method: algo",
+                "  seed: missing_seed",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"])
+
+    assert result.exit_code == 5
+    assert "missing_seed" in result.output
+    assert "collection-summary.json" in result.output
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "metrics" / "collection-summary.json").read_text(encoding="utf-8"))
+    assert summary["row_count"] == 0
+    assert summary["skipped_files"][0]["reason"] == "missing_configured_field"
+    assert "missing_seed" in summary["warnings"][0]
+    assert not (task_path / "metrics" / "normalized_metrics.csv").exists()
+
+
+def test_collect_and_figures_with_explicit_config_are_stable_and_reuse_mapped_fields(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "configured-results"
+    source.mkdir()
+    (source / "run_a.csv").write_text(
+        "\n".join(
+            [
+                "iter,algo,trial,score_pct",
+                "1,baseline,1,0.70",
+                "2,baseline,1,0.75",
+                "1,candidate,1,0.80",
+                "2,candidate,1,0.86",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "configured-results"]).output)
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - configured-results/run_a.csv",
+                "fields:",
+                "  epoch: iter",
+                "  method: algo",
+                "  seed: trial",
+                "  accuracy: score_pct",
+                "units:",
+                "  accuracy: ratio",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "figure.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: mapped_accuracy",
+                "chart_type: line",
+                "title: Configured Accuracy",
+                "x: epoch",
+                "y: accuracy",
+                "group_by: method",
+                "output:",
+                "  - figures/mapped_accuracy.png",
+                "  - figures/mapped_accuracy.svg",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    assert invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"]).exit_code == 0
+    assert invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id, "--spec", "figure.yaml"]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id, "--spec", "figure.yaml"]).exit_code == 0
+
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    assert_non_empty_file(task_path / "figures" / "mapped_accuracy.png")
+    assert_non_empty_file(task_path / "figures" / "mapped_accuracy.svg")
+    figure_summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    assert figure_summary["generated_figures"][0]["x"] == "epoch"
+    assert figure_summary["generated_figures"][0]["y"] == "accuracy"
+    assert figure_summary["generated_figures"][0]["group_by"] == "method"
+
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = [artifact["artifact_id"] for artifact in manifest["artifacts"]]
+    assert len(artifact_ids) == len(set(artifact_ids))
+    assert artifact_ids.count("metrics_normalized_csv") == 1
+    assert artifact_ids.count("figures_summary") == 1
+    assert artifact_ids.count("figure_mapped_accuracy_png") == 1
+
+
 def test_figures_csv_comparison_after_collect_generates_png_svg_and_spec(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     assert invoke(tmp_path, ["init"]).exit_code == 0

@@ -15,27 +15,36 @@ class JsonCollectionResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def collect_json(path: Path) -> JsonCollectionResult:
+def read_json_rows(path: Path) -> tuple[list[dict[str, object]], list[str]]:
     data = json.loads(path.read_text(encoding="utf-8-sig"))
     rows, warnings = _rows_from_json(data)
     if not rows:
-        return JsonCollectionResult(warnings=warnings)
+        return [], warnings
 
     flattened_rows: list[dict[str, object]] = []
     skipped_complex = False
     for row in rows:
         flattened, had_complex = _flatten_object(row)
         skipped_complex = skipped_complex or had_complex
-        flattened["source_file"] = path.as_posix()
         flattened_rows.append(flattened)
+
+    if skipped_complex:
+        warnings.append(f"Skipped complex nested values in {path.as_posix()}.")
+    return flattened_rows, warnings
+
+
+def collect_json(path: Path) -> JsonCollectionResult:
+    flattened_rows, warnings = read_json_rows(path)
+    if not flattened_rows:
+        return JsonCollectionResult(warnings=warnings)
 
     field_names = sorted({key for row in flattened_rows for key in row if key != "source_file"})
     detected = detect_metric_fields(field_names)
     if not detected:
         return JsonCollectionResult(warnings=warnings)
 
-    if skipped_complex:
-        warnings.append(f"Skipped complex nested values in {path.as_posix()}.")
+    for row in flattened_rows:
+        row["source_file"] = path.as_posix()
     return JsonCollectionResult(rows=flattened_rows, detected_fields=detected, warnings=warnings)
 
 
@@ -94,4 +103,3 @@ def _flatten_object(data: dict[str, Any]) -> tuple[dict[str, object], bool]:
 
 def _is_scalar(value: Any) -> bool:
     return value is None or isinstance(value, str | int | float | bool)
-
