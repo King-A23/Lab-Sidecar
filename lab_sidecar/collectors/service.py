@@ -20,6 +20,7 @@ from lab_sidecar.collectors.scan import SUPPORTED_SUFFIXES, CandidateFile, scan_
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
+from lab_sidecar.core.provenance import file_provenance
 from lab_sidecar.storage.sqlite_index import upsert_task
 
 
@@ -49,6 +50,7 @@ class _CollectedFile:
     source_file: str
     file_type: str
     row_count: int
+    source_provenance: dict[str, Any] = field(default_factory=dict)
     detected_fields: list[str] = field(default_factory=list)
     mapped_fields: list[str] = field(default_factory=list)
 
@@ -103,6 +105,7 @@ class MetricsCollectionService:
                     source_file=source_file,
                     file_type=candidate.path.suffix.lower().lstrip("."),
                     row_count=len(file_rows),
+                    source_provenance=file_provenance(candidate.path),
                     detected_fields=detected_fields,
                     mapped_fields=mapped_fields,
                 )
@@ -263,6 +266,7 @@ class MetricsCollectionService:
                     "source_file": to_manifest_path(candidate.path, self.root),
                     "origin": candidate.origin,
                     "suffix": candidate.path.suffix.lower(),
+                    "source_provenance": _safe_file_provenance(candidate.path),
                 }
                 for candidate in candidates
             ],
@@ -271,6 +275,7 @@ class MetricsCollectionService:
                     "source_file": item.source_file,
                     "file_type": item.file_type,
                     "row_count": item.row_count,
+                    "source_provenance": item.source_provenance,
                     "detected_fields": item.detected_fields,
                     "mapped_fields": item.mapped_fields,
                 }
@@ -338,6 +343,13 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
 
 def _write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _safe_file_provenance(path: Path) -> dict[str, Any]:
+    try:
+        return file_provenance(path)
+    except OSError:
+        return {}
 
 
 class _CandidateSkipped(RuntimeError):

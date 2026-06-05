@@ -114,6 +114,7 @@ class ReportGenerationService:
             "generated_at": generated_at,
             "report_path": "reports/report-fragment.md",
             "summary_path": "reports/report-summary.json",
+            "generated_from": self._source_artifacts(task_path),
             "provenance": self._build_provenance(record),
             "metrics": self._build_metrics_summary(metrics_path, collection_summary_path),
             "figures": self._build_figure_summary(record.task_id, figure_summary_path, task_path, reports_dir),
@@ -239,7 +240,12 @@ class ReportGenerationService:
             task_path / "metrics" / "collection-summary.json",
             task_path / "figures" / "figure-summary.json",
             task_path / "stderr.log",
+            task_path / "stdout.log",
+            task_path / "raw" / "source_refs.json",
             task_path / "reproduce" / "command.txt",
+            task_path / "reproduce" / "env.json",
+            task_path / "reproduce" / "git.json",
+            task_path / "reproduce" / "dependencies.json",
         ]
         return [_task_relative(path, task_path) for path in candidates if path.exists()]
 
@@ -336,4 +342,3 @@ def _upsert_artifact(record: TaskRecord, artifact: ArtifactRecord) -> None:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
-

@@ -13,6 +13,7 @@ from pptx import Presentation
 from typer.testing import CliRunner
 
 from lab_sidecar.cli.app import app
+from lab_sidecar.core.provenance import git_snapshot
 from lab_sidecar.runner.process import terminate_process_tree
 
 
@@ -68,6 +69,15 @@ def assert_readable_deck(path: Path, min_slides: int = 5, max_slides: int = 8) -
     return deck
 
 
+def test_git_snapshot_records_repository_commit_and_status() -> None:
+    snapshot = git_snapshot(PROJECT_ROOT)
+
+    assert snapshot["is_repository"] is True
+    assert snapshot["commit"]
+    assert isinstance(snapshot["status_short"], list)
+    assert "dirty" in snapshot
+
+
 def wait_for_output(workspace: Path, task_id: str, needle: str, timeout: float = 10.0) -> None:
     path = workspace / ".lab-sidecar" / "tasks" / task_id / "stdout.log"
     deadline = time.time() + timeout
@@ -121,6 +131,19 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     assert (task_path / "stderr.log").is_file()
     assert (task_path / "reproduce" / "command.txt").is_file()
     assert (task_path / "reproduce" / "env.json").is_file()
+    assert (task_path / "reproduce" / "git.json").is_file()
+    assert (task_path / "reproduce" / "dependencies.json").is_file()
+    env_snapshot = json.loads((task_path / "reproduce" / "env.json").read_text(encoding="utf-8"))
+    git_snapshot = json.loads((task_path / "reproduce" / "git.json").read_text(encoding="utf-8"))
+    dependencies = json.loads((task_path / "reproduce" / "dependencies.json").read_text(encoding="utf-8"))
+    assert env_snapshot["python_version"]
+    assert env_snapshot["python_executable"]
+    assert env_snapshot["platform"]
+    assert env_snapshot["working_dir"] == str(tmp_path)
+    assert env_snapshot["git_path"] == "reproduce/git.json"
+    assert env_snapshot["dependencies_path"] == "reproduce/dependencies.json"
+    assert "is_repository" in git_snapshot
+    assert isinstance(dependencies, dict)
 
     status = invoke(tmp_path, ["status", task_id])
     assert status.exit_code == 0
@@ -136,6 +159,8 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     assert artifacts.exit_code == 0
     assert "[log]" in artifacts.output
     assert "stdout.log" in artifacts.output
+    assert "reproduce/git.json" in artifacts.output
+    assert "reproduce/dependencies.json" in artifacts.output
 
     (tmp_path / ".lab-sidecar" / "index.sqlite").unlink()
     assert invoke(tmp_path, ["status", task_id]).exit_code == 0
@@ -442,6 +467,9 @@ def test_ingest_existing_directory(tmp_path: Path) -> None:
     assert refs["source_type"] == "directory"
     assert refs["child_count"] == len(before)
     assert "examples/csv-comparison/baseline.csv" in refs["candidate_files"]
+    baseline_ref = next(child for child in refs["children"] if child["name"] == "baseline.csv")
+    assert baseline_ref["sha256"]
+    assert baseline_ref["size_bytes"] > 0
     assert sorted(path.name for path in source.iterdir()) == before
 
     status = invoke(tmp_path, ["status", task_id])
@@ -486,6 +514,7 @@ def test_ingest_existing_file(tmp_path: Path) -> None:
     assert refs["source_type"] == "file"
     assert refs["path_kind"] == "relative"
     assert refs["size_bytes"] == source.stat().st_size
+    assert refs["sha256"]
     assert refs["is_candidate"] is True
     assert source.read_text(encoding="utf-8") == before
 
@@ -571,6 +600,8 @@ def test_collect_csv_comparison_ingest_generates_normalized_metrics(tmp_path: Pa
     assert summary["task_status"] == "completed"
     assert summary["row_count"] == len(rows)
     assert {"epoch", "model", "seed", "val_accuracy", "val_loss"}.issubset(summary["detected_fields"])
+    assert summary["processed_files"][0]["source_provenance"]["sha256"]
+    assert summary["candidates"][0]["source_provenance"]["sha256"]
 
     manifest = read_manifest(tmp_path, task_id)
     artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}
@@ -1309,6 +1340,12 @@ def test_report_completed_ingest_after_collect_and_figures_generates_markdown(tm
     assert summary["provenance"]["task_id"] == task_id
     assert summary["metrics"]["row_count"] > 0
     assert summary["figures"]["figure_count"] > 0
+    assert "manifest.json" in summary["source_artifacts"]
+    assert "metrics/normalized_metrics.csv" in summary["generated_from"]
+    assert "metrics/collection-summary.json" in summary["generated_from"]
+    assert "figures/figure-summary.json" in summary["generated_from"]
+    assert "stderr.log" in summary["generated_from"]
+    assert "raw/source_refs.json" in summary["generated_from"]
 
     manifest = read_manifest(tmp_path, task_id)
     artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}
@@ -1489,6 +1526,15 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     assert summary["metrics"]["row_count"] > 0
     assert summary["figures"]
     assert "reports/report-fragment.md" in summary["source_artifacts"]
+    assert summary["generated_from"] == summary["source_artifacts"]
+    assert "manifest.json" in summary["generated_from"]
+    assert "metrics/normalized_metrics.csv" in summary["generated_from"]
+    assert "metrics/collection-summary.json" in summary["generated_from"]
+    assert "figures/figure-summary.json" in summary["generated_from"]
+    assert "reports/report-fragment.md" in summary["generated_from"]
+    assert "raw/source_refs.json" in summary["generated_from"]
+    assert "stdout.log" in summary["generated_from"]
+    assert "stderr.log" in summary["generated_from"]
 
     manifest = read_manifest(tmp_path, task_id)
     artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}

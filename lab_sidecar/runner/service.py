@@ -13,6 +13,7 @@ from lab_sidecar.core.config import load_config
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import TaskPaths, TaskRecord, TaskStatus
 from lab_sidecar.core.paths import resolve_workspace_path, task_dir, tasks_dir, to_manifest_path
+from lab_sidecar.core.provenance import dependency_snapshot, git_snapshot, python_executable
 from lab_sidecar.runner.process import (
     command_popen_kwargs,
     current_python_command,
@@ -282,10 +283,15 @@ class RunnerService:
     def _write_reproduce_files(self, task_path: Path, command: str, run_cwd: Path) -> None:
         reproduce_dir = task_path / "reproduce"
         (reproduce_dir / "command.txt").write_text(command + "\n", encoding="utf-8")
+        git_data = git_snapshot(run_cwd)
+        dependency_data = dependency_snapshot()
         env_snapshot = {
             "python_version": sys.version,
+            "python_executable": python_executable(),
             "platform": platform.platform(),
             "working_dir": str(run_cwd),
+            "git_path": "reproduce/git.json",
+            "dependencies_path": "reproduce/dependencies.json",
             "environment": {
                 key: value
                 for key, value in os.environ.items()
@@ -303,6 +309,14 @@ class RunnerService:
         }
         (reproduce_dir / "env.json").write_text(
             json.dumps(env_snapshot, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (reproduce_dir / "git.json").write_text(
+            json.dumps(git_data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        (reproduce_dir / "dependencies.json").write_text(
+            json.dumps(dependency_data, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
 

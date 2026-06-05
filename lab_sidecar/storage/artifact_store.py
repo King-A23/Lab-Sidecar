@@ -5,6 +5,7 @@ from pathlib import Path
 
 from lab_sidecar.core.models import ArtifactRecord
 from lab_sidecar.core.paths import to_manifest_path
+from lab_sidecar.core.provenance import file_provenance
 
 SOURCE_CANDIDATE_SUFFIXES = {".csv", ".json", ".log", ".txt", ".md"}
 
@@ -14,6 +15,8 @@ def default_task_artifacts(task_dir: Path, root: Path) -> list[ArtifactRecord]:
     stderr = task_dir / "stderr.log"
     command = task_dir / "reproduce" / "command.txt"
     env = task_dir / "reproduce" / "env.json"
+    git = task_dir / "reproduce" / "git.json"
+    dependencies = task_dir / "reproduce" / "dependencies.json"
     return [
         ArtifactRecord(
             artifact_id="log_stdout",
@@ -41,6 +44,20 @@ def default_task_artifacts(task_dir: Path, root: Path) -> list[ArtifactRecord]:
             type="reproduce",
             path=to_manifest_path(env, root),
             description="Environment snapshot captured at task start",
+            source_paths=[],
+        ),
+        ArtifactRecord(
+            artifact_id="reproduce_git",
+            type="reproduce",
+            path=to_manifest_path(git, root),
+            description="Git snapshot captured at task start",
+            source_paths=[],
+        ),
+        ArtifactRecord(
+            artifact_id="reproduce_dependencies",
+            type="reproduce",
+            path=to_manifest_path(dependencies, root),
+            description="Python dependency snapshot captured at task start",
             source_paths=[],
         ),
     ]
@@ -95,7 +112,7 @@ def build_source_refs(source: Path, root: Path) -> dict:
         "candidate_suffixes": sorted(SOURCE_CANDIDATE_SUFFIXES),
     }
     if resolved.is_file():
-        data["size_bytes"] = stat.st_size
+        data.update(file_provenance(resolved))
         data["is_candidate"] = resolved.suffix.lower() in SOURCE_CANDIDATE_SUFFIXES
         return data
 
@@ -110,7 +127,7 @@ def build_source_refs(source: Path, root: Path) -> dict:
             "modified_at": _mtime_iso(child_stat.st_mtime),
         }
         if child.is_file():
-            child_summary["size_bytes"] = child_stat.st_size
+            child_summary.update(file_provenance(child))
             child_summary["suffix"] = child.suffix.lower()
             child_summary["is_candidate"] = child.suffix.lower() in SOURCE_CANDIDATE_SUFFIXES
             if child_summary["is_candidate"]:

@@ -583,6 +583,9 @@ class SlidesGenerationService:
             stdout_path,
             stderr_path,
             task_path / "reproduce" / "command.txt",
+            task_path / "reproduce" / "env.json",
+            task_path / "reproduce" / "git.json",
+            task_path / "reproduce" / "dependencies.json",
             project_goal_path,
             *[item.path for item in figure_items],
         ]
@@ -616,6 +619,7 @@ class SlidesGenerationService:
             "generated_at": _now_iso(),
             "pptx_path": _task_relative(pptx_path, task_path),
             "summary_path": _task_relative(summary_path, task_path),
+            "generated_from": context["source_artifacts"],
             "slide_count": len(presentation.slides),
             "included_figures": included_figures,
             "included_metrics": included_metrics,
