@@ -8,6 +8,19 @@ from pathlib import Path
 from typing import Any
 
 
+DEPENDENCY_SNAPSHOT_PACKAGES = [
+    "lab-sidecar",
+    "matplotlib",
+    "mcp",
+    "pandas",
+    "Pillow",
+    "pydantic",
+    "python-pptx",
+    "PyYAML",
+    "typer",
+]
+
+
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as fh:
@@ -26,15 +39,18 @@ def file_provenance(path: Path) -> dict[str, Any]:
 
 def dependency_snapshot() -> dict[str, str]:
     packages: dict[str, str] = {}
-    for dist in importlib.metadata.distributions():
-        name = dist.metadata.get("Name")
-        if not name:
+    for name in DEPENDENCY_SNAPSHOT_PACKAGES:
+        try:
+            packages[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
             continue
-        packages[name] = dist.version
     return dict(sorted(packages.items(), key=lambda item: item[0].lower()))
 
 
 def git_snapshot(cwd: Path) -> dict[str, Any]:
+    if _find_git_marker(cwd) is None:
+        return {"is_repository": False}
+
     repo_root = _git(["rev-parse", "--show-toplevel"], cwd)
     if repo_root is None:
         return {"is_repository": False}
@@ -72,3 +88,12 @@ def _git(args: list[str], cwd: Path) -> str | None:
 
 def python_executable() -> str:
     return sys.executable
+
+
+def _find_git_marker(cwd: Path) -> Path | None:
+    current = cwd.resolve()
+    for path in [current, *current.parents]:
+        marker = path / ".git"
+        if marker.exists():
+            return marker
+    return None

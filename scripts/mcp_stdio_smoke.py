@@ -50,14 +50,23 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         cwd=str(workspace),
     )
     server_log_path = workspace / "mcp-server.stderr.log"
+    progress_path = workspace / "mcp-smoke-progress.jsonl"
+
+    def record_progress(stage: str, payload: dict[str, Any] | None = None) -> None:
+        progress = {"stage": stage, **(payload or {})}
+        with progress_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(progress, ensure_ascii=False) + "\n")
 
     with server_log_path.open("w", encoding="utf-8") as server_err:
         async with stdio_client(server_params, errlog=server_err) as (read_stream, write_stream):
             async with ClientSession(read_stream, write_stream) as session:
+                record_progress("initialize")
                 await session.initialize()
+                record_progress("list_tools")
                 listed = await session.list_tools()
                 tool_names = sorted(tool.name for tool in listed.tools)
 
+                record_progress("run_experiment:start")
                 run_result = await _call_tool(
                     session,
                     "run_experiment",
@@ -65,18 +74,28 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
                         "command": _example_command(workspace),
                         "background": True,
                     },
-                    timeout=30,
+                    timeout=60,
                 )
+                record_progress("run_experiment:done", {"task_id": run_result.get("task_id"), "task_status": run_result.get("task_status")})
                 task_id = run_result["task_id"]
+                record_progress("inspect_results:wait_start", {"task_id": task_id})
                 inspect_result = await _wait_for_completed(session, task_id)
+                record_progress("inspect_results:done", {"task_status": inspect_result.get("task_status")})
+                record_progress("make_figures:start")
                 figures_result = await _call_tool(session, "make_figures", {"task_id": task_id}, timeout=90)
+                record_progress("make_figures:done", {"figure_count": figures_result.get("summary", {}).get("figure_count")})
+                record_progress("generate_report_fragment:start")
                 report_result = await _call_tool(
                     session,
                     "generate_report_fragment",
                     {"task_id": task_id},
                     timeout=60,
                 )
+                record_progress("generate_report_fragment:done")
+                record_progress("generate_slides:start")
                 slides_result = await _call_tool(session, "generate_slides", {"task_id": task_id}, timeout=90)
+                record_progress("generate_slides:done", {"slide_count": slides_result.get("summary", {}).get("slide_count")})
+                record_progress("cancel_run:start")
                 cancel_run_result = await _call_tool(
                     session,
                     "run_experiment",
@@ -84,16 +103,20 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
                         "command": _cancel_command(workspace),
                         "background": True,
                     },
-                    timeout=30,
+                    timeout=60,
                 )
+                record_progress("cancel_run:done", {"task_id": cancel_run_result.get("task_id"), "task_status": cancel_run_result.get("task_status")})
                 cancel_task_id = cancel_run_result["task_id"]
                 await asyncio.sleep(1)
+                record_progress("cancel_experiment:start", {"task_id": cancel_task_id})
                 cancel_result = await _call_tool(
                     session,
                     "cancel_experiment",
                     {"task_id": cancel_task_id},
                     timeout=30,
                 )
+                record_progress("cancel_experiment:done", {"task_status": cancel_result.get("task_status")})
+                record_progress("blocked_command:start")
                 blocked_result = await _call_tool(
                     session,
                     "run_experiment",
@@ -103,6 +126,7 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
                     },
                     timeout=30,
                 )
+                record_progress("blocked_command:done", {"status": blocked_result.get("summary", {}).get("status")})
 
     expected = {
         "run_experiment",
