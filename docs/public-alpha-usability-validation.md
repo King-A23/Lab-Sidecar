@@ -2,7 +2,7 @@
 
 Date: 2026-06-05
 
-Scope: clean install and high-fidelity example validation outside the repository workspace. This is not a real external user project validation because inputs came from `examples/`.
+Scope: clean install and high-fidelity example validation outside the repository workspace. The first validation used `examples/`; a later validation in this document used a real local project directory under `C:\code`. This still is not broad external user acceptance testing.
 
 ## Environment
 
@@ -164,6 +164,77 @@ The omitted response contract remained:
 }
 ```
 
+## Real Local Project Directory Validation
+
+Selected source directory:
+
+```text
+C:\code\CN-Lab1-Windows-VS2017\docs\测试记录\参数优化-DATA_TIMER-MAX_PHL_BACKLOG
+```
+
+Reason:
+
+- It is outside the Lab-Sidecar repository.
+- It contains real course/network lab experiment output, including `all-results.csv`.
+- The metrics are not ML-shaped; columns include `Score`, `AvgUtil`, `DataTimeoutPerMin`, `DATA_TIMER`, `BACKLOG_FACTOR`, and `BadCrcTotal`.
+
+Workspace:
+
+```text
+C:\Users\anyuc\AppData\Local\Temp\lab-sidecar-cnlab-validation-3
+```
+
+The validation used `ingest`; no `.lab-sidecar` directory was written into the selected source project.
+
+Initial findings:
+
+- `collect` initially failed because metric field detection favored ML-style fields and did not recognize system/network experiment fields.
+- After metric collection was fixed, `figures` initially failed because auto bar chart selection did not recognize system/network category and metric columns.
+
+Minimal fixes:
+
+- Extended metric detection for generic experiment fields such as score, utilization, timeout, duration, packet, and error counts.
+- Added aliases for real observed fields including `AvgUtil`, `AUtil`, `BUtil`, `DurationSec`, `WallSeconds`, `DataTimeoutPerMin`, `AckTimeoutTotal`, `SendAckTotal`, `SendNakTotal`, and `BadCrcTotal`.
+- Extended auto figure selection to use categories such as `DATA_TIMER`, `BACKLOG_FACTOR`, `Stage`, and `Scenario`, and metrics such as `Score`, `AvgUtil`, `DataTimeoutPerMin`, `BadCrcTotal`, and `WallSeconds`.
+
+Final commands:
+
+```powershell
+$workspace = Join-Path $env:TEMP 'lab-sidecar-cnlab-validation-3'
+$source = 'C:\code\CN-Lab1-Windows-VS2017\docs\测试记录\参数优化-DATA_TIMER-MAX_PHL_BACKLOG'
+Push-Location $workspace
+py -3 -m lab_sidecar.cli.app init
+py -3 -m lab_sidecar.cli.app ingest $source
+py -3 -m lab_sidecar.cli.app collect task_20260605_141018_6170ec
+py -3 -m lab_sidecar.cli.app figures task_20260605_141018_6170ec
+py -3 -m lab_sidecar.cli.app report task_20260605_141018_6170ec
+py -3 -m lab_sidecar.cli.app slides task_20260605_141018_6170ec --template zh-project
+py -3 -m lab_sidecar.cli.app artifacts task_20260605_141018_6170ec
+Pop-Location
+```
+
+Result:
+
+- task_id: `task_20260605_141018_6170ec`
+- candidate files: 1
+- metrics rows: 25
+- detected fields: `DurationSec`, `AUtil`, `BUtil`, `AvgUtil`, `SendAckTotal`, `AckTimeoutTotal`, `DataTimeoutTotal`, `DataTimeoutPerMin`, `SendNakTotal`, `BadCrcTotal`, `Score`, `WallSeconds`
+- figures: 1
+  - `figures/bar_score_by_data_timer.png`
+  - `figures/bar_score_by_data_timer.svg`
+  - x: `DATA_TIMER`
+  - y: `Score`
+- report: `reports/report-fragment.md`
+- slides: `slides/presentation-draft.pptx`
+- zh-project slide count: 7
+- artifact list succeeded
+
+Remaining limitations from this real directory:
+
+- `ingest` records candidates from the selected source directory. Nested experiment outputs still need either selecting the result folder directly or future explicit recursive/source declaration support.
+- Slides key comparison grouped by `source_file`, which is not ideal for this one-file dataset; future project comparison should use a domain column such as `DATA_TIMER`, `Stage`, or a declared grouping field when available.
+- Dense system experiment tables are safely truncated in slides, but the table prioritization is still generic.
+
 ## Changes From This Validation
 
 - Improved `collect` failure messages:
@@ -173,6 +244,7 @@ The omitted response contract remained:
 - Added `docs/public-alpha-quickstart.md`.
 - Updated README with shortest smoke commands and doc links.
 - Fixed `scripts/mcp_stdio_smoke.py` to accept an existing empty workspace.
+- Extended collector and figure auto-selection for real system/network experiment metrics found in `C:\code\CN-Lab1-Windows-VS2017`.
 
 ## Test Results
 
@@ -188,17 +260,20 @@ Results:
 - `py -3 -m pytest`: 66 passed.
 - `git status --short`: showed only this validation's intended working-tree changes before commit.
 
+After the real local project directory hardening, `py -3 -m pytest` passed again with 67 tests.
+
 ## Blocking
 
-- None after the smoke script fix.
+- None after the smoke script fix and the real local directory metric/figure hardening.
 
 ## Follow-Up
 
-- Run the same validation on a real external course or experiment directory.
+- Repeat validation on external user-owned projects, not only local repositories already present under `C:\code`.
 - Test concrete host-specific MCP config in actual hosts.
 - Add MCP cancellation.
 - Improve project figure grouping for mixed metrics.
 - Improve long-label wrapping in project comparison slides.
+- Improve declared grouping support for dense system experiment comparisons.
 
 ## Out Of Scope
 

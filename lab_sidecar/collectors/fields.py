@@ -13,6 +13,15 @@ COMMON_METRIC_FIELDS = {
     "f1",
     "latency",
     "memory",
+    "score",
+    "util",
+    "utilization",
+    "timeout",
+    "duration",
+    "packet",
+    "packets",
+    "error",
+    "errors",
     "seed",
     "model",
     "method",
@@ -21,6 +30,17 @@ COMMON_METRIC_FIELDS = {
 FIELD_ALIASES = {
     "algorithm": "method",
     "runtime": "latency",
+    "avgutil": "utilization",
+    "autil": "utilization",
+    "butil": "utilization",
+    "durationsec": "duration",
+    "wallseconds": "duration",
+    "datatimeoutpermin": "timeout",
+    "datatimeouttotal": "timeout",
+    "acktimeouttotal": "timeout",
+    "sendacktotal": "packets",
+    "sendnaktotal": "packets",
+    "badcrctotal": "errors",
 }
 
 
@@ -38,4 +58,3 @@ def is_metric_field(field_name: str) -> bool:
         return True
     tokens = [token for token in re.split(r"[^a-z0-9]+", normalized) if token]
     return any(token in COMMON_METRIC_FIELDS or token in FIELD_ALIASES for token in tokens)
-

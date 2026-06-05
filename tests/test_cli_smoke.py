@@ -471,6 +471,52 @@ def test_collect_json_algorithm_benchmark_ingest_generates_normalized_metrics(tm
     assert {"algorithm", "seed", "runtime_ms", "memory_mb"}.issubset(summary["detected_fields"])
 
 
+def test_network_experiment_csv_collects_metrics_and_generates_bar_figure(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "network-results"
+    source.mkdir()
+    (source / "all-results.csv").write_text(
+        "\n".join(
+            [
+                "Stage,Scenario,DurationSec,DATA_TIMER,BACKLOG_FACTOR,AvgUtil,DataTimeoutPerMin,Score,BadCrcTotal,WallSeconds",
+                "coarse,default flood,120,1500,3,88.02,24.5,87.285,12,120.8",
+                "coarse,default flood,120,1500,4,85.15,29,84.28,14,120.7",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "network-results"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    rows = read_csv_rows(task_path / "metrics" / "normalized_metrics.csv")
+    assert len(rows) == 2
+    assert {"DurationSec", "AvgUtil", "DataTimeoutPerMin", "Score", "BadCrcTotal", "WallSeconds"}.issubset(rows[0])
+    summary = json.loads((task_path / "metrics" / "collection-summary.json").read_text(encoding="utf-8"))
+    assert {
+        "DurationSec",
+        "AvgUtil",
+        "DataTimeoutPerMin",
+        "Score",
+        "BadCrcTotal",
+        "WallSeconds",
+    }.issubset(summary["detected_fields"])
+
+    figure_result = invoke(tmp_path, ["figures", task_id])
+
+    assert figure_result.exit_code == 0
+    figures_dir = task_path / "figures"
+    assert_non_empty_file(figures_dir / "bar_score_by_data_timer.png")
+    assert_non_empty_file(figures_dir / "bar_score_by_data_timer.svg")
+    figure_summary = json.loads((figures_dir / "figure-summary.json").read_text(encoding="utf-8"))
+    assert figure_summary["generated_figures"][0]["chart_type"] == "bar"
+    assert figure_summary["generated_figures"][0]["x"] == "DATA_TIMER"
+    assert figure_summary["generated_figures"][0]["y"] == "Score"
+
+
 def test_collect_missing_task_returns_exit_code_3(tmp_path: Path) -> None:
     assert invoke(tmp_path, ["init"]).exit_code == 0
 

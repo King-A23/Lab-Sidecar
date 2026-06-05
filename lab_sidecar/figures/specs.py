@@ -26,7 +26,17 @@ PROCESS_METRIC_PRIORITY = [
     "recall",
     "macro_recall",
 ]
-BAR_CATEGORY_PRIORITY = ["model", "method", "algorithm", "variant", "source_file"]
+BAR_CATEGORY_PRIORITY = [
+    "model",
+    "method",
+    "algorithm",
+    "variant",
+    "DATA_TIMER",
+    "BACKLOG_FACTOR",
+    "Stage",
+    "Scenario",
+    "source_file",
+]
 BAR_METRIC_PRIORITY = [
     "accuracy",
     "final_accuracy",
@@ -45,6 +55,14 @@ BAR_METRIC_PRIORITY = [
     "memory",
     "memory_mb",
     "peak_memory_mb",
+    "score",
+    "Score",
+    "AvgUtil",
+    "AUtil",
+    "BUtil",
+    "DataTimeoutPerMin",
+    "BadCrcTotal",
+    "WallSeconds",
 ]
 LINE_GROUP_PRIORITY = ["model", "method", "experiment", "source_file"]
 
@@ -57,6 +75,11 @@ METRIC_ALIASES = {
     "runtime": ["runtime", "runtime_ms", "latency", "latency_ms", "time", "time_ms"],
     "latency": ["latency", "latency_ms", "runtime", "runtime_ms", "time", "time_ms"],
     "memory": ["memory", "memory_mb", "peak_memory_mb"],
+    "score": ["score", "Score"],
+    "utilization": ["util", "utilization", "AvgUtil", "AUtil", "BUtil"],
+    "timeout": ["timeout", "DataTimeoutPerMin", "DataTimeoutTotal", "AckTimeoutTotal"],
+    "errors": ["error", "errors", "BadCrcTotal"],
+    "duration": ["duration", "DurationSec", "WallSeconds"],
 }
 
 FRIENDLY_LABELS = {
@@ -83,6 +106,20 @@ FRIENDLY_LABELS = {
     "memory": "Memory",
     "memory_mb": "Memory (MB)",
     "peak_memory_mb": "Peak Memory (MB)",
+    "Score": "Score",
+    "AvgUtil": "Average Utilization",
+    "AUtil": "A Utilization",
+    "BUtil": "B Utilization",
+    "DataTimeoutPerMin": "Data Timeouts / Min",
+    "DataTimeoutTotal": "Data Timeouts",
+    "AckTimeoutTotal": "ACK Timeouts",
+    "BadCrcTotal": "Bad CRC Count",
+    "DurationSec": "Duration (s)",
+    "WallSeconds": "Wall Time (s)",
+    "DATA_TIMER": "DATA_TIMER",
+    "BACKLOG_FACTOR": "BACKLOG_FACTOR",
+    "Stage": "Stage",
+    "Scenario": "Scenario",
     "epoch": "Epoch",
     "step": "Step",
     "model": "Model",
