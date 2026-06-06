@@ -45,3 +45,8 @@ The smoke checks that a real MCP client can list and call these tools:
 - `generate_slides`
 
 Tool responses return bounded summaries and artifact paths by default. They do not return complete stdout, stderr, metrics rows, report Markdown, artifact bodies, or PPT contents.
+
+For V2 Codex-plugin-like host setup, smoke guidance, safety boundaries, and the
+current decision to defer MCP mirroring of V2 tools, see
+`docs/v2-host-integration.md`. The stdio smoke above remains the regression
+guard for the existing V1 MCP tool surface.
