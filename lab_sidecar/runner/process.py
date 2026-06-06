@@ -61,12 +61,32 @@ def terminate_process_tree(pid: int) -> bool:
 
 def _probe_process_posix(pid: int) -> ProcessProbe:
     try:
+        waited_pid, status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        pass
+    except OSError:
+        pass
+    else:
+        if waited_pid == pid:
+            return ProcessProbe(is_running=False, exit_code=_posix_exit_code(status), exists=False)
+        if waited_pid == 0:
+            return ProcessProbe(is_running=True, exists=True)
+
+    try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return ProcessProbe(is_running=False, exists=False)
     except PermissionError:
         return ProcessProbe(is_running=True, exists=True)
     return ProcessProbe(is_running=True, exists=True)
+
+
+def _posix_exit_code(status: int) -> int | None:
+    if os.WIFEXITED(status):
+        return os.WEXITSTATUS(status)
+    if os.WIFSIGNALED(status):
+        return -os.WTERMSIG(status)
+    return None
 
 
 def _probe_process_windows(pid: int) -> ProcessProbe:

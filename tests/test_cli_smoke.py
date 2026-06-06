@@ -48,6 +48,14 @@ def read_manifest(workspace: Path, task_id: str) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def assert_manifest_json_valid(workspace: Path, task_id: str) -> dict:
+    path = workspace / ".lab-sidecar" / "tasks" / task_id / "manifest.json"
+    raw = path.read_text(encoding="utf-8")
+    parsed = json.loads(raw)
+    assert parsed["task_id"] == task_id
+    return parsed
+
+
 def read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open("r", newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh))
@@ -231,7 +239,7 @@ def test_background_run_status_logs_and_cancel(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     task_id = extract_task_id(result.output)
-    manifest = read_manifest(tmp_path, task_id)
+    manifest = assert_manifest_json_valid(tmp_path, task_id)
     assert manifest["status"] == "running"
     assert manifest["worker_pid"]
 
@@ -240,19 +248,22 @@ def test_background_run_status_logs_and_cancel(tmp_path: Path) -> None:
     status = invoke(tmp_path, ["status", task_id])
     assert status.exit_code == 0
     assert "Status: running" in status.output
+    assert_manifest_json_valid(tmp_path, task_id)
 
     logs = invoke(tmp_path, ["logs", task_id, "--stream", "stdout", "--tail", "5"])
     assert logs.exit_code == 0
     assert "tick=0" in logs.output
+    assert_manifest_json_valid(tmp_path, task_id)
 
     cancel = invoke(tmp_path, ["cancel", task_id])
     assert cancel.exit_code == 0
     assert "Status: cancelled" in cancel.output
+    assert_manifest_json_valid(tmp_path, task_id)
 
     status_after_cancel = invoke(tmp_path, ["status", task_id])
     assert status_after_cancel.exit_code == 0
     assert "Status: cancelled" in status_after_cancel.output
-    cancelled_manifest = read_manifest(tmp_path, task_id)
+    cancelled_manifest = assert_manifest_json_valid(tmp_path, task_id)
     assert cancelled_manifest["status"] == "cancelled"
     assert cancelled_manifest["pid"] is None
     assert cancelled_manifest["worker_pid"] is None
