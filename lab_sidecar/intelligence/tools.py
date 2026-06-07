@@ -10,13 +10,20 @@ from lab_sidecar.core.models import TaskRecord, TaskStatus
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
 from lab_sidecar.figures.service import FigureGenerationService, MetricsNotReadyError, NoFiguresGeneratedError
 from lab_sidecar.intelligence.adoption import adopt_proposal
-from lab_sidecar.intelligence.ai_policy import AIProviderPolicy, load_ai_provider_policy
-from lab_sidecar.intelligence.ai_provider import AIProvider, run_ai_provider
+from lab_sidecar.intelligence.ai_policy import AIProviderPolicy, load_ai_provider_policy, provider_availability
+from lab_sidecar.intelligence.ai_provider import AIProvider, ProviderBackedWorker
 from lab_sidecar.intelligence.bundle import build_input_bundle, omitted_contract
-from lab_sidecar.intelligence.heuristic_worker import propose_figure, propose_metrics
-from lab_sidecar.intelligence.paths import create_worker_run_dirs, generate_worker_run_id, worker_run_dir
+from lab_sidecar.intelligence.heuristic_worker import HeuristicWorker
+from lab_sidecar.intelligence.paths import create_worker_run_dirs, generate_worker_run_id, sandbox_dir, worker_run_dir
 from lab_sidecar.intelligence.preview import ArtifactPreviewError, preview_artifact
 from lab_sidecar.intelligence.validator import unavailable_worker_result, validate_proposal
+from lab_sidecar.intelligence.worker_invocation import (
+    SidecarWorker,
+    WorkerInvocation,
+    WorkerRequest,
+    WorkerResult,
+    write_worker_result,
+)
 from lab_sidecar.mcp.responses import artifact_list, compact_task_outputs, task_summary
 from lab_sidecar.reports.service import ReportGenerationService, ReportMetricsRequiredError
 from lab_sidecar.runner.service import RunnerService
@@ -49,7 +56,14 @@ def delegate_experiment_artifacts(
     worker_run_id = None
 
     if intelligent_mode == "auto":
-        worker_run_id, heuristic_status, heuristic_warnings, heuristic_risk_flags = _run_heuristic_worker(
+        (
+            worker_run_id,
+            heuristic_status,
+            heuristic_warnings,
+            heuristic_risk_flags,
+            worker_type,
+            worker_status,
+        ) = _run_worker_invocation(
             root=root,
             record=record,
             user_goal=user_goal,
@@ -64,6 +78,8 @@ def delegate_experiment_artifacts(
             record = load_task(root, record.task_id)
     else:
         heuristic_status = None
+        worker_type = None
+        worker_status = None
         risk_flags.append("intelligent_mode_off")
 
     return _tool_response(
@@ -75,6 +91,8 @@ def delegate_experiment_artifacts(
         risk_flags=risk_flags,
         worker_run_id=worker_run_id,
         intelligence_status=heuristic_status,
+        worker_type=worker_type,
+        worker_status=worker_status,
         next_actions=_next_actions(record.task_id, desired, risk_flags),
     )
 
@@ -94,6 +112,8 @@ def inspect_sidecar_task(
         risk_flags=[],
         worker_run_id=None,
         intelligence_status=None,
+        worker_type=None,
+        worker_status=None,
         next_actions=_next_actions(task_id, [], []),
     )
 
@@ -113,6 +133,8 @@ def cancel_sidecar_task(
         risk_flags=[],
         worker_run_id=None,
         intelligence_status=None,
+        worker_type=None,
+        worker_status=None,
         next_actions=[f"inspect_sidecar_task {task_id}"],
     )
 
@@ -199,7 +221,7 @@ def _generate_requested_outputs(root: Path, task_id: str, desired_outputs: list[
     return load_task(root, task_id), warnings
 
 
-def _run_heuristic_worker(
+def _run_worker_invocation(
     root: Path,
     record: TaskRecord,
     user_goal: str,
@@ -207,7 +229,7 @@ def _run_heuristic_worker(
     context_budget: dict[str, Any] | None,
     ai_provider: AIProvider | None = None,
     ai_policy: AIProviderPolicy | None = None,
-) -> tuple[str, str, list[str], list[str]]:
+) -> tuple[str, str, list[str], list[str], str, str]:
     worker_run_id = generate_worker_run_id()
     run_dir = create_worker_run_dirs(root, record.task_id, worker_run_id)
     bundle = build_input_bundle(
@@ -218,96 +240,142 @@ def _run_heuristic_worker(
         desired_outputs=desired_outputs,
         context_budget=context_budget,
     )
-    (run_dir / "input-bundle.json").write_text(
-        json.dumps(bundle, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    _write_input_bundle(run_dir, bundle)
+    worker, worker_type, policy_summary = _select_worker(root, ai_provider, ai_policy)
+    request = WorkerRequest(
+        task_id=record.task_id,
+        worker_run_id=worker_run_id,
+        worker_type=worker_type,
+        user_goal=user_goal,
+        desired_outputs=desired_outputs,
+        input_bundle_path=to_manifest_path(run_dir / "input-bundle.json", root),
+        sandbox_path=to_manifest_path(sandbox_dir(root, record.task_id, worker_run_id), root),
+        context_budget=bundle.get("context_budget", {}),
+        policy=policy_summary,
     )
-    warnings: list[str] = []
-    risk_flags: list[str] = []
+    worker_result = WorkerInvocation(root=root, worker=worker).run(request)
+    final_status, response_status, warnings, risk_flags = _validate_and_adopt_worker_result(
+        root=root,
+        record=record,
+        user_goal=user_goal,
+        desired_outputs=desired_outputs,
+        context_budget=context_budget,
+        run_dir=run_dir,
+        worker_result=worker_result,
+    )
+    return worker_run_id, response_status, warnings, risk_flags, worker_type, final_status
+
+
+def _select_worker(
+    root: Path,
+    ai_provider: AIProvider | None,
+    ai_policy: AIProviderPolicy | None,
+) -> tuple[SidecarWorker, str, dict[str, Any]]:
+    policy = ai_policy or load_ai_provider_policy(root)
+    policy_summary = _policy_summary(policy)
+    if ai_provider is not None or policy.fake_provider_enabled or policy.real_provider_enabled:
+        policy_summary["selection"] = "provider_backed"
+        return ProviderBackedWorker(root=root, policy=policy, provider=ai_provider), "provider_backed", policy_summary
+
+    availability = provider_availability(policy)
+    initial_warnings: list[str] = []
+    initial_risk_flags: list[str] = []
+    if not availability.available:
+        initial_warnings.append(availability.reason)
+        initial_risk_flags.append("ai_provider_unavailable")
+    policy_summary["selection"] = "heuristic"
+    policy_summary["provider_availability"] = availability.reason
+    return HeuristicWorker(root, initial_warnings=initial_warnings, initial_risk_flags=initial_risk_flags), "heuristic", policy_summary
+
+
+def _validate_and_adopt_worker_result(
+    root: Path,
+    record: TaskRecord,
+    user_goal: str,
+    desired_outputs: list[str],
+    context_budget: dict[str, Any] | None,
+    run_dir: Path,
+    worker_result: WorkerResult,
+) -> tuple[str, str, list[str], list[str]]:
+    warnings: list[str] = list(worker_result.warnings)
+    risk_flags: list[str] = list(worker_result.risk_flags)
     accepted_any = False
     rejected_any = False
     accepted_types: set[str] = set()
+    diagnostics: list[str] = list(worker_result.diagnostics)
+    proposals = worker_result.proposal_list()
 
-    ai_result = run_ai_provider(
-        root=root,
-        task_id=record.task_id,
-        worker_run_id=worker_run_id,
-        bundle=bundle,
-        policy=ai_policy or load_ai_provider_policy(root),
-        provider=ai_provider,
-    )
-    warnings.extend(ai_result.warnings)
-    risk_flags.extend(ai_result.risk_flags)
-    if ai_result.proposal:
-        validation = validate_proposal(root, record.task_id, worker_run_id, ai_result.proposal)
+    for proposal in proposals:
+        proposal_type = proposal.get("proposal_type")
+        if isinstance(proposal_type, str) and proposal_type in accepted_types:
+            continue
+        validation = validate_proposal(root, record.task_id, worker_result.worker_run_id, proposal)
+        diagnostics.extend(validation.diagnostics)
         if validation.accepted:
-            adopt_proposal(root, record.task_id, worker_run_id, ai_result.proposal, validation)
+            adopt_proposal(root, record.task_id, worker_result.worker_run_id, proposal, validation)
             accepted_any = True
-            proposal_type = ai_result.proposal.get("proposal_type")
             if isinstance(proposal_type, str):
                 accepted_types.add(proposal_type)
             bundle = build_input_bundle(
                 root=root,
                 record=load_task(root, record.task_id),
-                worker_run_id=worker_run_id,
+                worker_run_id=worker_result.worker_run_id,
                 user_goal=user_goal,
                 desired_outputs=desired_outputs,
                 context_budget=context_budget,
             )
-            (run_dir / "input-bundle.json").write_text(
-                json.dumps(bundle, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
+            _write_input_bundle(run_dir, bundle)
         else:
             rejected_any = True
-            warnings.append("AI provider proposal rejected; heuristic fallback remains available")
+            warnings.append(
+                f"{worker_result.worker_type} {proposal_type or 'unknown'} proposal rejected; "
+                "official artifacts were not generated from it"
+            )
 
-    if "metrics" not in accepted_types and (
-        "metrics" in desired_outputs or any(output in desired_outputs for output in ["figures", "report", "slides"])
-    ):
-        proposal = propose_metrics(root, record.task_id, worker_run_id, bundle)
-        if proposal:
-            validation = validate_proposal(root, record.task_id, worker_run_id, proposal)
-            if validation.accepted:
-                adopt_proposal(root, record.task_id, worker_run_id, proposal, validation)
-                accepted_any = True
-                bundle = build_input_bundle(
-                    root=root,
-                    record=load_task(root, record.task_id),
-                    worker_run_id=worker_run_id,
-                    user_goal=user_goal,
-                    desired_outputs=desired_outputs,
-                    context_budget=context_budget,
-                )
-                (run_dir / "input-bundle.json").write_text(
-                    json.dumps(bundle, ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8",
-                )
-            else:
-                rejected_any = True
-                warnings.append("heuristic metrics proposal rejected; V1 fallback outputs were preserved")
-
-    if "figure" not in accepted_types and ("figures" in desired_outputs or "slides" in desired_outputs):
-        proposal = propose_figure(root, record.task_id, worker_run_id, bundle)
-        if proposal:
-            validation = validate_proposal(root, record.task_id, worker_run_id, proposal)
-            if validation.accepted:
-                adopt_proposal(root, record.task_id, worker_run_id, proposal, validation)
-                accepted_any = True
-            else:
-                rejected_any = True
-                warnings.append("heuristic figure proposal rejected; official figures were not generated from it")
+    if not proposals:
+        unavailable_worker_result(root, record.task_id, worker_result.worker_run_id)
+        if "intelligent_worker_unavailable" not in risk_flags:
+            risk_flags.append("intelligent_worker_unavailable")
+        warnings.append("intelligent worker produced no proposal; V1 deterministic fallback outputs were preserved")
+        final_result = worker_result.model_copy(
+            update={
+                "status": "unavailable",
+                "warnings": _dedupe(warnings),
+                "risk_flags": _dedupe(risk_flags),
+                "diagnostics": _dedupe(diagnostics),
+            }
+        )
+        write_worker_result(root, final_result)
+        return "unavailable", "worker_unavailable_fallback", _dedupe(warnings), _dedupe(risk_flags)
 
     if accepted_any:
-        return worker_run_id, "accepted", warnings, risk_flags
-    if rejected_any:
-        risk_flags.append("heuristic_proposal_rejected")
-        return worker_run_id, "rejected_fallback", warnings, risk_flags
+        final_result = worker_result.model_copy(
+            update={
+                "status": "accepted",
+                "warnings": _dedupe(warnings),
+                "risk_flags": _dedupe(risk_flags),
+                "diagnostics": _dedupe(diagnostics),
+            }
+        )
+        write_worker_result(root, final_result)
+        return "accepted", "accepted", _dedupe(warnings), _dedupe(risk_flags)
 
-    unavailable_worker_result(root, record.task_id, worker_run_id)
-    risk_flags.append("intelligent_worker_unavailable")
-    warnings.append("heuristic worker produced no proposal; V1 deterministic fallback outputs were preserved")
-    return worker_run_id, "worker_unavailable_fallback", warnings, risk_flags
+    if rejected_any:
+        risk_flags.append("worker_proposal_rejected")
+        if worker_result.worker_type == "heuristic":
+            risk_flags.append("heuristic_proposal_rejected")
+        final_result = worker_result.model_copy(
+            update={
+                "status": "rejected",
+                "warnings": _dedupe(warnings),
+                "risk_flags": _dedupe(risk_flags),
+                "diagnostics": _dedupe(diagnostics),
+            }
+        )
+        write_worker_result(root, final_result)
+        return "rejected", "rejected_fallback", _dedupe(warnings), _dedupe(risk_flags)
+
+    return "unavailable", "worker_unavailable_fallback", _dedupe(warnings), _dedupe(risk_flags)
 
 
 def _tool_response(
@@ -319,6 +387,8 @@ def _tool_response(
     risk_flags: list[str],
     worker_run_id: str | None,
     intelligence_status: str | None,
+    worker_type: str | None,
+    worker_status: str | None,
     next_actions: list[str],
 ) -> dict[str, Any]:
     summary = {
@@ -331,6 +401,8 @@ def _tool_response(
             "worker_run_id": worker_run_id,
             "path": to_manifest_path(worker_run_dir(root, record.task_id, worker_run_id), root),
             "status": intelligence_status or "unknown",
+            "worker_type": worker_type or "unknown",
+            "worker_status": worker_status or "unknown",
         }
     return {
         "schema_version": "2.1",
@@ -362,9 +434,9 @@ def _summary_headline(intelligent_mode: str, desired_outputs: list[str], heurist
     if intelligent_mode == "off":
         return f"V1 deterministic fallback completed for {outputs}; intelligent mode was off."
     if heuristic_status == "accepted":
-        return f"Heuristic worker adopted accepted proposal(s) for {outputs}; official artifacts were generated by V1 services."
+        return f"Worker adopted accepted proposal(s) for {outputs}; official artifacts were generated by V1 services."
     if heuristic_status == "rejected_fallback":
-        return f"V1 deterministic fallback completed for {outputs}; heuristic proposal was rejected."
+        return f"V1 deterministic fallback completed for {outputs}; worker proposal was rejected."
     return f"V1 deterministic fallback completed for {outputs}; intelligent worker was unavailable."
 
 
@@ -372,8 +444,37 @@ def _next_actions(task_id: str, desired_outputs: list[str], risk_flags: list[str
     actions = [f"inspect_sidecar_task {task_id}"]
     if "intelligent_worker_unavailable" in risk_flags:
         actions.append("Review validator diagnostics in the task intelligence directory.")
-    if "heuristic_proposal_rejected" in risk_flags:
+    if "heuristic_proposal_rejected" in risk_flags or "worker_proposal_rejected" in risk_flags:
         actions.append("Review rejected heuristic proposal and validator diagnostics before writing manual config.")
     if "figures" in desired_outputs:
         actions.append("Review deterministic figure outputs before using them in downstream materials.")
     return actions
+
+
+def _write_input_bundle(run_dir: Path, bundle: dict[str, Any]) -> None:
+    (run_dir / "input-bundle.json").write_text(
+        json.dumps(bundle, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+
+def _policy_summary(policy: AIProviderPolicy) -> dict[str, Any]:
+    return {
+        "provider_name": policy.provider_name,
+        "model_name": policy.model_name,
+        "max_input_chars": policy.max_input_chars,
+        "redact_secrets": policy.redact_secrets,
+        "cloud_upload_allowed": policy.cloud_upload_allowed,
+        "audit_prompt_response": policy.audit_prompt_response,
+        "fake_provider_enabled": policy.fake_provider_enabled,
+        "fake_provider_unavailable": policy.fake_provider_unavailable,
+        "real_provider_enabled": policy.real_provider_enabled,
+    }
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        if value not in result:
+            result.append(value)
+    return result

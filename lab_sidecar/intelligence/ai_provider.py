@@ -8,8 +8,15 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from lab_sidecar.intelligence.ai_policy import AIProviderPolicy
-from lab_sidecar.intelligence.heuristic_worker import propose_figure, propose_metrics, write_yaml
+from lab_sidecar.intelligence.heuristic_worker import (
+    HeuristicWorker,
+    propose_figure,
+    propose_figure_from_metrics_proposal,
+    propose_metrics,
+    write_yaml,
+)
 from lab_sidecar.intelligence.paths import worker_run_dir
+from lab_sidecar.intelligence.worker_invocation import WorkerRequest, WorkerResult, load_worker_input_bundle
 
 
 SECRET_PATTERNS = [
@@ -125,6 +132,92 @@ class RealProviderSmokeStub:
         raise AIProviderUnavailable("real provider execution is not implemented in local Phase 2.3")
 
 
+class ProviderBackedWorker:
+    worker_type = "provider_backed"
+
+    def __init__(
+        self,
+        root: Path,
+        policy: AIProviderPolicy,
+        provider: AIProvider | None = None,
+    ) -> None:
+        self.root = root
+        self.policy = policy
+        self.provider = provider
+
+    def run(self, request: WorkerRequest) -> WorkerResult:
+        bundle = load_worker_input_bundle(self.root, request)
+        provider_result = run_ai_provider(
+            root=self.root,
+            task_id=request.task_id,
+            worker_run_id=request.worker_run_id,
+            bundle=bundle,
+            policy=self.policy,
+            provider=self.provider,
+        )
+        proposals: list[dict[str, Any]] = []
+        proposal_paths: list[str] = []
+        diagnostics: list[str] = []
+        warnings = list(provider_result.warnings)
+        risk_flags = list(provider_result.risk_flags)
+        fallback_used = False
+
+        if provider_result.proposal is not None:
+            proposals.append(provider_result.proposal)
+            proposal_paths.append(_proposal_path(self.root, request.task_id, request.worker_run_id, provider_result.proposal))
+            if provider_result.proposal.get("proposal_type") == "metrics" and (
+                "figures" in request.desired_outputs or "slides" in request.desired_outputs
+            ):
+                figure_proposal = propose_figure_from_metrics_proposal(
+                    self.root,
+                    request.task_id,
+                    request.worker_run_id,
+                    provider_result.proposal,
+                )
+                if figure_proposal is not None:
+                    proposals.append(figure_proposal)
+                    proposal_paths.append(_proposal_path(self.root, request.task_id, request.worker_run_id, figure_proposal))
+        else:
+            fallback_used = True
+            fallback = HeuristicWorker(self.root).run(request)
+            proposals.extend(fallback.proposal_list())
+            proposal_paths.extend(fallback.proposal_paths)
+            warnings.extend(fallback.warnings)
+            risk_flags.extend(flag for flag in fallback.risk_flags if flag not in risk_flags)
+            diagnostics.extend(fallback.diagnostics)
+            if provider_result.used_provider:
+                warnings.append("AI provider produced no proposal; heuristic fallback was attempted")
+            else:
+                warnings.append("AI provider unavailable; heuristic fallback was attempted")
+
+        status = "accepted" if proposals else "unavailable"
+        if not proposals and "intelligent_worker_unavailable" not in risk_flags:
+            risk_flags.append("intelligent_worker_unavailable")
+        return WorkerResult(
+            task_id=request.task_id,
+            worker_run_id=request.worker_run_id,
+            worker_type=self.worker_type,
+            status=status,
+            proposal=proposals[0] if proposals else None,
+            proposals=proposals,
+            proposal_path=proposal_paths[0] if proposal_paths else None,
+            proposal_paths=proposal_paths,
+            summary={
+                "headline": "Provider-backed worker produced proposal(s)."
+                if proposals
+                else "Provider-backed worker produced no proposal.",
+                "provider_name": self.provider.provider_name if self.provider else self.policy.provider_name,
+                "model_name": self.provider.model_name if self.provider else self.policy.model_name,
+                "proposal_count": len(proposals),
+                "proposal_types": [proposal.get("proposal_type", "unknown") for proposal in proposals],
+                "heuristic_fallback_used": fallback_used,
+            },
+            diagnostics=diagnostics,
+            risk_flags=risk_flags,
+            warnings=warnings,
+        )
+
+
 def build_provider_input(bundle: dict[str, Any], policy: AIProviderPolicy) -> ProviderInput:
     safe_bundle = _redact_value(bundle) if policy.redact_secrets else deepcopy(bundle)
     provider_bundle, truncated = _fit_bundle_to_budget(safe_bundle, policy.max_input_chars)
@@ -176,6 +269,14 @@ def write_provider_proposal(root: Path, task_id: str, worker_run_id: str, propos
     proposal_type = proposal.get("proposal_type", "unknown")
     suffix = "metrics" if proposal_type == "metrics" else "figure" if proposal_type == "figure" else "ai"
     write_yaml(worker_run_dir(root, task_id, worker_run_id) / f"{suffix}-proposal.yaml", proposal)
+
+
+def _proposal_path(root: Path, task_id: str, worker_run_id: str, proposal: dict[str, Any]) -> str:
+    from lab_sidecar.core.paths import to_manifest_path
+
+    proposal_type = proposal.get("proposal_type", "unknown")
+    suffix = "metrics" if proposal_type == "metrics" else "figure" if proposal_type == "figure" else "ai"
+    return to_manifest_path(worker_run_dir(root, task_id, worker_run_id) / f"{suffix}-proposal.yaml", root)
 
 
 @dataclass(frozen=True)

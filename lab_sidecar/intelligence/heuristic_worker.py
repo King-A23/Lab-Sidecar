@@ -5,8 +5,10 @@ from typing import Any
 
 import yaml
 
+from lab_sidecar.core.paths import to_manifest_path
 from lab_sidecar.figures.specs import friendly_label
 from lab_sidecar.intelligence.paths import worker_run_dir
+from lab_sidecar.intelligence.worker_invocation import WorkerRequest, WorkerResult, load_worker_input_bundle
 
 
 NUMERIC_TYPES = {"number"}
@@ -24,6 +26,74 @@ METRIC_ALIASES = {
     "runtime": "latency",
     "duration": "duration",
 }
+
+
+class HeuristicWorker:
+    worker_type = "heuristic"
+
+    def __init__(
+        self,
+        root: Path,
+        initial_warnings: list[str] | None = None,
+        initial_risk_flags: list[str] | None = None,
+    ) -> None:
+        self.root = root
+        self.initial_warnings = initial_warnings or []
+        self.initial_risk_flags = initial_risk_flags or []
+
+    def run(self, request: WorkerRequest) -> WorkerResult:
+        bundle = load_worker_input_bundle(self.root, request)
+        proposals: list[dict[str, Any]] = []
+        desired_outputs = request.desired_outputs
+
+        metrics_proposal = None
+        if "metrics" in desired_outputs or any(output in desired_outputs for output in ["figures", "report", "slides"]):
+            metrics_proposal = propose_metrics(self.root, request.task_id, request.worker_run_id, bundle)
+            if metrics_proposal:
+                proposals.append(metrics_proposal)
+
+        if "figures" in desired_outputs or "slides" in desired_outputs:
+            figure_proposal = propose_figure(self.root, request.task_id, request.worker_run_id, bundle)
+            if figure_proposal is None and metrics_proposal is not None:
+                figure_proposal = propose_figure_from_metrics_proposal(
+                    self.root,
+                    request.task_id,
+                    request.worker_run_id,
+                    metrics_proposal,
+                )
+            if figure_proposal:
+                proposals.append(figure_proposal)
+
+        if not proposals:
+            return WorkerResult(
+                task_id=request.task_id,
+                worker_run_id=request.worker_run_id,
+                worker_type=self.worker_type,
+                status="unavailable",
+                summary={"headline": "Heuristic worker produced no proposal from the bounded input bundle."},
+                diagnostics=["heuristic_worker_unavailable: bounded previews did not contain enough usable fields."],
+                risk_flags=[*self.initial_risk_flags, "intelligent_worker_unavailable"],
+                warnings=[*self.initial_warnings],
+            )
+
+        proposal_paths = [_proposal_path(self.root, request.task_id, request.worker_run_id, proposal) for proposal in proposals]
+        return WorkerResult(
+            task_id=request.task_id,
+            worker_run_id=request.worker_run_id,
+            worker_type=self.worker_type,
+            status="accepted",
+            proposal=proposals[0],
+            proposals=proposals,
+            proposal_path=proposal_paths[0] if proposal_paths else None,
+            proposal_paths=proposal_paths,
+            summary={
+                "headline": "Heuristic worker produced proposal(s) from bounded task context.",
+                "proposal_count": len(proposals),
+                "proposal_types": [proposal.get("proposal_type", "unknown") for proposal in proposals],
+            },
+            risk_flags=[*self.initial_risk_flags],
+            warnings=[*self.initial_warnings],
+        )
 
 
 def write_yaml(path: Path, data: dict[str, Any]) -> None:
@@ -72,6 +142,60 @@ def propose_figure(
     if not preview:
         return None
 
+    return _figure_proposal_from_preview(
+        root=root,
+        task_id=task_id,
+        worker_run_id=worker_run_id,
+        preview=preview,
+        rationale="Selected a supported chart from bounded normalized-metrics columns, inferred types, and small row sample.",
+    )
+
+
+def propose_figure_from_metrics_proposal(
+    root: Path,
+    task_id: str,
+    worker_run_id: str,
+    metrics_proposal: dict[str, Any],
+) -> dict[str, Any] | None:
+    columns = [
+        mapping["target"]
+        for mapping in metrics_proposal.get("field_mappings", [])
+        if isinstance(mapping, dict) and isinstance(mapping.get("target"), str)
+    ]
+    if not columns:
+        return None
+    source_metrics = f".lab-sidecar/tasks/{task_id}/metrics/normalized_metrics.csv"
+    preview = {
+        "path": source_metrics,
+        "type": "csv",
+        "columns": columns,
+        "inferred_types": {
+            column: "number"
+            for column in columns
+            if column in {"epoch", "step", "accuracy", "score", "f1", "loss", "latency", "duration"}
+        },
+        "descriptive_stats": {
+            column: {"source": "metrics_proposal_mapping"}
+            for column in columns
+            if column in {"epoch", "step", "accuracy", "score", "f1", "loss", "latency", "duration"}
+        },
+    }
+    return _figure_proposal_from_preview(
+        root=root,
+        task_id=task_id,
+        worker_run_id=worker_run_id,
+        preview=preview,
+        rationale="Selected a supported chart from a proposed normalized metrics mapping; validation re-checks the generated metrics bundle before adoption.",
+    )
+
+
+def _figure_proposal_from_preview(
+    root: Path,
+    task_id: str,
+    worker_run_id: str,
+    preview: dict[str, Any],
+    rationale: str,
+) -> dict[str, Any] | None:
     columns = list(preview.get("columns") or preview.get("keys") or [])
     types = preview.get("inferred_types") or {}
     numeric = [column for column in columns if types.get(column) in NUMERIC_TYPES]
@@ -115,7 +239,7 @@ def propose_figure(
         "figures": [figure],
         "skipped_candidates": [],
         "confidence": 0.7,
-        "rationale": "Selected a supported chart from bounded normalized-metrics columns, inferred types, and small row sample.",
+        "rationale": rationale,
     }
     path = worker_run_dir(root, task_id, worker_run_id) / "figure-proposal.yaml"
     write_yaml(path, proposal)
@@ -203,3 +327,9 @@ def _normalize(value: str) -> str:
 
 def _slug(value: str) -> str:
     return "".join(char.lower() if char.isalnum() else "_" for char in value).strip("_") or "figure"
+
+
+def _proposal_path(root: Path, task_id: str, worker_run_id: str, proposal: dict[str, Any]) -> str:
+    proposal_type = proposal.get("proposal_type")
+    filename = "metrics-proposal.yaml" if proposal_type == "metrics" else "figure-proposal.yaml"
+    return to_manifest_path(worker_run_dir(root, task_id, worker_run_id) / filename, root)
