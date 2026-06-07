@@ -25,7 +25,7 @@ Codex main agent
   -> minimal context returns to Codex
 ```
 
-The plan is split into phases 2.1 through 2.4. Each phase is designed to be run
+The plan is split into phases 2.1 through 2.5. Each phase is designed to be run
 as an independent goal-mode task with a small blast radius, explicit acceptance
 evidence, and a written phase record.
 
@@ -74,6 +74,7 @@ docs/v2-phase-2-1-non-ai-scaffold-acceptance.md
 docs/v2-phase-2-2-heuristic-worker-acceptance.md
 docs/v2-phase-2-3-optional-ai-provider-acceptance.md
 docs/v2-phase-2-4-codex-host-hardening-acceptance.md
+docs/v2-phase-2-5-worker-invocation-protocol-acceptance.md
 ```
 
 Recommended acceptance record shape:
@@ -412,6 +413,79 @@ platform-specific paths and Python commands, then record the exact commands.
 - Host documentation omits setup, smoke commands, common failure modes, or
   safety boundaries.
 
+## Phase 2.5: Worker Invocation Protocol
+
+Detailed plan:
+
+```text
+docs/v2-phase-2-5-worker-invocation-protocol-plan.md
+```
+
+Goal-mode objective:
+
+```text
+Implement V2 Phase 2.5 Worker Invocation Protocol for Lab-Sidecar. Extract the
+current heuristic and fake-provider worker paths into a stable subagent-like
+request/result lifecycle with WorkerRequest, WorkerResult, WorkerInvocation, and
+SidecarWorker interfaces. Keep delegate_experiment_artifacts as the public local
+tool entrypoint, preserve deterministic validation before adoption, and finish
+by writing docs/v2-phase-2-5-worker-invocation-protocol-acceptance.md with
+evidence and tests.
+```
+
+### Goal
+
+Make the worker flow behave like a subagent delegation protocol without making
+Lab-Sidecar depend on Codex host subagent internals or become a generic
+multi-agent framework.
+
+### Implementation Targets
+
+- Add structured worker request/result models and a `SidecarWorker` protocol
+  under `lab_sidecar/intelligence/`.
+- Make heuristic and fake-provider paths use the same worker invocation layer.
+- Keep workers as proposal producers only; deterministic validators remain the
+  only gate into official V1 artifact generation.
+- Persist `worker-request.json` and `worker-result.json` under each
+  task-local `intelligence/<worker_run_id>/` directory.
+- Preserve minimal context responses and omitted-content defaults.
+- Do not add MCP mirroring, real provider adapters, Web UI, FastAPI, hosted
+  execution, remote runners, or generic multi-agent orchestration in this
+  phase.
+
+### Required Tests
+
+- Heuristic worker runs through the protocol and still adopts only
+  validator-approved proposals.
+- Fake-provider worker runs through the same protocol and preserves budget,
+  redaction, audit, and fallback behavior.
+- `intelligent_mode="off"` skips the worker and returns the V1 fallback summary.
+- Worker/provider unavailable paths return risk flags without crashing.
+- Rejected proposals are recorded but not adopted.
+- Existing V1 CLI, MCP, and V2 host/provider/heuristic tests still pass.
+
+### Acceptance Commands
+
+```bash
+py -3 -m pytest tests/test_v2_worker_invocation.py
+py -3 -m pytest tests/test_v2_ai_provider.py tests/test_v2_heuristic_worker.py tests/test_v2_host_integration.py tests/test_v2_intelligence_scaffold.py
+py -3 -m pytest tests/test_cli_smoke.py tests/test_mcp_tools.py
+py -3 scripts/mcp_stdio_smoke.py --workspace "$TMPDIR/lab-sidecar-v2-phase-2-5-mcp"
+py -3 -m pytest
+git status --short
+```
+
+### Blocking Criteria
+
+- Worker implementations can bypass the protocol and directly write official
+  artifacts.
+- Official artifacts can be created from unvalidated proposals.
+- Default responses include worker transcripts, prompt/response bodies, full
+  logs, full datasets, report bodies, PPT content, or artifact bodies.
+- The protocol requires AI or Codex host subagent internals for normal
+  workflows.
+- Existing V1 CLI or MCP tests regress.
+
 ## Final V2.1-2.4 Acceptance Gate
 
 After Phase 2.4, the final phase record must judge whether V2.1 through V2.4
@@ -441,7 +515,7 @@ The judgment can pass only if:
 
 ## Assumptions And Defaults
 
-- This plan controls execution for V2 phases 2.1 through 2.4.
+- This plan controls execution for V2 phases 2.1 through 2.5.
 - The design source of truth remains `docs/v2-intelligent-sidecar-design.md`.
 - The new implementation should prefer existing V1 service APIs and artifact
   formats over new parallel behavior.
