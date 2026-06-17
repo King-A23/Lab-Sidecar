@@ -95,6 +95,36 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
                 record_progress("generate_slides:start")
                 slides_result = await _call_tool(session, "generate_slides", {"task_id": task_id}, timeout=90)
                 record_progress("generate_slides:done", {"slide_count": slides_result.get("summary", {}).get("slide_count")})
+                record_progress("v2_delegate:start")
+                v2_delegate_result = await _call_tool(
+                    session,
+                    "delegate_experiment_artifacts",
+                    {
+                        "user_goal": "Smoke V2 MCP mirror with existing CSV comparison results.",
+                        "result_path": "examples/csv-comparison",
+                        "desired_outputs": ["metrics"],
+                        "intelligent_mode": "off",
+                    },
+                    timeout=90,
+                )
+                v2_task_id = v2_delegate_result["task_id"]
+                record_progress("v2_delegate:done", {"task_id": v2_task_id, "status": v2_delegate_result.get("status")})
+                record_progress("v2_inspect:start", {"task_id": v2_task_id})
+                v2_inspect_result = await _call_tool(
+                    session,
+                    "inspect_sidecar_task",
+                    {"task_id": v2_task_id},
+                    timeout=30,
+                )
+                v2_csv_path = _artifact_path(v2_inspect_result, "metrics_normalized_csv")
+                record_progress("v2_preview:start", {"task_id": v2_task_id, "artifact_path": v2_csv_path})
+                v2_preview_result = await _call_tool(
+                    session,
+                    "preview_sidecar_artifact",
+                    {"task_id": v2_task_id, "artifact_path": v2_csv_path, "max_rows": 1},
+                    timeout=30,
+                )
+                record_progress("v2_preview:done", {"preview_type": v2_preview_result.get("preview_type")})
                 record_progress("cancel_run:start")
                 cancel_run_result = await _call_tool(
                     session,
@@ -135,6 +165,10 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         "make_figures",
         "generate_report_fragment",
         "generate_slides",
+        "delegate_experiment_artifacts",
+        "inspect_sidecar_task",
+        "preview_sidecar_artifact",
+        "cancel_sidecar_task",
     }
     missing = sorted(expected.difference(tool_names))
     if missing:
@@ -151,6 +185,16 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         raise RuntimeError("generate_report_fragment returned a report preview by default")
     if slides_result.get("summary", {}).get("slide_count", 0) < 1:
         raise RuntimeError(f"generate_slides did not generate slides: {slides_result}")
+    if v2_delegate_result.get("schema_version") != "2.1" or v2_delegate_result.get("status") != "completed":
+        raise RuntimeError(f"delegate_experiment_artifacts did not return a completed V2 response: {v2_delegate_result}")
+    if v2_delegate_result.get("omitted", {}).get("worker_prompt_response") != "omitted_by_default":
+        raise RuntimeError(f"V2 delegate response did not preserve the omitted contract: {v2_delegate_result}")
+    if v2_inspect_result.get("schema_version") != "2.1" or v2_inspect_result.get("status") != "completed":
+        raise RuntimeError(f"inspect_sidecar_task did not return a completed V2 response: {v2_inspect_result}")
+    if v2_preview_result.get("preview_type") != "csv_rows":
+        raise RuntimeError(f"preview_sidecar_artifact did not return a CSV preview: {v2_preview_result}")
+    if v2_preview_result.get("preview", {}).get("row_count_returned") != 1:
+        raise RuntimeError(f"preview_sidecar_artifact did not bound CSV rows: {v2_preview_result}")
     if cancel_run_result.get("task_status") != "running":
         raise RuntimeError(f"cancel smoke task did not start in background: {cancel_run_result}")
     if cancel_result.get("task_status") != "cancelled":
@@ -170,12 +214,22 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         "report_path": report_result["summary"]["report_path"],
         "slide_count": slides_result["summary"]["slide_count"],
         "slide_qa_checks": slides_result["summary"].get("qa_checks", {}),
+        "v2_task_id": v2_task_id,
+        "v2_status": v2_delegate_result["status"],
+        "v2_preview_type": v2_preview_result["preview_type"],
         "cancel_task_id": cancel_task_id,
         "cancel_status": cancel_result["task_status"],
         "blocked_command_status": blocked_result["summary"]["status"],
         "omitted_contract": slides_result["omitted"],
         "artifact_count": len(slides_result["artifacts"]),
     }
+
+
+def _artifact_path(result: dict[str, Any], artifact_id: str) -> str:
+    for artifact in result.get("artifacts", []):
+        if artifact.get("artifact_id") == artifact_id:
+            return artifact["path"]
+    raise RuntimeError(f"artifact not found in tool response: {artifact_id}")
 
 
 async def _wait_for_completed(session: Any, task_id: str) -> dict[str, Any]:

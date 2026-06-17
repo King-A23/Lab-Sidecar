@@ -1,0 +1,33 @@
+{
+  "name": "lab-sidecar",
+  "version": "0.1.0",
+  "description": "Use Lab-Sidecar from Codex as a local-first experiment and artifact sidecar.",
+  "author": {
+    "name": "Lab-Sidecar maintainers"
+  },
+  "license": "MIT",
+  "keywords": [
+    "codex",
+    "mcp",
+    "experiments",
+    "reports",
+    "slides"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Lab Sidecar",
+    "shortDescription": "Delegate experiment artifacts from Codex",
+    "longDescription": "Lab-Sidecar helps Codex delegate long-running experiment, metrics, figure, report, and slide work into local task artifacts while returning bounded summaries to the main thread.",
+    "developerName": "Lab-Sidecar maintainers",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Use Lab-Sidecar to run this experiment and summarize artifacts",
+      "Generate figures, report, and slides for these results"
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

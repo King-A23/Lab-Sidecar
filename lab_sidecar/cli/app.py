@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
+import sys
+import tempfile
 from enum import StrEnum
 from pathlib import Path
 
@@ -49,6 +52,21 @@ def _fail(message: str, code: int = 1) -> None:
     raise typer.Exit(code=code)
 
 
+def _relative(path: Path, root: Path) -> str:
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
+def _echo_next(*commands: str) -> None:
+    if not commands:
+        return
+    typer.echo("Next:")
+    for command in commands:
+        typer.echo(f"- {command}")
+
+
 @app.command()
 def init(
     force: bool = typer.Option(False, "--force", help="Recreate missing files only."),
@@ -69,6 +87,49 @@ def init(
     typer.echo(f"State dir: {state_dir(root).relative_to(root).as_posix()}")
     typer.echo(f"Config: {config_path(root).relative_to(root).as_posix()}")
     typer.echo(f"Index: {sqlite_path(root).relative_to(root).as_posix()}")
+    _echo_next("labsidecar run \"<command>\"", "labsidecar ingest <path>", "labsidecar doctor")
+
+
+@app.command()
+def doctor() -> None:
+    """Check local Lab-Sidecar prerequisites and workspace state."""
+    root = _root()
+    has_error = False
+
+    typer.echo("Lab-Sidecar doctor")
+    typer.echo(f"Workspace: {root}")
+
+    python_version = ".".join(str(part) for part in sys.version_info[:3])
+    if sys.version_info < (3, 11):
+        typer.echo(f"[fail] Python: {python_version} (requires 3.11+)")
+        has_error = True
+    else:
+        typer.echo(f"[ok] Python: {python_version}")
+
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".lab-sidecar-doctor-", dir=root, delete=True):
+            pass
+    except OSError as exc:
+        typer.echo(f"[fail] Writable workspace: {exc}")
+        has_error = True
+    else:
+        typer.echo("[ok] Writable workspace")
+
+    if config_path(root).is_file() and state_dir(root).is_dir():
+        typer.echo(f"[ok] Config: {_relative(config_path(root), root)}")
+        typer.echo(f"[ok] Task directory: {_relative(state_dir(root) / 'tasks', root)}")
+    else:
+        typer.echo("[warn] Workspace config: not initialized")
+        typer.echo("Hint: run 'labsidecar init' before creating tasks.")
+
+    if importlib.util.find_spec("mcp") is None:
+        typer.echo("[warn] Optional MCP SDK: not installed")
+        typer.echo("Hint: install with 'python -m pip install -e \".[mcp]\"' when using MCP.")
+    else:
+        typer.echo("[ok] Optional MCP SDK: installed")
+
+    if has_error:
+        raise typer.Exit(code=1)
 
 
 @app.command()
@@ -89,8 +150,25 @@ def run(
     typer.echo(f"Task created: {record.task_id}")
     typer.echo(f"Status: {record.status.value}")
     typer.echo(f"Command: {record.command}")
-    typer.echo(f"Logs: {record.paths.stdout}")
-    typer.echo(f"Use 'labsidecar status {record.task_id}' to check progress.")
+    typer.echo(f"Artifacts: {record.paths.task_dir}")
+    typer.echo(f"Stdout: {record.paths.stdout}")
+    typer.echo(f"Stderr: {record.paths.stderr}")
+    if record.status == TaskStatus.COMPLETED:
+        _echo_next(
+            f"labsidecar collect {record.task_id}",
+            f"labsidecar artifacts {record.task_id}",
+        )
+    elif record.status == TaskStatus.RUNNING:
+        _echo_next(
+            f"labsidecar status {record.task_id}",
+            f"labsidecar logs {record.task_id} --tail 20",
+        )
+    elif record.status == TaskStatus.FAILED:
+        _echo_next(
+            f"labsidecar status {record.task_id}",
+            f"labsidecar logs {record.task_id} --stream stderr --tail 40",
+            f"labsidecar slides {record.task_id}",
+        )
 
 
 @app.command()
@@ -117,9 +195,19 @@ def status(task_id: str) -> None:
     else:
         typer.echo(f"Updated: {record.updated_at}")
     typer.echo(f"Artifacts: {record.artifact_count()}")
+    typer.echo(f"Artifact dir: {record.paths.task_dir}")
     if record.failure_summary:
         typer.echo("Failure summary:")
         typer.echo(record.failure_summary)
+        _echo_next(
+            f"labsidecar logs {record.task_id} --stream stderr --tail 40",
+            f"labsidecar slides {record.task_id}",
+        )
+    elif record.status == TaskStatus.COMPLETED:
+        _echo_next(
+            f"labsidecar collect {record.task_id}",
+            f"labsidecar artifacts {record.task_id}",
+        )
 
 
 @app.command()
@@ -193,7 +281,11 @@ def ingest(
     typer.echo(f"Imported as task: {record.task_id}")
     typer.echo(f"Source: {record.source_path}")
     typer.echo(f"Status: {record.status.value}")
-    typer.echo(f"Next step: run 'labsidecar artifacts {record.task_id}'")
+    typer.echo(f"Artifacts: {record.paths.task_dir}")
+    _echo_next(
+        f"labsidecar collect {record.task_id}",
+        f"labsidecar artifacts {record.task_id}",
+    )
 
 
 @app.command()
@@ -249,6 +341,10 @@ def collect(
     typer.echo(f"Wrote: {result.csv_path.relative_to(root).as_posix()}")
     typer.echo(f"Wrote: {result.json_path.relative_to(root).as_posix()}")
     typer.echo(f"Summary: {result.summary_path.relative_to(root).as_posix()}")
+    _echo_next(
+        f"labsidecar figures {result.record.task_id}",
+        f"labsidecar report {result.record.task_id}",
+    )
 
 
 @app.command()
@@ -299,6 +395,10 @@ def figures(
         typer.echo("Warnings:")
         for warning in result.warnings:
             typer.echo(f"- {warning}")
+    _echo_next(
+        f"labsidecar report {result.record.task_id}",
+        f"labsidecar slides {result.record.task_id}",
+    )
 
 
 @app.command()
@@ -332,6 +432,7 @@ def report(
     typer.echo(result.report_path.relative_to(root).as_posix())
     typer.echo(f"Summary: {result.summary_path.relative_to(root).as_posix()}")
     typer.echo(f"Template: {result.template}")
+    _echo_next(f"labsidecar slides {result.record.task_id}")
 
 
 @app.command()
@@ -366,6 +467,10 @@ def slides(
     typer.echo(f"Summary: {result.summary_path.relative_to(root).as_posix()}")
     typer.echo(f"Template: {result.template}")
     typer.echo(f"Slides: {result.summary['slide_count']}")
+    _echo_next(
+        f"labsidecar artifacts {result.record.task_id}",
+        f"labsidecar open {result.record.task_id}",
+    )
 
 
 @app.command()

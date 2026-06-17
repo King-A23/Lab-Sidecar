@@ -440,4 +440,13 @@ def list_task_ids(root: Path) -> list[str]:
     directory = tasks_dir(root)
     if not directory.exists():
         return []
-    return sorted(path.name for path in directory.iterdir() if path.is_dir())
+    task_paths = [path for path in directory.iterdir() if path.is_dir()]
+    return [path.name for path in sorted(task_paths, key=_task_recency_key)]
+
+
+def _task_recency_key(path: Path) -> tuple[int, str]:
+    manifest = path / "manifest.json"
+    try:
+        return (manifest.stat().st_mtime_ns, path.name)
+    except OSError:
+        return (path.stat().st_mtime_ns, path.name)

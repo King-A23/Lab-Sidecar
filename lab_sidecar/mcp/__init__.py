@@ -3,6 +3,12 @@
 The package keeps MCP integration as a thin layer over the existing services.
 """
 
-from lab_sidecar.mcp.tools import LabSidecarMCPTools
-
 __all__ = ["LabSidecarMCPTools"]
+
+
+def __getattr__(name: str):
+    if name == "LabSidecarMCPTools":
+        from lab_sidecar.mcp.tools import LabSidecarMCPTools
+
+        return LabSidecarMCPTools
+    raise AttributeError(name)

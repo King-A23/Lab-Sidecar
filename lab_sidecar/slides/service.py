@@ -88,8 +88,16 @@ class FigureItem:
         return " | ".join(parts)
 
     def display_caption(self, task_path: Path, unknown: str) -> str:
-        caption = self.full_caption(unknown)
+        caption = self.readable_caption(unknown)
         return _short_text(caption, MAX_CAPTION_CHARS)
+
+    def readable_caption(self, unknown: str) -> str:
+        if not self.x or not self.y or not self.group_by or not self.source_metrics:
+            return self.full_caption(unknown)
+        summary = f"{self.y} over {self.x} by {self.group_by}"
+        if self.figure_id:
+            return f"{self.figure_id}: {summary}"
+        return summary
 
     def to_summary(self, task_path: Path) -> dict[str, str]:
         return {
@@ -318,7 +326,7 @@ class SlidesGenerationService:
             "columns": columns,
             "key_columns": columns[:MAX_KEY_COLUMNS],
             "omitted_key_column_count": max(0, len(columns) - MAX_KEY_COLUMNS),
-            "numeric": numeric[:MAX_NUMERIC_COLUMNS],
+            "numeric": sorted(numeric, key=lambda item: _metric_priority(str(item["column"])))[:MAX_NUMERIC_COLUMNS],
             "numeric_omitted_count": max(0, len(numeric) - MAX_NUMERIC_COLUMNS),
         }
 
@@ -448,7 +456,7 @@ class SlidesGenerationService:
     def _caption_truncations(self, figure_items: list[FigureItem], unknown: str) -> list[dict[str, Any]]:
         truncations: list[dict[str, Any]] = []
         for item in figure_items:
-            full = item.full_caption(unknown)
+            full = item.readable_caption(unknown)
             display = _short_text(full, MAX_CAPTION_CHARS)
             if display != full:
                 truncations.append(
@@ -469,6 +477,8 @@ class SlidesGenerationService:
         for raw_line in text.splitlines():
             line = _clean_markdown_line(raw_line)
             if not line:
+                continue
+            if _is_low_value_report_excerpt(line):
                 continue
             lines.append(text_tracker.fit(f"report_excerpt[{len(lines)}]", line, 125).display)
             if len(lines) >= MAX_REPORT_BULLETS:
@@ -762,9 +772,20 @@ class _PresentationBuilder:
         self._settings_slide()
         self._metrics_slide()
         self._metrics_table_slide()
+        if self._should_show_key_comparison():
+            self._key_comparison_slide()
         self._figure_slides()
         self._result_summary_slide()
         self._reproduce_slide()
+
+    def _should_show_key_comparison(self) -> bool:
+        comparison = self.context["key_comparison"]
+        if not comparison.get("present"):
+            return False
+        if comparison.get("baseline_item"):
+            return True
+        top_items = comparison.get("top_items") or []
+        return len(top_items) > 1
 
     def _build_project_completed(self) -> None:
         self._project_overview_slide()
@@ -1452,6 +1473,46 @@ def _clean_markdown_line(line: str) -> str:
     stripped = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", stripped)
     stripped = stripped.replace("|", " ").strip()
     return re.sub(r"\s+", " ", stripped)
+
+
+def _is_low_value_report_excerpt(line: str) -> bool:
+    normalized = line.strip().lower()
+    if not normalized:
+        return True
+    if normalized in {
+        "实验报告片段",
+        "experiment report fragment",
+        "实验概览",
+        "experiment overview",
+        "实验设置与来源",
+        "experiment settings and source",
+        "字段 值",
+        "field value",
+        "--- ---",
+        "---: ---:",
+    }:
+        return True
+    return normalized.startswith(
+        (
+            "task_id:",
+            "task_id ",
+            "status:",
+            "status ",
+            "mode:",
+            "mode ",
+            "command ",
+            "source_path ",
+            "working_dir ",
+            "created_at ",
+            "started_at ",
+            "finished_at ",
+            "exit_code ",
+            "任务 id:",
+            "任务id:",
+            "状态:",
+            "模式:",
+        )
+    )
 
 
 def _resolve_task_or_workspace_path(path_text: str, root: Path, task_path: Path) -> Path:

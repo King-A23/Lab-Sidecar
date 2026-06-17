@@ -1,23 +1,37 @@
 # simple-success
 
-最小成功样例，用于验证 Phase 1 的 `run/status/logs/artifacts`，以及后续 Phase 2 的 `collect/figures/report`。
+Minimal successful run fixture for the public alpha demo.
 
-## 文件说明
+## Files
 
-- `train.py`：一个无外部依赖的伪训练脚本，会打印训练日志并输出 `metrics.csv`
-- `metrics.csv`：脚本的确定性输出样例，便于不运行脚本时直接测试收集逻辑
+- `train.py`: deterministic dependency-free training stand-in. It prints short
+  logs and writes `metrics.csv`.
+- `metrics.csv`: checked-in deterministic output for ingest/collect scenarios
+  that do not need to rerun the script.
 
-## 建议测试方式
+## Direct Run
+
+From this directory:
 
 ```bash
 python train.py --output metrics.csv
 ```
 
-未来在 Lab-Sidecar 中的预期流程：
+## Lab-Sidecar Demo Flow
+
+From a repository root or copied demo workspace root:
 
 ```bash
-labsidecar run "python train.py --output metrics.csv"
-labsidecar collect <task_id>
-labsidecar figures <task_id>
-labsidecar report <task_id>
+python -m lab_sidecar.cli.app run "python examples/simple-success/train.py --output metrics.csv"
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app collect "$TASK_ID"
+python -m lab_sidecar.cli.app figures "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
 ```
+
+Replace `<printed_task_id>` with the id printed by `run`.
+
+Expected result: a completed task with 5 metric rows, task-local logs,
+normalized metrics, figures, a deterministic report fragment, and a static
+editable PPTX draft under `.lab-sidecar/tasks/$TASK_ID/`.

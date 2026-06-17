@@ -154,3 +154,57 @@ def test_preview_rejects_unsupported_registered_artifact(tmp_path: Path) -> None
 
     assert result["status"] == "rejected"
     assert result["risk_flags"] == ["artifact_preview_rejected"]
+
+
+def test_preview_caps_large_requested_limits(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    source = tmp_path / "results" / "metrics.csv"
+    source.parent.mkdir(parents=True)
+    with source.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=["epoch", "accuracy"])
+        writer.writeheader()
+        for index in range(30):
+            writer.writerow({"epoch": index, "accuracy": 0.5 + index / 100})
+
+    result = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="Generate metrics for preview cap testing.",
+        result_path=source,
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+    inspected = inspect_sidecar_task(tmp_path, result["task_id"])
+    csv_result = preview_sidecar_artifact(
+        tmp_path,
+        result["task_id"],
+        artifact_path(inspected, "metrics_normalized_csv"),
+        max_rows=999,
+    )
+
+    script = tmp_path / "many_lines.py"
+    script.write_text(
+        "\n".join(
+            [
+                "for index in range(120):",
+                "    print(f'line-{index}-' + 'x' * 1200, flush=True)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    log_record = RunnerService(tmp_path).run(f'"{sys.executable}" many_lines.py', background=False)
+    log_result = preview_sidecar_artifact(
+        tmp_path,
+        log_record.task_id,
+        log_record.paths.stdout,
+        max_lines=999,
+    )
+
+    assert csv_result["preview_type"] == "csv_rows"
+    assert csv_result["preview"]["row_count_returned"] == 20
+    assert csv_result["preview"]["truncated"] is True
+    assert log_result["preview_type"] == "log_tail"
+    assert log_result["preview"]["line_count_returned"] == 80
+    assert log_result["preview"]["truncated"] is True
+    assert len(log_result["preview"]["tail"][0]) == 1000
+    assert "line-0" not in json.dumps(log_result)

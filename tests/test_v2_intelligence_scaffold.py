@@ -143,6 +143,50 @@ def test_default_responses_omit_full_bodies_and_rows(tmp_path: Path) -> None:
         assert "ppt/slides" not in serialized
 
 
+def test_v2_responses_and_input_bundle_redact_and_bound_command_preview(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    script = tmp_path / "write_metrics.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "Path('metrics.csv').write_text('epoch,accuracy\\n1,0.9\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    secret = "SECRET_TOKEN_SHOULD_NOT_RETURN"
+    sentinel = "LONG_COMMAND_SUFFIX_" + ("x" * 900)
+    command = f'"{sys.executable}" write_metrics.py --token {secret} {sentinel}'
+
+    result = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="Collect metrics while preserving command quarantine.",
+        command=command,
+        desired_outputs=["metrics"],
+        intelligent_mode="auto",
+        context_budget={"preview_rows": 1},
+    )
+    inspected = inspect_sidecar_task(tmp_path, result["task_id"])
+    worker_run_id = result["summary"]["intelligence"]["worker_run_id"]
+    bundle = json.loads(
+        (worker_run_dir(tmp_path, result["task_id"], worker_run_id) / "input-bundle.json").read_text(encoding="utf-8")
+    )
+
+    for response in [result, inspected]:
+        serialized = json.dumps(response, ensure_ascii=False)
+        preview = response["summary"]["task"]["command"]
+        assert response["omitted"]["full_command"] == "omitted_by_default"
+        assert len(preview) <= 500
+        assert "[REDACTED]" in preview
+        assert secret not in serialized
+        assert sentinel not in serialized
+
+    bundle_serialized = json.dumps(bundle, ensure_ascii=False)
+    bundle_preview = bundle["task"]["command"]
+    assert bundle["omitted"]["full_command"] == "omitted_by_default"
+    assert len(bundle_preview) <= 500
+    assert "[REDACTED]" in bundle_preview
+    assert secret not in bundle_serialized
+    assert sentinel not in bundle_serialized
+
+
 def test_sandbox_escape_proposal_is_rejected_without_official_artifact_changes(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     init_workspace(tmp_path)

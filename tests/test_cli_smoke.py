@@ -104,12 +104,33 @@ def test_init_creates_workspace(tmp_path: Path) -> None:
     assert (tmp_path / ".lab-sidecar" / "config.yaml").is_file()
     assert (tmp_path / ".lab-sidecar" / "tasks").is_dir()
     assert (tmp_path / ".lab-sidecar" / "index.sqlite").is_file()
+    assert "Next:" in result.output
+    assert 'labsidecar run "<command>"' in result.output
+    assert "labsidecar ingest <path>" in result.output
 
     second = invoke(tmp_path, ["init"])
     assert second.exit_code == 2
 
     forced = invoke(tmp_path, ["init", "--force"])
     assert forced.exit_code == 0
+
+
+def test_doctor_reports_workspace_health(tmp_path: Path) -> None:
+    before_init = invoke(tmp_path, ["doctor"])
+
+    assert before_init.exit_code == 0
+    assert "Lab-Sidecar doctor" in before_init.output
+    assert "[ok] Python:" in before_init.output
+    assert "[ok] Writable workspace" in before_init.output
+    assert "[warn] Workspace config: not initialized" in before_init.output
+    assert "labsidecar init" in before_init.output
+
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    after_init = invoke(tmp_path, ["doctor"])
+
+    assert after_init.exit_code == 0
+    assert "[ok] Config: .lab-sidecar/config.yaml" in after_init.output
+    assert "[ok] Task directory: .lab-sidecar/tasks" in after_init.output
 
 
 def test_simple_success_task_and_queries(tmp_path: Path) -> None:
@@ -123,6 +144,13 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     task_id = extract_task_id(result.output)
     task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
     manifest = read_manifest(tmp_path, task_id)
+
+    assert f"Artifacts: .lab-sidecar/tasks/{task_id}" in result.output
+    assert f"Stdout: .lab-sidecar/tasks/{task_id}/stdout.log" in result.output
+    assert f"Stderr: .lab-sidecar/tasks/{task_id}/stderr.log" in result.output
+    assert "Next:" in result.output
+    assert f"labsidecar collect {task_id}" in result.output
+    assert f"labsidecar artifacts {task_id}" in result.output
 
     assert manifest["schema_version"] == "1"
     assert manifest["task_id"] == task_id
@@ -157,6 +185,7 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     assert status.exit_code == 0
     assert "Status: completed" in status.output
     assert "Exit code: 0" in status.output
+    assert f"Artifact dir: .lab-sidecar/tasks/{task_id}" in status.output
 
     logs = invoke(tmp_path, ["logs", task_id, "--tail", "20"])
     assert logs.exit_code == 0
@@ -432,6 +461,67 @@ def test_list_and_open_use_manifest_task_state(tmp_path: Path) -> None:
     assert "list-open-smoke" in listed.output
     assert opened.exit_code == 0
     assert str(tmp_path / ".lab-sidecar" / "tasks" / task_id) in opened.output
+
+
+def test_list_limit_empty_and_open_missing_task(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    empty = invoke(tmp_path, ["list"])
+    assert empty.exit_code == 0
+    assert "No tasks found." in empty.output
+
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    first = extract_task_id(invoke(tmp_path, ["run", command, "--name", "first"]).output)
+    second = extract_task_id(invoke(tmp_path, ["run", command, "--name", "second"]).output)
+
+    limited = invoke(tmp_path, ["list", "--limit", "1"])
+    assert limited.exit_code == 0
+    assert second in limited.output
+    assert "second" in limited.output
+    assert first not in limited.output
+    assert "first" not in limited.output
+
+    missing = invoke(tmp_path, ["open", "task_missing"])
+    assert missing.exit_code == 3
+    assert "task 'task_missing' was not found" in missing.output
+
+
+def test_artifact_chain_prints_next_steps(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    ingest_result = invoke(tmp_path, ["ingest", "examples/csv-comparison"])
+
+    assert ingest_result.exit_code == 0
+    task_id = extract_task_id(ingest_result.output)
+    assert f"Artifacts: .lab-sidecar/tasks/{task_id}" in ingest_result.output
+    assert "Next:" in ingest_result.output
+    assert f"labsidecar collect {task_id}" in ingest_result.output
+    assert f"labsidecar artifacts {task_id}" in ingest_result.output
+
+    collect_result = invoke(tmp_path, ["collect", task_id])
+    assert collect_result.exit_code == 0
+    assert "Next:" in collect_result.output
+    assert f"labsidecar figures {task_id}" in collect_result.output
+    assert f"labsidecar report {task_id}" in collect_result.output
+
+    figures_result = invoke(tmp_path, ["figures", task_id])
+    assert figures_result.exit_code == 0
+    assert "Next:" in figures_result.output
+    assert f"labsidecar report {task_id}" in figures_result.output
+    assert f"labsidecar slides {task_id}" in figures_result.output
+
+    report_result = invoke(tmp_path, ["report", task_id])
+    assert report_result.exit_code == 0
+    assert "Next:" in report_result.output
+    assert f"labsidecar slides {task_id}" in report_result.output
+
+    slides_result = invoke(tmp_path, ["slides", task_id])
+    assert slides_result.exit_code == 0
+    assert "Next:" in slides_result.output
+    assert f"labsidecar artifacts {task_id}" in slides_result.output
+    assert f"labsidecar open {task_id}" in slides_result.output
 
 
 def test_cancel_non_running_task_returns_state_error(tmp_path: Path) -> None:
@@ -1527,8 +1617,14 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     assert all({"slide_index", "title", "purpose", "source_artifacts"}.issubset(slide) for slide in summary["slides"])
     assert summary["included_metrics"]["row_count"] > 0
     assert summary["included_metrics"]["numeric"]
-    assert "val_accuracy" in {item["column"] for item in summary["included_metrics"]["numeric"]}
+    numeric_columns = [item["column"] for item in summary["included_metrics"]["numeric"]]
+    assert "val_accuracy" in numeric_columns
+    assert numeric_columns[:2] == ["val_accuracy", "val_loss"]
     assert summary["included_figures"]
+    assert any(slide["title"] == "关键对比" for slide in summary["slides"])
+    comparison = summary["key_comparisons"][0]
+    assert comparison["best_item"]["label"] == "model_a"
+    assert comparison["baseline_item"]["label"] == "baseline"
     assert "warnings" in summary
     assert summary["qa_checks"]["slide_count"]["passed"] is True
     assert summary["qa_checks"]["empty_slide_check"]["passed"] is True
@@ -1546,6 +1642,13 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     assert "raw/source_refs.json" in summary["generated_from"]
     assert "stdout.log" in summary["generated_from"]
     assert "stderr.log" in summary["generated_from"]
+    assert not any(line.lower().startswith(("task_id:", "status:", "mode:")) for line in summary["report_excerpt"])
+
+    deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
+    assert "model_a" in deck_text
+    assert "baseline" in deck_text
+    assert "line_val_accuracy_over_epoch: val_accuracy over epoch by model" in deck_text
+    assert "type=line" not in deck_text
 
     manifest = read_manifest(tmp_path, task_id)
     artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}

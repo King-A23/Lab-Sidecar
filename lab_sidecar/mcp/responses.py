@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from lab_sidecar.core.paths import resolve_workspace_path
 
 
 DEFAULT_OMITTED = {
+    "full_command": "omitted_by_default",
     "full_stdout": "omitted_by_default",
     "full_stderr": "omitted_by_default",
     "metrics_rows": "omitted_by_default",
@@ -16,8 +18,16 @@ DEFAULT_OMITTED = {
 }
 MAX_ARTIFACTS = 40
 MAX_WARNINGS = 10
+MAX_COMMAND_CHARS = 500
 MAX_FAILURE_SUMMARY_CHARS = 1200
 MAX_LOG_TAIL_LINES = 20
+REDACTION_TEXT = "[REDACTED]"
+SECRET_PATTERNS = [
+    re.compile(r"(?i)(--(?:api[-_]?key|token|password|secret)(?:=|\s+))([^\s\"']+)"),
+    re.compile(r"(?i)((?:api[_-]?key|token|password|secret)\s*[:=]\s*)([^\s\"']+)"),
+    re.compile(r"(?i)(bearer\s+)([A-Za-z0-9_\-./+=]{8,})"),
+    re.compile(r"\b(sk)-[A-Za-z0-9_\-]{8,}\b"),
+]
 
 
 def base_response(
@@ -77,7 +87,7 @@ def task_summary(root: Path, record: TaskRecord) -> dict[str, Any]:
         "finished_at": record.finished_at,
         "exit_code": record.exit_code,
         "working_dir": record.working_dir,
-        "command": record.command,
+        "command": command_preview(record.command),
         "artifact_dir": record.paths.task_dir,
         "artifact_count": record.artifact_count(),
         "failure_summary": _short_text(record.failure_summary, MAX_FAILURE_SUMMARY_CHARS),
@@ -134,6 +144,21 @@ def bounded_log_tail(path: Path, line_count: int) -> list[str]:
     if lines == 0 or not path.exists():
         return []
     return path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+
+
+def command_preview(command: str | None) -> str | None:
+    if command is None:
+        return None
+    preview = command
+    for pattern in SECRET_PATTERNS:
+        preview = pattern.sub(_redacted_secret, preview)
+    return _short_text(preview, MAX_COMMAND_CHARS)
+
+
+def _redacted_secret(match: re.Match[str]) -> str:
+    if match.lastindex == 1:
+        return f"{match.group(1)}-{REDACTION_TEXT}"
+    return f"{match.group(1)}{REDACTION_TEXT}"
 
 
 def _compact_qa(qa_checks: Any) -> dict[str, bool | None]:

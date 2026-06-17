@@ -1,184 +1,227 @@
 # Lab-Sidecar
 
-Lab-Sidecar is a local-first CLI experiment runner for capturing commands, logs, task status, and reproducible report and presentation artifact records.
+Lab-Sidecar is a local-first CLI sidecar that turns messy experiment outputs into task records, normalized metrics, deterministic figures, Markdown report fragments, and editable PPTX drafts.
 
-## Quick Smoke
+It is built for students, research beginners, and personal developers who run long local experiments and then need to remember what happened, compare small result files, and prepare reproducible report or presentation artifacts.
 
-```powershell
-py -3 -m pip install -e ".[dev,mcp]"
-py -3 -m lab_sidecar.cli.app init
-py -3 -m lab_sidecar.cli.app run "py -3 examples/simple-success/train.py --output metrics.csv"
-py -3 -m lab_sidecar.cli.app collect <task_id>
-py -3 -m lab_sidecar.cli.app figures <task_id>
-py -3 -m lab_sidecar.cli.app report <task_id>
-py -3 -m lab_sidecar.cli.app slides <task_id>
+```text
+run / ingest -> collect -> figures -> report -> slides
 ```
 
-See `docs/public-alpha-quickstart.md` for the full 10-minute path, `docs/public-alpha-release-notes.md` for current limits, and `docs/mcp-host-config.md` for MCP stdio setup.
+## Why This Exists
 
-## Install
+Local experiments often leave behind a mix of terminal logs, CSV files, JSON files, screenshots, and half-written notes. Lab-Sidecar keeps that work file-first: every task gets a directory under `.lab-sidecar/tasks/<task_id>/`, with `manifest.json` as the durable record and generated artifacts beside it.
 
-```powershell
-py -3 -m pip install -e ".[dev]"
+Today it does five practical things:
+
+- runs or ingests local experiment results
+- collects CSV/JSON metrics into normalized tables
+- renders deterministic PNG/SVG figures
+- writes deterministic Markdown report fragments
+- drafts static editable PowerPoint decks from the recorded artifacts
+
+Reports and slides are template-generated. They do not use AI and they do not claim to infer complex research conclusions.
+
+## Demo Preview
+
+These previews are committed from a real `examples/csv-comparison` Lab-Sidecar run. They are not stock images.
+
+![Validation accuracy comparison](docs/assets/demo/csv-comparison-val-accuracy.png)
+
+![Report preview generated from csv-comparison](docs/assets/demo/csv-comparison-report-preview.png)
+
+The full demo recipe is in [docs/demo-public-alpha.md](docs/demo-public-alpha.md).
+
+## 10-Minute Quickstart
+
+Install from a clone:
+
+```bash
+python -m pip install -e ".[dev,mcp]"
 ```
 
-Optional MCP stdio support is pinned behind an extra:
+On Windows, use `py -3` instead of `python` if that is your configured launcher.
 
-```powershell
-py -3 -m pip install -e ".[mcp]"
+Create a clean demo workspace from the repository root:
+
+```bash
+export LABSIDECAR_REPO="$(pwd)"
+export LABSIDECAR_WS="${TMPDIR:-/tmp}/lab-sidecar-alpha-workspace"
+rm -rf "$LABSIDECAR_WS"
+mkdir -p "$LABSIDECAR_WS"
+cp -R "$LABSIDECAR_REPO/examples" "$LABSIDECAR_WS/examples"
+cd "$LABSIDECAR_WS"
+python -m lab_sidecar.cli.app init
+python -m lab_sidecar.cli.app doctor
 ```
 
-If the `labsidecar` console script is not on `PATH` on Windows, use the module entrypoint:
+Run the deterministic training fixture:
 
-```powershell
-py -3 -m lab_sidecar.cli.app --help
+```bash
+python -m lab_sidecar.cli.app run "python examples/simple-success/train.py --output metrics.csv"
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app collect "$TASK_ID"
+python -m lab_sidecar.cli.app figures "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
+python -m lab_sidecar.cli.app artifacts "$TASK_ID"
+python -m lab_sidecar.cli.app open "$TASK_ID"
+```
+
+The `run` command prints the task id, artifact directory, log paths, and next likely commands. A task id looks like `task_20260608_132834_153843`.
+
+Expected files:
+
+```text
+.lab-sidecar/tasks/$TASK_ID/
+  manifest.json
+  stdout.log
+  stderr.log
+  metrics/normalized_metrics.csv
+  figures/*.png
+  figures/*.svg
+  reports/report-fragment.md
+  slides/presentation-draft.pptx
+  slides/slides-summary.json
+```
+
+For an existing-results path, try:
+
+```bash
+python -m lab_sidecar.cli.app ingest examples/csv-comparison
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app collect "$TASK_ID"
+python -m lab_sidecar.cli.app figures "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
 ```
 
 ## CLI Commands
 
-The current CLI supports the local experiment runner, metrics collection, figure generation, deterministic Markdown report fragments, and Phase 4.1 static PPTX drafts:
+Both `labsidecar` and `lab-sidecar` console scripts point at the same CLI after installation. The module entrypoint always works from an editable checkout:
 
-```powershell
-py -3 -m lab_sidecar.cli.app init
-py -3 -m lab_sidecar.cli.app run "<command>"
-py -3 -m lab_sidecar.cli.app run "<command>" --background
-py -3 -m lab_sidecar.cli.app status <task_id>
-py -3 -m lab_sidecar.cli.app logs <task_id> --tail 20
-py -3 -m lab_sidecar.cli.app artifacts <task_id>
-py -3 -m lab_sidecar.cli.app cancel <task_id>
-py -3 -m lab_sidecar.cli.app ingest <path>
-py -3 -m lab_sidecar.cli.app collect <task_id>
-py -3 -m lab_sidecar.cli.app figures <task_id>
-py -3 -m lab_sidecar.cli.app figures <task_id> --spec figure.yaml
-py -3 -m lab_sidecar.cli.app report <task_id>
-py -3 -m lab_sidecar.cli.app report <task_id> --template zh-summary
-py -3 -m lab_sidecar.cli.app slides <task_id>
-py -3 -m lab_sidecar.cli.app slides <task_id> --template en-summary
-py -3 -m lab_sidecar.cli.app slides <task_id> --template zh-project
+| Command | Purpose |
+| --- | --- |
+| `init` | Create `.lab-sidecar/` config, task directory, and local index. |
+| `doctor` | Check Python version, writable workspace, config, task directory, and optional MCP SDK. |
+| `run "<command>"` | Execute a user-provided local command and capture task logs/artifacts. |
+| `run "<command>" --background` | Start a long task and return a task id immediately. |
+| `ingest <path>` | Register an existing file or directory without running a command. |
+| `status <task_id>` | Refresh and print status, exit code, timestamps, artifact count, and next steps. |
+| `list --limit 20` | Show recent tasks from task manifests. |
+| `open <task_id>` | Print the absolute task artifact directory path. |
+| `logs <task_id> --tail 20` | Print bounded stdout/stderr tails. |
+| `artifacts <task_id>` | List artifacts recorded in `manifest.json`. |
+| `cancel <task_id>` | Cancel a running task started by Lab-Sidecar. |
+| `collect <task_id>` | Normalize CSV/JSON metrics into task-local tables. |
+| `figures <task_id>` | Generate static PNG/SVG figures. |
+| `report <task_id>` | Generate a deterministic Markdown report fragment. |
+| `slides <task_id>` | Generate a static editable PPTX draft. |
+
+Use `python -m lab_sidecar.cli.app <command>` if your shell cannot find the console script.
+
+## Artifact Layout
+
+Lab-Sidecar keeps generated artifacts under `.lab-sidecar/` and does not move, delete, or rewrite user source files during collection, figure rendering, report generation, or slide generation.
+
+```text
+.lab-sidecar/
+  config.yaml
+  index.sqlite
+  tasks/
+    task_YYYYMMDD_HHMMSS_xxxxxx/
+      manifest.json
+      stdout.log
+      stderr.log
+      raw/
+      metrics/
+      figures/
+      reports/
+      slides/
+      reproduce/
 ```
 
-## Minimal Workflow
+SQLite is only an index. The task-local `manifest.json` and artifact files are the record to inspect or share after redaction.
 
-Register existing results and produce report-ready and presentation-ready artifacts:
+## Codex And MCP
 
-```powershell
-py -3 -m lab_sidecar.cli.app init
-py -3 -m lab_sidecar.cli.app ingest examples/csv-comparison
-py -3 -m lab_sidecar.cli.app collect <task_id>
-py -3 -m lab_sidecar.cli.app figures <task_id>
-py -3 -m lab_sidecar.cli.app report <task_id>
-py -3 -m lab_sidecar.cli.app slides <task_id>
-py -3 -m lab_sidecar.cli.app artifacts <task_id>
-```
+Lab-Sidecar includes an experimental local MCP adapter in `lab_sidecar.mcp`. It exposes thin wrappers over the same local services rather than a separate product surface.
 
-Run a command, then collect generated metrics and build the same artifact chain:
-
-```powershell
-py -3 -m lab_sidecar.cli.app init
-py -3 -m lab_sidecar.cli.app run "py -3 examples/simple-success/train.py --output metrics.csv"
-py -3 -m lab_sidecar.cli.app collect <task_id>
-py -3 -m lab_sidecar.cli.app figures <task_id>
-py -3 -m lab_sidecar.cli.app report <task_id>
-py -3 -m lab_sidecar.cli.app slides <task_id>
-py -3 -m lab_sidecar.cli.app status <task_id>
-```
-
-For run-mode tasks, `collect` scans the task directory and the run working directory top level for CSV/JSON files created after the task starts. It does not recursively scan the workspace or `.lab-sidecar`.
-
-Run a long task in the background:
-
-```powershell
-py -3 -m lab_sidecar.cli.app run "py -3 long_task.py" --background
-py -3 -m lab_sidecar.cli.app status <task_id>
-py -3 -m lab_sidecar.cli.app cancel <task_id>
-```
-
-## Report Templates
-
-`report` writes task-local artifacts:
-
-- `.lab-sidecar/tasks/<task_id>/reports/report-fragment.md`
-- `.lab-sidecar/tasks/<task_id>/reports/report-summary.json`
-
-Supported templates:
-
-- `zh-lab` default Chinese course lab report fragment
-- `zh-summary` short Chinese summary
-- `en-paper` short English research-style summary
-
-Reports are generated by deterministic templates. They do not use AI and do not guarantee automatic interpretation of complex research conclusions. Numeric summaries come from collected artifacts such as `metrics/normalized_metrics.csv`, `metrics/collection-summary.json`, and `figures/figure-summary.json`; unknown content is marked as `未自动推断`.
-
-## Slides Templates
-
-`slides` writes task-local artifacts:
-
-- `.lab-sidecar/tasks/<task_id>/slides/presentation-draft.pptx`
-- `.lab-sidecar/tasks/<task_id>/slides/slides-summary.json`
-
-Supported templates:
-
-- `zh-summary` default Chinese static summary deck
-- `en-summary` English static summary deck
-- `zh-project` compressed Chinese static course/project presentation deck for single-task project material packs, targeting 7-9 slides
-
-Phase 4.1 only generates a static, editable PPTX draft from existing manifest, metrics, figures, report, and log artifacts. Completed tasks need at least one of metrics, figures, or report artifacts; failed or cancelled tasks can generate diagnostic slides from manifest and logs. It does not modify the user source directory.
-
-Current static deck contents include:
-
-- title and experiment settings slides based on `manifest.json`
-- a metrics summary slide with row count, key columns, and numeric min/mean/max/final values
-- a bounded metrics table preview that selects important columns, formats numbers consistently, and records row/column truncation metadata
-- a rule-based key comparison page for project-style decks when metrics contain fields such as `variant`, `model`, `method`, `algorithm`, or `source_file`
-- up to four PNG figures, split across multiple figure slides with at most two figures per slide
-- figure captions with `figure_id`, chart type, x/y/group fields, and source metrics, using `未自动推断` or `Not automatically inferred` when metadata is missing
-- a report summary slide using `reports/report-fragment.md` when present
-- a reproducibility slide with command, source path, working directory, and artifact directory
-- failed/cancelled diagnostic decks with status, exit code or cancellation note, bounded stderr/stdout tails, and reproducibility details
-- for `zh-project`, compressed project overview/source, metrics summary, metrics table, figures, key comparison/ablation, and conclusion/reproducibility slides
-
-Long commands, paths, failure summaries, and stdout/stderr tails are bounded in the PPTX to avoid overflowing slide content. The full original values and truncation records are kept in `slides-summary.json` under fields such as `full_text_fields` and `text_truncations`.
-
-Metrics table preview uses simple layout guards: numeric columns are narrower and right-aligned, text/path columns get more width but still have cell-level truncation. `slides-summary.json` records `shown_columns`, `hidden_columns`, and `truncated_cells_count` so the full table provenance remains inspectable.
-
-Key comparison is deterministic rule inference, not AI analysis: accuracy/F1-like metrics are treated as higher-is-better, while loss/runtime/latency/time/memory-like metrics are treated as lower-is-better. If a baseline cannot be recognized, `baseline_item` and `delta` remain null and the deck displays `未自动推断`.
-
-`slides-summary.json` records the generated slide count, template, font family/fallbacks, included figures, included metrics, table truncations, key comparisons, caption truncations, figure warnings/skipped candidates, source artifacts, truncation metadata, and per-slide purpose/source artifact metadata. It also includes `qa_checks` for slide count consistency, empty slide/title checks, artifact duplicate checks, table overflow guards, and caption overflow guards. The command does not create animation, video, GIF, Web UI, MCP integration, or AI-polished content.
-
-Phase 4.1 static PPTX real-sample visual acceptance passed on 2026-06-04 with 0 blocking issues. The record is `docs/phase-4-real-sample-visual-acceptance.md`.
-
-Phase 4.2 direct run collection acceptance passed on 2026-06-04 with 0 blocking issues. Animation output is deferred; the record is `docs/phase-4-2-direct-run-collect-acceptance.md`.
-
-## MCP Tool Adapter
-
-Phase 5 adds an experimental local MCP-facing adapter in `lab_sidecar.mcp`. The adapter exposes the planned tool contract without reimplementing core behavior:
+V1 deterministic tools:
 
 - `run_experiment`
 - `inspect_results`
+- `cancel_experiment`
 - `make_figures`
 - `generate_report_fragment`
 - `generate_slides`
 
-The tools call the existing runner, collector, figure, report, and slides services. Responses default to bounded summaries and artifact lists; they do not return full stdout, stderr, metrics rows, report bodies, or PPT contents. `run_experiment` applies a conservative workspace and command safety gate before calling the runner.
+V2 bounded delegation tools:
 
-The MCP-facing safety gate applies to `LabSidecarMCPTools.run_experiment`. The CLI `run` command remains a user-explicit local command execution path and does not apply the MCP confirmation/blocking policy.
+- `delegate_experiment_artifacts`
+- `inspect_sidecar_task`
+- `preview_sidecar_artifact`
+- `cancel_sidecar_task`
+
+Default MCP/V2 responses return task ids, compact summaries, risk flags, next actions, and artifact metadata. Complete command strings, stdout/stderr, metrics rows, report bodies, PPT contents, worker prompt/response bodies, full data files, and artifact bytes are omitted by default. Use `preview_sidecar_artifact` for bounded detail.
 
 The optional stdio server entrypoint is:
 
-```powershell
-py -3 -m lab_sidecar.mcp.server
+```bash
+python -m lab_sidecar.mcp.server
 ```
 
-Host setup notes are in `docs/mcp-host-config.md`. Public alpha readiness pinned `mcp==1.27.2` and completed a real stdio MCP client smoke with `scripts/mcp_stdio_smoke.py`. The smoke uses `run_experiment(background=True)` so command execution returns a `task_id`, then polls `inspect_results` before calling the figure, report, and slides tools.
+Host setup is in [docs/mcp-host-config.md](docs/mcp-host-config.md). A repo-scoped Codex plugin scaffold lives in [plugins/lab-sidecar](plugins/lab-sidecar/); it is optional guidance for Codex hosts, not required for normal CLI use.
 
-In environments without the optional `mcp` Python package, use `LabSidecarMCPTools` directly for local smoke tests and host integration work.
+## Safety And Limits
 
-## Current Scope
+- CLI `run` executes the command you provide in your local environment.
+- MCP-facing command execution has conservative workspace and command checks, but it is not operating-system isolation, a container runtime, or a malware scanner.
+- Generated logs and artifacts may contain local paths, command arguments, environment details, metrics, or snippets of output. Review and redact before sharing.
+- Reports and slides are deterministic summaries of recorded artifacts, not autonomous research conclusions.
+- The current project does not include a browser app, HTTP service, remote runner, cloud sync, animation/video export, or default AI analysis.
 
-The current scope does not include:
+## Install And Development
 
-- Web UI
-- FastAPI
-- AI automatic analysis
-- Animation, video, GIF, Manim, or Remotion output
+Editable install:
 
-Task records and artifacts are stored under `.lab-sidecar/`. Each task has a `manifest.json`; SQLite is only an index and is not the source of truth.
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Optional MCP SDK:
+
+```bash
+python -m pip install -e ".[dev,mcp]"
+```
+
+Run tests:
+
+```bash
+python -m pytest
+```
+
+Run the MCP stdio smoke when MCP behavior is in scope:
+
+```bash
+python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-mcp-stdio-smoke
+```
+
+Build a local package artifact without publishing:
+
+```bash
+python -m pip install build
+python -m build
+```
+
+## Project Docs
+
+- [Public alpha quickstart](docs/public-alpha-quickstart.md)
+- [Deterministic public alpha demo](docs/demo-public-alpha.md)
+- [Public alpha release notes](docs/public-alpha-release-notes.md)
+- [MCP host configuration](docs/mcp-host-config.md)
+- [Next-stage acceptance record](docs/next-stage-product-growth-acceptance.md)
+- [Changelog](CHANGELOG.md)
+- [Contributing guide](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [MIT license](LICENSE)

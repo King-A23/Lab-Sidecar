@@ -4,9 +4,11 @@ import os
 import shutil
 import sys
 import time
+import types
 from pathlib import Path
 
 from lab_sidecar.core.config import init_workspace
+from lab_sidecar.mcp.server import create_server
 from lab_sidecar.mcp.safety import assess_run_command
 from lab_sidecar.mcp.tools import LabSidecarMCPTools
 
@@ -100,6 +102,32 @@ def test_mcp_direct_success_chain_uses_summaries_and_artifacts(tmp_path: Path) -
     artifact_paths = {artifact["path"] for artifact in slides_result["artifacts"]}
     assert "slides/presentation-draft.pptx" in artifact_paths
     assert "slides/slides-summary.json" in artifact_paths
+
+
+def test_mcp_task_summary_redacts_and_bounds_command_preview(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    script = tmp_path / "write_metrics.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "Path('metrics.csv').write_text('epoch,accuracy\\n1,0.9\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    secret = "SECRET_TOKEN_SHOULD_NOT_RETURN"
+    sentinel = "LONG_COMMAND_SUFFIX_" + ("x" * 900)
+    command = f'"{sys.executable}" write_metrics.py --token {secret} {sentinel}'
+    tools = LabSidecarMCPTools(tmp_path)
+
+    run_result = tools.run_experiment(command, background=False)
+    inspect_result = tools.inspect_results(run_result["task_id"])
+
+    for response in [run_result, inspect_result]:
+        serialized = str(response)
+        preview = response["summary"]["command"]
+        assert response["omitted"]["full_command"] == "omitted_by_default"
+        assert len(preview) <= 500
+        assert "[REDACTED]" in preview
+        assert secret not in serialized
+        assert sentinel not in serialized
 
 
 def test_mcp_inspect_log_tail_is_opt_in_and_bounded(tmp_path: Path) -> None:
@@ -201,3 +229,107 @@ def test_mcp_background_long_task_returns_task_id_without_log_body(tmp_path: Pat
     assert "ready" not in str(cancel)
     inspected = tools.inspect_results(task_id, collect_metrics=False)
     assert inspected["task_status"] == "cancelled"
+
+
+def test_mcp_v2_delegate_inspect_and_preview_use_bounded_context(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    init_workspace(tmp_path)
+    tools = LabSidecarMCPTools(tmp_path)
+
+    delegated = tools.delegate_experiment_artifacts(
+        user_goal="Generate all artifacts for a Codex host through the V2 MCP mirror.",
+        result_path="examples/csv-comparison",
+        desired_outputs=["metrics", "figures", "report", "slides"],
+        intelligent_mode="off",
+    )
+
+    assert delegated["schema_version"] == "2.1"
+    assert delegated["status"] == "completed"
+    assert delegated["omitted"]["full_stdout"] == "omitted_by_default"
+    assert delegated["omitted"]["worker_prompt_response"] == "omitted_by_default"
+    assert "baseline,1,0.72,0.9" not in str(delegated)
+
+    inspected = tools.inspect_sidecar_task(delegated["task_id"])
+    assert inspected["schema_version"] == "2.1"
+    assert inspected["status"] == "completed"
+    csv_path = next(artifact["path"] for artifact in inspected["artifacts"] if artifact["artifact_id"] == "metrics_normalized_csv")
+
+    preview = tools.preview_sidecar_artifact(delegated["task_id"], csv_path, max_rows=1)
+
+    assert preview["schema_version"] == "2.1"
+    assert preview["preview_type"] == "csv_rows"
+    assert preview["preview"]["row_count_returned"] == 1
+    assert preview["omitted"]["complete_artifact"] == "omitted_by_default"
+    assert "model_b,3" not in str(preview)
+
+
+def test_mcp_v2_delegate_keeps_command_safety_gate(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    tools = LabSidecarMCPTools(tmp_path)
+
+    result = tools.delegate_experiment_artifacts(
+        user_goal="This should be blocked by the MCP command safety gate.",
+        command="rm -rf .",
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+
+    assert result["schema_version"] == "1"
+    assert result["summary"]["status"] == "blocked"
+    assert result["task_id"] is None
+    assert result["omitted"]["full_stdout"] == "omitted_by_default"
+
+
+def test_mcp_v2_delegate_blocks_workspace_external_result_path(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    outside = tmp_path.parent / "external-results.csv"
+    outside.write_text("epoch,accuracy\n1,0.9\n", encoding="utf-8")
+    tools = LabSidecarMCPTools(tmp_path)
+
+    result = tools.delegate_experiment_artifacts(
+        user_goal="This should be blocked because the result path is outside the workspace.",
+        result_path=outside,
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+
+    assert result["schema_version"] == "1"
+    assert result["summary"]["status"] == "blocked"
+    assert "outside" in " ".join(result["warnings"])
+    assert result["task_id"] is None
+
+
+def test_mcp_server_registers_v1_and_v2_tools(monkeypatch, tmp_path: Path) -> None:
+    class FakeFastMCP:
+        def __init__(self, name: str) -> None:
+            self.name = name
+            self.registered: list[str] = []
+
+        def tool(self):
+            def register(func):
+                self.registered.append(func.__name__)
+                return func
+
+            return register
+
+    fake_module = types.ModuleType("mcp.server.fastmcp")
+    fake_module.FastMCP = FakeFastMCP
+    monkeypatch.setitem(sys.modules, "mcp", types.ModuleType("mcp"))
+    monkeypatch.setitem(sys.modules, "mcp.server", types.ModuleType("mcp.server"))
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fake_module)
+
+    server = create_server(tmp_path)
+
+    assert server.name == "lab-sidecar"
+    assert {
+        "run_experiment",
+        "inspect_results",
+        "cancel_experiment",
+        "make_figures",
+        "generate_report_fragment",
+        "generate_slides",
+        "delegate_experiment_artifacts",
+        "inspect_sidecar_task",
+        "preview_sidecar_artifact",
+        "cancel_sidecar_task",
+    }.issubset(set(server.registered))

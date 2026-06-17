@@ -4,14 +4,14 @@ Lab-Sidecar's MCP entrypoint is experimental and local-first. It exposes the sam
 
 Install the optional SDK dependency before starting the stdio server:
 
-```powershell
-py -3 -m pip install -e .[mcp]
+```bash
+python -m pip install -e ".[mcp]"
 ```
 
 Run the server from the workspace that Lab-Sidecar should manage:
 
-```powershell
-py -3 -m lab_sidecar.mcp.server
+```bash
+python -m lab_sidecar.mcp.server
 ```
 
 Generic stdio host configuration shape:
@@ -20,9 +20,9 @@ Generic stdio host configuration shape:
 {
   "mcpServers": {
     "lab-sidecar": {
-      "command": "py",
-      "args": ["-3", "-m", "lab_sidecar.mcp.server"],
-      "cwd": "C:\\code\\Lab-Sidecar"
+      "command": "python",
+      "args": ["-m", "lab_sidecar.mcp.server"],
+      "cwd": "/absolute/path/to/workspace"
     }
   }
 }
@@ -32,21 +32,32 @@ The `cwd` is the configured workspace root. MCP-facing `run_experiment` blocks w
 
 Run the real stdio client smoke after installing `.[mcp]`:
 
-```powershell
-py -3 scripts/mcp_stdio_smoke.py --workspace "$env:TEMP\\lab-sidecar-mcp-stdio-smoke"
+```bash
+python scripts/mcp_stdio_smoke.py --workspace "${TMPDIR:-/tmp}/lab-sidecar-mcp-stdio-smoke"
 ```
 
-The smoke checks that a real MCP client can list and call these tools:
+The smoke checks that a real MCP client can list and call the deterministic V1
+tools:
 
 - `run_experiment`
 - `inspect_results`
+- `cancel_experiment`
 - `make_figures`
 - `generate_report_fragment`
 - `generate_slides`
 
-Tool responses return bounded summaries and artifact paths by default. They do not return complete stdout, stderr, metrics rows, report Markdown, artifact bodies, or PPT contents.
+The stdio server also exposes the V2 bounded delegation mirror:
 
-For V2 Codex-plugin-like host setup, smoke guidance, safety boundaries, and the
-current decision to defer MCP mirroring of V2 tools, see
-`docs/v2-host-integration.md`. The stdio smoke above remains the regression
-guard for the existing V1 MCP tool surface.
+- `delegate_experiment_artifacts`
+- `inspect_sidecar_task`
+- `preview_sidecar_artifact`
+- `cancel_sidecar_task`
+
+Tool responses return bounded summaries and artifact paths by default. They do
+not return complete command strings, stdout, stderr, metrics rows, report
+Markdown, worker prompt/response bodies, artifact bodies, or PPT contents. Use
+`preview_sidecar_artifact` for bounded CSV, Markdown, log, image, and PPTX
+previews.
+
+For V2 Codex-plugin-like host setup, smoke guidance, safety boundaries, and MCP
+mirroring details, see `docs/v2-host-integration.md`.

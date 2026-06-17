@@ -1,20 +1,35 @@
 # simple-failure
 
-最小失败样例，用于验证 Phase 1 的失败状态保存和 stderr 诊断信息保留。
+Minimal failed-run fixture for public alpha diagnostics.
 
-## 文件说明
+## Files
 
-- `fail.py`：一个会稳定退出码为 `1` 的脚本
-- `stderr-example.log`：预期 stderr 内容，便于后续回归测试对比
+- `fail.py`: deterministic script that exits with code `1`.
+- `stderr-example.log`: expected stderr content for manual comparison.
 
-## 建议测试方式
+## Direct Run
+
+From this directory:
 
 ```bash
 python fail.py
 ```
 
-未来在 Lab-Sidecar 中的预期结果：
+## Lab-Sidecar Demo Flow
 
-- 任务状态为 `failed`
-- `stderr.log` 保留错误原文
-- `manifest.json` 中存在 `exit_code` 和 `failure_summary`
+From a repository root or copied demo workspace root:
+
+```bash
+python -m lab_sidecar.cli.app run "python examples/simple-failure/fail.py"
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app status "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
+python -m lab_sidecar.cli.app artifacts "$TASK_ID"
+```
+
+Replace `<printed_task_id>` with the id printed by `run`.
+
+Expected result: task status `failed`, exit code `1`, preserved stderr, a
+bounded failure summary in `manifest.json`, and diagnostic report/PPTX artifacts
+under `.lab-sidecar/tasks/$TASK_ID/`.

@@ -1,31 +1,34 @@
 # csv-comparison
 
-多实验 CSV 对比样例，用于验证：
+Multi-result CSV fixture for the public alpha comparison demo.
 
-- 多文件导入
-- 指标字段规范化
-- 多实验对比曲线
-- 最终指标柱状图
-
-## 文件说明
+## Files
 
 - `baseline.csv`
 - `model_a.csv`
 - `model_b.csv`
 
-三个文件结构一致，包含 `epoch`、`model`、`seed`、`val_accuracy`、`val_loss`。
+All three files use the same schema: `epoch`, `model`, `seed`,
+`val_accuracy`, and `val_loss`.
 
-## 预期用途
+## Lab-Sidecar Demo Flow
 
-未来在 Lab-Sidecar 中可执行：
+From a repository root or copied demo workspace root:
 
 ```bash
-labsidecar ingest ./examples/csv-comparison
-labsidecar collect <task_id>
-labsidecar figures <task_id>
+python -m lab_sidecar.cli.app ingest examples/csv-comparison
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app collect "$TASK_ID"
+python -m lab_sidecar.cli.app figures "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
 ```
 
-推荐至少生成：
+Replace `<printed_task_id>` with the id printed by `ingest`.
 
-- 一张 `val_accuracy` 多实验对比曲线
-- 一张最终 `val_accuracy` 柱状图
+Expected result: normalized metrics from the three CSV files, source provenance
+in `metrics/collection-summary.json`, comparison figures, a deterministic
+report fragment, and a static editable PPTX draft.
+
+Data note: `model_a` has the highest final `val_accuracy` in this fixture
+(`0.83`), followed by `model_b` (`0.81`) and `baseline` (`0.77`).

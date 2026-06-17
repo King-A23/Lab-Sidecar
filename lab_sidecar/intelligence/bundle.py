@@ -79,6 +79,7 @@ def build_input_bundle(
 
 def omitted_contract() -> dict[str, str]:
     return {
+        "full_command": "omitted_by_default",
         "full_stdout": "omitted_by_default",
         "full_stderr": "omitted_by_default",
         "metrics_rows": "omitted_by_default",

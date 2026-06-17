@@ -5,7 +5,7 @@ The host contract is a small set of Python-callable tools that a Codex agent
 can delegate to while keeping large task details in `.lab-sidecar/tasks/`.
 
 This document covers host setup, smoke checks, common failures, safety
-boundaries, and the current MCP mirroring decision for Phase 2.4.
+boundaries, and the thin MCP mirror for the V2 host tools.
 
 ## Supported Host Shape
 
@@ -42,9 +42,9 @@ library API for reading arbitrary files. Default responses should stay small:
 - `risk_flags`
 - `omitted`
 
-The host should not expect full stdout, stderr, datasets, report bodies, PPTX
-contents, prompt or response transcripts, or artifact bodies in default tool
-responses.
+The host should not expect complete command strings, full stdout, stderr,
+datasets, report bodies, PPTX contents, prompt or response transcripts, or
+artifact bodies in default tool responses.
 
 ## Phase 2.4 Preview Contract
 
@@ -134,8 +134,8 @@ Targeted tests cover:
 
 ## Codex MCP Configuration
 
-Existing MCP host configuration remains V1-oriented and is documented in
-`docs/mcp-host-config.md`. A generic stdio host shape is:
+MCP host configuration is documented in `docs/mcp-host-config.md`. A generic
+stdio host shape is:
 
 ```json
 {
@@ -156,47 +156,47 @@ python -m pip install -e ".[mcp]"
 python -m lab_sidecar.mcp.server
 ```
 
-Run the current V1 MCP stdio smoke:
+Run the MCP stdio smoke:
 
 ```bash
 python scripts/mcp_stdio_smoke.py --workspace "${TMPDIR:-/tmp}/lab-sidecar-v2-host-mcp"
 ```
 
-This smoke should continue to list and call the existing MCP tools:
+This smoke lists the deterministic V1 tools:
 
 - `run_experiment`
 - `inspect_results`
+- `cancel_experiment`
 - `make_figures`
 - `generate_report_fragment`
 - `generate_slides`
 
-For Phase 2.4, this smoke is a regression guard for existing MCP behavior. It
-is not evidence that V2 tool contracts have been mirrored to MCP.
+The stdio server also registers these V2 mirror tools, covered by direct MCP
+adapter tests:
+
+- `delegate_experiment_artifacts`
+- `inspect_sidecar_task`
+- `cancel_sidecar_task`
+- `preview_sidecar_artifact`
 
 ## MCP Mirroring Decision
 
-Do not mirror the V2 tools to MCP yet.
+The V2 tools are now mirrored to MCP as a thin adapter over the same local
+functions:
 
-Deferral rationale:
+- `LabSidecarMCPTools.delegate_experiment_artifacts`
+- `LabSidecarMCPTools.inspect_sidecar_task`
+- `LabSidecarMCPTools.cancel_sidecar_task`
+- `LabSidecarMCPTools.preview_sidecar_artifact`
 
-- Phase 2.4 stabilizes the local plugin-like contracts first, including
-  bounded preview.
-- Mirroring in the same phase would expand the MCP adapter before the local V2
-  contract has had separate host use.
-- The existing MCP server is a V1 thin adapter. Adding V2 behavior before the
-  contracts settle risks turning MCP into a parallel product surface instead of
-  a mirror.
-- No confirmed Codex plugin registration details are required for the local
-  plugin-like path, so Codex workflow hardening can proceed without MCP changes.
+Mirroring constraints:
 
-Revisit MCP mirroring when:
-
-- `delegate_experiment_artifacts`, `inspect_sidecar_task`,
-  `cancel_sidecar_task`, and `preview_sidecar_artifact` all have stable bounded
-  response contracts.
-- Preview rejection rules are covered by tests.
-- A stdio adapter can call the same local functions without changing behavior,
-  broadening file access, or returning larger default payloads.
+- MCP remains an adapter, not a separate product surface.
+- Command delegation still passes through the MCP command safety gate.
+- `result_path` must stay inside the configured workspace and outside
+  `.lab-sidecar`.
+- Default responses preserve the V2 omitted-content contract.
+- Preview remains bounded and task-artifact scoped.
 
 ## Common Failure Modes
 
@@ -220,8 +220,8 @@ Oversized or missing previews:
 
 - Symptom: default host response omits logs, rows, report text, or PPTX
   internals.
-- Fix: use `preview_sidecar_artifact` after Phase 2.4 implements it; do not
-  replace it with generic file reads.
+- Fix: use `preview_sidecar_artifact`; do not replace it with generic file
+  reads.
 
 AI provider unavailable:
 
@@ -252,7 +252,7 @@ Host integrations must preserve these boundaries:
 - default tool responses are summaries, metadata, next actions, risk flags, and
   omission records
 - preview is bounded and type-specific
-- MCP, if mirrored later, remains a thin adapter over the same local contracts
+- MCP remains a thin adapter over the same local contracts
 - CLI remains a separate user-explicit local execution path
 
 Do not treat Lab-Sidecar V2 as a general file browser, shell proxy, data export
@@ -266,6 +266,6 @@ The Phase 2.4 acceptance document should record:
 - whether `preview_sidecar_artifact` exists and which preview types passed
 - external path and unsupported artifact rejection evidence
 - evidence that default responses omit artifact bodies and large logs
-- exact MCP stdio smoke command and output summary for existing V1 tools
-- explicit note that V2 MCP mirroring was deferred, with the rationale above
+- exact MCP stdio smoke command and output summary for V1 tools
+- targeted test evidence that V2 MCP mirror tools preserve bounded responses
 - final `git status --short`, including any pre-existing unrelated changes

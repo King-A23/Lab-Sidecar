@@ -1,22 +1,31 @@
 # algorithm-benchmark
 
-算法性能对比样例，覆盖多算法、多输入规模、多 seed 的 JSON 结果。
+JSON benchmark fixture for algorithm comparison demos.
 
-## 文件说明
+## Files
 
-- `results.json`：排序算法 benchmark 结果
+- `results.json`: sorting benchmark results for `quick_sort`, `merge_sort`,
+  and `heap_sort` across two input sizes and three seeds.
 
-## 适合验证的能力
+## Lab-Sidecar Demo Flow
 
-- `ingest` 导入已有结果目录
-- `collect` 规范化 `algorithm`、`input_size`、`seed`、`runtime_ms`
-- `figures` 生成运行时间对比图
-- `report` 输出简短 benchmark 摘要
+From a repository root or copied demo workspace root:
 
-## 预期结论
+```bash
+python -m lab_sidecar.cli.app ingest examples/algorithm-benchmark
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app collect "$TASK_ID"
+python -m lab_sidecar.cli.app figures "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
+```
 
-在该样例中：
+Replace `<printed_task_id>` with the id printed by `ingest`.
 
-- `quick_sort` 是最快算法
-- `merge_sort` 次之
-- `heap_sort` 最慢但内存占用更稳定
+Expected result: a normalized benchmark table containing `algorithm`,
+`input_size`, `seed`, `runtime_ms`, and `memory_mb`, plus at least one
+runtime-oriented figure, a report fragment, and a static editable PPTX draft
+when the standard alpha pipeline is run.
+
+Data note: in the checked-in data, `quick_sort` has the lowest runtime,
+`merge_sort` is second, and `heap_sort` uses less memory than `merge_sort`.
