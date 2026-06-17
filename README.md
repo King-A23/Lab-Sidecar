@@ -1,8 +1,8 @@
 # Lab-Sidecar
 
-Lab-Sidecar is a local-first CLI sidecar that turns messy experiment outputs into task records, normalized metrics, deterministic figures, Markdown report fragments, and editable PPTX drafts.
+Lab-Sidecar is a local-first research sidecar for AI agents and experiment workflows. It turns messy experiment outputs into task records, normalized metrics, deterministic figures, Markdown report fragments, and editable PPTX drafts.
 
-It is built for students, research beginners, and personal developers who run long local experiments and then need to remember what happened, compare small result files, and prepare reproducible report or presentation artifacts.
+It is built for AI agents, students, research beginners, and personal developers who run long local experiments and then need to remember what happened, compare small result files, and package reproducible report or presentation artifacts.
 
 ```text
 run / ingest -> collect -> figures -> report -> slides
@@ -10,9 +10,9 @@ run / ingest -> collect -> figures -> report -> slides
 
 ## Why This Exists
 
-Local experiments often leave behind a mix of terminal logs, CSV files, JSON files, screenshots, and half-written notes. Lab-Sidecar keeps that work file-first: every task gets a directory under `.lab-sidecar/tasks/<task_id>/`, with `manifest.json` as the durable record and generated artifacts beside it.
+Agent-heavy and research-heavy workflows often leave behind a mix of terminal logs, CSV files, JSON files, screenshots, and half-written notes. Lab-Sidecar keeps that work file-first: every task gets a directory under `.lab-sidecar/tasks/<task_id>/`, with `manifest.json` as the durable record and generated artifacts beside it.
 
-Today it does five practical things:
+Today it does five practical things for noisy agent or research runs:
 
 - runs or ingests local experiment results
 - collects CSV/JSON metrics into normalized tables
@@ -21,6 +21,8 @@ Today it does five practical things:
 - drafts static editable PowerPoint decks from the recorded artifacts
 
 Reports and slides are template-generated. They do not use AI and they do not claim to infer complex research conclusions.
+
+For AI agents, Lab-Sidecar is the artifact boundary: the agent can ask for a task id, status, compact summaries, artifact paths, and bounded previews instead of pulling full logs, tables, reports, or slide contents into the prompt. For research workflows, the same record is useful after the agent is gone: every run has local files you can inspect, compare, redact, or share.
 
 ## Demo Preview
 

@@ -1,8 +1,10 @@
 # V2 Host Integration
 
 Lab-Sidecar V2 host integration is local-first and Codex-plugin-like first.
-The host contract is a small set of Python-callable tools that a Codex agent
-can delegate to while keeping large task details in `.lab-sidecar/tasks/`.
+It is aimed at AI-agent and research workflows that need bounded artifact
+delegation. The host contract is a small set of Python-callable tools that a
+Codex agent can delegate to while keeping large task details in
+`.lab-sidecar/tasks/`.
 
 This document covers host setup, smoke checks, common failures, safety
 boundaries, and the thin MCP mirror for the V2 host tools.

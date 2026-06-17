@@ -1,8 +1,8 @@
 # Public Alpha Quickstart
 
-This is the 10-minute local path for Lab-Sidecar public alpha. It uses built-in
-examples and does not require a browser app, HTTP service, AI services,
-animation, or a remote runner.
+This is the 10-minute local path for Lab-Sidecar public alpha in AI-agent and
+research workflows. It uses built-in examples and does not require a browser
+app, HTTP service, AI services, animation, or a remote runner.
 
 ## Install
 

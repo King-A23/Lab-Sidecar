@@ -34,7 +34,7 @@ from lab_sidecar.slides.service import (
 )
 
 
-app = typer.Typer(help="Local-first experiment runner and artifact sidecar.")
+app = typer.Typer(help="Local-first research sidecar for AI agents and experiment workflows.")
 
 
 class LogStream(StrEnum):

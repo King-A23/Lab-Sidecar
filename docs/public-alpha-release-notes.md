@@ -4,7 +4,7 @@ Date: 2026-06-08
 
 ## Summary
 
-Lab-Sidecar public alpha is a local-first, CLI-first experiment sidecar. It can run or ingest local experiment results, collect CSV/JSON metrics, generate static figures, write deterministic Markdown report fragments, and create editable static PPTX drafts.
+Lab-Sidecar public alpha is a local-first, CLI-first research sidecar for AI agents and experiment workflows. It can run or ingest local experiment results, collect CSV/JSON metrics, generate static figures, write deterministic Markdown report fragments, and create editable static PPTX drafts.
 
 This alpha intentionally does not include Web UI, FastAPI, remote runners, AI-generated analysis, animation, GIF, MP4, Manim, Remotion, or hosted services.
 

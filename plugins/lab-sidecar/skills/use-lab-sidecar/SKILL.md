@@ -1,11 +1,11 @@
 ---
 name: use-lab-sidecar
-description: Delegate local experiment runs, result ingestion, metrics collection, figures, reports, and slides to Lab-Sidecar from Codex while preserving context quarantine.
+description: Delegate local experiment runs, research result ingestion, metrics collection, figures, reports, and slides to Lab-Sidecar from Codex while preserving context quarantine.
 ---
 
 # Use Lab-Sidecar
 
-Use this skill when a Codex task would benefit from moving noisy experiment or artifact work out of the main thread.
+Use this skill when a Codex task would benefit from moving noisy experiment or artifact work out of the main thread, especially for research-style results that should stay out of the prompt context.
 
 ## When To Delegate
 

@@ -2,9 +2,9 @@
 
 Date: 2026-06-08
 
-This is the deterministic public-alpha demo path for Lab-Sidecar. It uses
-checked-in examples, disposable workspaces, and task-local artifacts under
-`.lab-sidecar/tasks/<TASK_ID>/`.
+This is the deterministic public-alpha demo path for Lab-Sidecar in AI-agent
+and research workflows. It uses checked-in examples, disposable workspaces,
+and task-local artifacts under `.lab-sidecar/tasks/<TASK_ID>/`.
 
 Lab-Sidecar is the local artifact sidecar in this demo. Codex supervisor agents
 may coordinate repository work, but Lab-Sidecar itself remains a CLI/MCP tool

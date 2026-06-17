@@ -5,14 +5,14 @@ build-backend = "hatchling.build"
 [project]
 name = "lab-sidecar"
 version = "0.1.0"
-description = "Local-first experiment runner and artifact sidecar."
+description = "Local-first research sidecar for AI agents and experiment workflows."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
   { name = "Lab-Sidecar maintainers" },
 ]
-keywords = ["experiments", "cli", "artifacts", "reports", "figures"]
+keywords = ["experiments", "cli", "artifacts", "reports", "figures", "agents", "research"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",

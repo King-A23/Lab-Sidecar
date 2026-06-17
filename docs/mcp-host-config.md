@@ -1,6 +1,6 @@
 # MCP Host Configuration
 
-Lab-Sidecar's MCP entrypoint is experimental and local-first. It exposes the same thin adapter tested by `LabSidecarMCPTools`; it does not add remote execution, a Web UI, FastAPI, or AI analysis.
+Lab-Sidecar's MCP entrypoint is experimental and local-first. It is meant for AI-agent and research workflows that need a thin adapter over task-local artifacts; it exposes the same thin adapter tested by `LabSidecarMCPTools` and does not add remote execution, a Web UI, FastAPI, or AI analysis.
 
 Install the optional SDK dependency before starting the stdio server:
 
