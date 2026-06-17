@@ -15,10 +15,13 @@ surface with bounded responses and deterministic artifact records.
 From the repository root:
 
 ```bash
-python -m pip install -e ".[dev,mcp]"
+python -m pip install -e ".[dev]"
 ```
 
 Use `py -3` instead of `python` on Windows if that is your configured launcher.
+
+If you also want to run the optional MCP stdio smoke at the end of this guide,
+install `.[dev,mcp]` instead.
 
 ## Preview Assets
 

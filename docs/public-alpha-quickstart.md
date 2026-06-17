@@ -9,7 +9,7 @@ animation, or a remote runner.
 From the repository root:
 
 ```bash
-python -m pip install -e ".[dev,mcp]"
+python -m pip install -e ".[dev]"
 ```
 
 If the `labsidecar` console script is not on `PATH`, use:
@@ -20,6 +20,9 @@ python -m lab_sidecar.cli.app --help
 
 On Windows PowerShell, use `py -3` instead of `python` if that is your
 configured launcher.
+
+If you plan to run the optional MCP smoke, install `.[dev,mcp]` instead of
+`.[dev]`.
 
 ## Create A Workspace
 

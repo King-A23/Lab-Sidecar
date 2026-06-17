@@ -37,8 +37,11 @@ The full demo recipe is in [docs/demo-public-alpha.md](docs/demo-public-alpha.md
 Install from a clone:
 
 ```bash
-python -m pip install -e ".[dev,mcp]"
+python -m pip install -e ".[dev]"
 ```
+
+If you also want the optional MCP smoke and plugin checks, install
+`.[dev,mcp]` instead.
 
 On Windows, use `py -3` instead of `python` if that is your configured launcher.
 
