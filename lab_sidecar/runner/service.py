@@ -112,15 +112,12 @@ class RunnerService:
         if record.status != TaskStatus.RUNNING:
             raise RuntimeError(record.status.value)
 
-        target_pid = record.pid or record.worker_pid
-        if target_pid:
-            terminate_process_tree(target_pid)
-
         stderr_path = resolve_workspace_path(record.paths.stderr, self.root)
         with stderr_path.open("a", encoding="utf-8") as fh:
             fh.write(f"\nLab-Sidecar: cancellation requested at {now_iso()}.\n")
 
         finished = now_iso()
+        target_pid = record.pid or record.worker_pid
         record.status = TaskStatus.CANCELLED
         record.exit_code = None
         record.finished_at = finished
@@ -129,6 +126,10 @@ class RunnerService:
         record.worker_pid = None
         write_manifest(manifest_path(self.root, task_id), record)
         upsert_task(self.root, record)
+
+        if target_pid:
+            terminate_process_tree(target_pid)
+
         return record
 
     def ingest_source(self, source: Path, name: str | None = None) -> TaskRecord:
