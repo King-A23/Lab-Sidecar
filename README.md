@@ -65,6 +65,8 @@ Run the deterministic training fixture:
 ```bash
 python -m lab_sidecar.cli.app run "python examples/simple-success/train.py --output metrics.csv"
 export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app list
+python -m lab_sidecar.cli.app summarize "$TASK_ID"
 python -m lab_sidecar.cli.app collect "$TASK_ID"
 python -m lab_sidecar.cli.app figures "$TASK_ID"
 python -m lab_sidecar.cli.app report "$TASK_ID"
@@ -101,6 +103,14 @@ python -m lab_sidecar.cli.app report "$TASK_ID"
 python -m lab_sidecar.cli.app slides "$TASK_ID"
 ```
 
+To compare a small set of collected local tasks, pass two to five task ids:
+
+```bash
+python -m lab_sidecar.cli.app compare <task_id_a> <task_id_b>
+```
+
+`compare` reads each task's `metrics/normalized_metrics.csv`, uses the final row from each file, and reports shared numeric fields only. It does not claim statistical significance or infer research conclusions.
+
 ## CLI Commands
 
 Both `labsidecar` and `lab-sidecar` console scripts point at the same CLI after installation. The module entrypoint always works from an editable checkout:
@@ -113,7 +123,9 @@ Both `labsidecar` and `lab-sidecar` console scripts point at the same CLI after 
 | `run "<command>" --background` | Start a long task and return a task id immediately. |
 | `ingest <path>` | Register an existing file or directory without running a command. |
 | `status <task_id>` | Refresh and print status, exit code, timestamps, artifact count, and next steps. |
-| `list --limit 20` | Show recent tasks from task manifests. |
+| `list --limit 20 [--status completed]` | Show recent tasks from task manifests with scan-friendly status, timestamp, artifact, and name columns. |
+| `summarize <task_id>` | Print a bounded task digest with major artifact paths and summary counts, without full logs or artifact bodies. |
+| `compare <task_id> <task_id> [...]` | Compare final-row shared numeric metrics for 2-5 collected local tasks. |
 | `open <task_id>` | Print the absolute task artifact directory path. |
 | `logs <task_id> --tail 20` | Print bounded stdout/stderr tails. |
 | `artifacts <task_id>` | List artifacts recorded in `manifest.json`. |

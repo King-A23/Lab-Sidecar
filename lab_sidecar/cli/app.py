@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import csv
+import json
 import importlib.util
+import math
 import sys
 import tempfile
 from enum import StrEnum
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -43,6 +47,22 @@ class LogStream(StrEnum):
     BOTH = "both"
 
 
+METRICS_RELATIVE_PATH = Path("metrics") / "normalized_metrics.csv"
+COLLECTION_SUMMARY_RELATIVE_PATH = Path("metrics") / "collection-summary.json"
+FIGURE_SUMMARY_RELATIVE_PATH = Path("figures") / "figure-summary.json"
+REPORT_RELATIVE_PATH = Path("reports") / "report-fragment.md"
+SLIDES_RELATIVE_PATH = Path("slides") / "presentation-draft.pptx"
+COMPARISON_METADATA_COLUMNS = {
+    "source_file",
+    "source_path",
+    "file",
+    "path",
+}
+COMMAND_PREVIEW_CHARS = 120
+FAILURE_SUMMARY_LINES = 8
+FAILURE_SUMMARY_LINE_CHARS = 160
+
+
 def _root() -> Path:
     return Path.cwd().resolve()
 
@@ -65,6 +85,227 @@ def _echo_next(*commands: str) -> None:
     typer.echo("Next:")
     for command in commands:
         typer.echo(f"- {command}")
+
+
+def _json_file(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _artifact_type_counts(record) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for artifact in record.artifacts:
+        counts[artifact.type] = counts.get(artifact.type, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _format_counts(counts: dict[str, int]) -> str:
+    if not counts:
+        return "(none)"
+    return ", ".join(f"{kind}={count}" for kind, count in counts.items())
+
+
+def _task_path(record, root: Path) -> Path:
+    return resolve_workspace_path(record.paths.task_dir, root)
+
+
+def _task_artifact_path(record, root: Path, relative_path: Path) -> Path:
+    return _task_path(record, root) / relative_path
+
+
+def _artifact_presence(record, root: Path) -> list[tuple[str, str, bool]]:
+    task_path = _task_path(record, root)
+    items = [
+        ("metrics", METRICS_RELATIVE_PATH.as_posix()),
+        ("figures", FIGURE_SUMMARY_RELATIVE_PATH.as_posix()),
+        ("report", REPORT_RELATIVE_PATH.as_posix()),
+        ("slides", SLIDES_RELATIVE_PATH.as_posix()),
+    ]
+    return [(label, relative, (task_path / relative).exists()) for label, relative in items]
+
+
+def _status_updated_at(record) -> str:
+    return record.finished_at or record.updated_at or record.created_at
+
+
+def _display_name(record) -> str:
+    return record.name or "(unnamed)"
+
+
+def _preview_text(value: str | None, limit: int = COMMAND_PREVIEW_CHARS) -> str:
+    if not value:
+        return "(none)"
+    normalized = " ".join(value.split())
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 3].rstrip() + "..."
+
+
+def _short_failure_summary(record) -> str | None:
+    if not record.failure_summary:
+        return None
+    lines = [line for line in record.failure_summary.splitlines() if line.strip()]
+    return "\n".join(
+        _preview_text(line, FAILURE_SUMMARY_LINE_CHARS)
+        for line in lines[:FAILURE_SUMMARY_LINES]
+    )
+
+
+def _print_key_artifacts(record, root: Path, include_missing: bool = False) -> None:
+    key_artifacts = _artifact_presence(record, root)
+    if not include_missing and not any(exists for _label, _relative, exists in key_artifacts):
+        return
+    typer.echo("Key artifacts:")
+    for label, relative, exists in key_artifacts:
+        if exists:
+            typer.echo(f"- {label}: {relative}")
+        elif include_missing:
+            typer.echo(f"- {label}: (not generated)")
+
+
+def _next_commands_for(record) -> list[str]:
+    if record.status == TaskStatus.RUNNING:
+        return [
+            f"labsidecar status {record.task_id}",
+            f"labsidecar logs {record.task_id} --tail 20",
+        ]
+    if record.status == TaskStatus.FAILED:
+        return [
+            f"labsidecar logs {record.task_id} --stream stderr --tail 40",
+            f"labsidecar summarize {record.task_id}",
+            f"labsidecar artifacts {record.task_id}",
+        ]
+    if record.status == TaskStatus.CANCELLED:
+        return [
+            f"labsidecar artifacts {record.task_id}",
+            f"labsidecar logs {record.task_id} --tail 40",
+        ]
+    if record.status == TaskStatus.COMPLETED:
+        return [
+            f"labsidecar summarize {record.task_id}",
+            f"labsidecar collect {record.task_id}",
+            f"labsidecar figures {record.task_id}",
+            f"labsidecar report {record.task_id}",
+        ]
+    return [
+        f"labsidecar status {record.task_id}",
+        f"labsidecar logs {record.task_id} --tail 20",
+    ]
+
+
+def _print_task_identity(record) -> None:
+    typer.echo(f"Task: {record.task_id}")
+    typer.echo(f"Name: {_display_name(record)}")
+    typer.echo(f"Status: {record.status.value}")
+    typer.echo(f"Mode: {record.mode}")
+    if record.mode == "ingest":
+        typer.echo(f"Source: {record.source_path or '(none)'}")
+    else:
+        typer.echo(f"Command: {_preview_text(record.command)}")
+        typer.echo(f"Working dir: {record.working_dir}")
+    typer.echo(f"Artifact dir: {record.paths.task_dir}")
+
+
+def _print_task_times(record) -> None:
+    typer.echo(f"Created: {record.created_at}")
+    if record.started_at:
+        typer.echo(f"Started: {record.started_at}")
+    if record.finished_at:
+        typer.echo(f"Finished: {record.finished_at}")
+    else:
+        typer.echo(f"Updated: {record.updated_at}")
+
+
+def _print_artifact_summary(record, root: Path) -> None:
+    typer.echo(f"Artifacts: {record.artifact_count()}")
+    typer.echo(f"Artifact types: {_format_counts(_artifact_type_counts(record))}")
+    _print_key_artifacts(record, root)
+
+
+def _metrics_summary(record, root: Path) -> dict[str, Any]:
+    task_path = _task_path(record, root)
+    collection_summary_path = task_path / COLLECTION_SUMMARY_RELATIVE_PATH
+    metrics_path = task_path / METRICS_RELATIVE_PATH
+    data = _json_file(collection_summary_path)
+    return {
+        "summary_path": COLLECTION_SUMMARY_RELATIVE_PATH.as_posix(),
+        "summary_exists": collection_summary_path.exists(),
+        "metrics_path": METRICS_RELATIVE_PATH.as_posix(),
+        "metrics_exists": metrics_path.exists(),
+        "row_count": data.get("row_count"),
+        "detected_fields": data.get("detected_fields") or [],
+        "candidate_count": data.get("candidate_count"),
+    }
+
+
+def _figure_summary(record, root: Path) -> dict[str, Any]:
+    path = _task_artifact_path(record, root, FIGURE_SUMMARY_RELATIVE_PATH)
+    data = _json_file(path)
+    return {
+        "path": FIGURE_SUMMARY_RELATIVE_PATH.as_posix(),
+        "exists": path.exists(),
+        "figure_count": data.get("figure_count"),
+    }
+
+
+def _table(rows: list[list[str]]) -> None:
+    if not rows:
+        return
+    widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
+    for row in rows:
+        typer.echo("  ".join(value.ljust(widths[index]) for index, value in enumerate(row)).rstrip())
+
+
+def _read_metrics_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
+    try:
+        with path.open("r", newline="", encoding="utf-8-sig") as fh:
+            reader = csv.DictReader(fh)
+            if not reader.fieldnames:
+                return [], []
+            rows = [{key: value for key, value in row.items() if key is not None} for row in reader]
+            return list(reader.fieldnames), rows
+    except OSError as exc:
+        raise FileNotFoundError(path) from exc
+
+
+def _parse_number(value: Any) -> float | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if text == "":
+        return None
+    try:
+        parsed = float(text)
+    except ValueError:
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _format_number(value: float) -> str:
+    return f"{value:.12g}"
+
+
+def _comparable_numeric_fields(fields: list[str], final_rows: list[dict[str, str]]) -> list[str]:
+    comparable: list[str] = []
+    for field in fields:
+        if field in COMPARISON_METADATA_COLUMNS:
+            continue
+        values = [row.get(field) for row in final_rows]
+        non_empty_values = [value for value in values if str(value or "").strip()]
+        if not non_empty_values:
+            continue
+        if len(non_empty_values) != len(final_rows):
+            continue
+        if all(_parse_number(value) is not None for value in non_empty_values):
+            comparable.append(field)
+    return comparable
 
 
 @app.command()
@@ -173,7 +414,7 @@ def run(
 
 @app.command()
 def status(task_id: str) -> None:
-    """Show task status from manifest.json."""
+    """Show a compact task dashboard from manifest.json."""
     root = _root()
     try:
         record = RunnerService(root).refresh(task_id)
@@ -184,30 +425,16 @@ def status(task_id: str) -> None:
             code=3,
         )
 
-    typer.echo(f"Task: {record.task_id}")
-    typer.echo(f"Status: {record.status.value}")
+    _print_task_identity(record)
     typer.echo(f"Exit code: {record.exit_code}")
-    typer.echo(f"Created: {record.created_at}")
-    if record.started_at:
-        typer.echo(f"Started: {record.started_at}")
-    if record.finished_at:
-        typer.echo(f"Finished: {record.finished_at}")
-    else:
-        typer.echo(f"Updated: {record.updated_at}")
-    typer.echo(f"Artifacts: {record.artifact_count()}")
-    typer.echo(f"Artifact dir: {record.paths.task_dir}")
-    if record.failure_summary:
+    _print_task_times(record)
+    _print_artifact_summary(record, root)
+    failure_summary = _short_failure_summary(record)
+    if failure_summary:
         typer.echo("Failure summary:")
-        typer.echo(record.failure_summary)
-        _echo_next(
-            f"labsidecar logs {record.task_id} --stream stderr --tail 40",
-            f"labsidecar slides {record.task_id}",
-        )
-    elif record.status == TaskStatus.COMPLETED:
-        _echo_next(
-            f"labsidecar collect {record.task_id}",
-            f"labsidecar artifacts {record.task_id}",
-        )
+        typer.echo(failure_summary)
+        typer.echo(f"Diagnostic log: {record.paths.stderr}")
+    _echo_next(*_next_commands_for(record))
 
 
 @app.command()
@@ -233,6 +460,11 @@ def cancel(task_id: str) -> None:
 @app.command("list")
 def list_tasks(
     limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of task records to show."),
+    status_filter: TaskStatus | None = typer.Option(
+        None,
+        "--status",
+        help="Only show tasks with this status: pending, running, completed, failed, or cancelled.",
+    ),
 ) -> None:
     """List recent Lab-Sidecar tasks from manifest files."""
     root = _root()
@@ -241,13 +473,206 @@ def list_tasks(
         typer.echo("No tasks found.")
         return
 
-    for task_id in reversed(task_ids[-limit:]):
+    rows: list[list[str]] = [["task_id", "status", "created_at", "finished_at", "updated_at", "artifacts", "name"]]
+    service = RunnerService(root)
+    for task_id in reversed(task_ids):
+        try:
+            record = service.refresh(task_id)
+        except Exception:
+            continue
+        if status_filter is not None and record.status != status_filter:
+            continue
+        rows.append(
+            [
+                record.task_id,
+                record.status.value,
+                record.created_at,
+                record.finished_at or "(running)",
+                _status_updated_at(record),
+                str(record.artifact_count()),
+                record.name or "",
+            ]
+        )
+        if len(rows) - 1 >= limit:
+            break
+
+    if len(rows) == 1:
+        typer.echo("No tasks found.")
+        return
+    _table(rows)
+
+
+@app.command()
+def summarize(task_id: str) -> None:
+    """Show a bounded task digest without full logs or full artifact bodies."""
+    root = _root()
+    try:
+        record = RunnerService(root).refresh(task_id)
+    except FileNotFoundError:
+        _fail(
+            f"Error: task '{task_id}' was not found.\n"
+            "Hint: check whether the task directory still exists under .lab-sidecar/tasks/.",
+            code=3,
+        )
+
+    _print_task_identity(record)
+    _print_task_times(record)
+    _print_artifact_summary(record, root)
+
+    metrics = _metrics_summary(record, root)
+    figures_summary = _figure_summary(record, root)
+    typer.echo("Metrics:")
+    if metrics["summary_exists"]:
+        row_count = metrics["row_count"] if metrics["row_count"] is not None else "(unknown)"
+        typer.echo(f"- rows: {row_count}")
+        if metrics["detected_fields"]:
+            typer.echo(f"- detected fields: {', '.join(str(field) for field in metrics['detected_fields'])}")
+        typer.echo(f"- summary: {metrics['summary_path']}")
+        if metrics["metrics_exists"]:
+            typer.echo(f"- normalized table: {metrics['metrics_path']}")
+        else:
+            typer.echo("- normalized table: (not generated)")
+    else:
+        typer.echo("- collection summary: (not generated)")
+        typer.echo("- normalized table: (not generated)")
+
+    typer.echo("Figures:")
+    if figures_summary["exists"]:
+        figure_count = (
+            figures_summary["figure_count"]
+            if figures_summary["figure_count"] is not None
+            else "(unknown)"
+        )
+        typer.echo(f"- generated figures: {figure_count}")
+        typer.echo(f"- summary: {figures_summary['path']}")
+    else:
+        typer.echo("- summary: (not generated)")
+
+    report_path = _task_artifact_path(record, root, REPORT_RELATIVE_PATH)
+    slides_path = _task_artifact_path(record, root, SLIDES_RELATIVE_PATH)
+    typer.echo("Report:")
+    typer.echo(f"- {REPORT_RELATIVE_PATH.as_posix()}" if report_path.exists() else "- (not generated)")
+    typer.echo("Slides:")
+    typer.echo(f"- {SLIDES_RELATIVE_PATH.as_posix()}" if slides_path.exists() else "- (not generated)")
+
+    failure_summary = _short_failure_summary(record)
+    if failure_summary:
+        typer.echo("Failure summary:")
+        typer.echo(failure_summary)
+
+    _echo_next(*_next_commands_for(record))
+
+
+@app.command()
+def compare(
+    task_ids: list[str] = typer.Argument(..., help="Two to five task ids to compare."),
+) -> None:
+    """Compare final rows for shared numeric metrics across 2-5 tasks."""
+    root = _root()
+    if len(task_ids) < 2:
+        _fail("Error: compare requires at least 2 task ids.", code=2)
+    if len(task_ids) > 5:
+        _fail("Error: compare supports at most 5 task ids.", code=2)
+
+    records = []
+    metrics_by_task: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
+    missing_metrics: list[str] = []
+    for task_id in task_ids:
         try:
             record = RunnerService(root).refresh(task_id)
         except FileNotFoundError:
+            _fail(
+                f"Error: task '{task_id}' was not found.\n"
+                "Hint: run 'labsidecar list' to find available task ids.",
+                code=3,
+            )
+        records.append(record)
+        metrics_path = _task_artifact_path(record, root, METRICS_RELATIVE_PATH)
+        if not metrics_path.exists():
+            missing_metrics.append(record.task_id)
             continue
-        label = f" - {record.name}" if record.name else ""
-        typer.echo(f"{record.task_id}\t{record.status.value}\t{record.updated_at}{label}")
+        fields, rows = _read_metrics_rows(metrics_path)
+        if not rows:
+            missing_metrics.append(record.task_id)
+            continue
+        metrics_by_task[record.task_id] = (fields, rows)
+
+    if missing_metrics:
+        _fail(
+            "Error: metrics are missing for task(s): "
+            + ", ".join(missing_metrics)
+            + "\nHint: run 'labsidecar collect <task_id>' before comparing.",
+            code=5,
+        )
+
+    common_fields: set[str] | None = None
+    all_fields: dict[str, set[str]] = {}
+    final_rows: list[dict[str, str]] = []
+    for record in records:
+        fields, rows = metrics_by_task[record.task_id]
+        field_set = set(fields)
+        all_fields[record.task_id] = field_set
+        common_fields = field_set if common_fields is None else common_fields & field_set
+        final_rows.append(rows[-1])
+
+    ordered_common_fields = [
+        field
+        for field in metrics_by_task[records[0].task_id][0]
+        if common_fields is not None and field in common_fields
+    ]
+    comparable_fields = _comparable_numeric_fields(ordered_common_fields, final_rows)
+    skipped_common_fields = [
+        field
+        for field in ordered_common_fields
+        if field not in comparable_fields and field not in COMPARISON_METADATA_COLUMNS
+    ]
+    skipped_by_task = {}
+    for record in records:
+        task_fields = all_fields[record.task_id]
+        skipped_by_task[record.task_id] = sorted(
+            field
+            for field in task_fields
+            if common_fields is not None and field not in common_fields
+        )
+
+    if not comparable_fields:
+        _fail(
+            "Error: no common numeric metric fields were found across the selected tasks.\n"
+            "Hint: compare tasks after collecting metrics with shared numeric columns.",
+            code=5,
+        )
+
+    typer.echo(f"Compared tasks: {len(records)}")
+    typer.echo(f"Source: {METRICS_RELATIVE_PATH.as_posix()}")
+    typer.echo(f"Common numeric fields: {', '.join(comparable_fields)}")
+    if skipped_common_fields:
+        typer.echo(f"Skipped common non-numeric fields: {', '.join(skipped_common_fields)}")
+    skipped_messages = [
+        f"{task_id}: {', '.join(fields)}"
+        for task_id, fields in skipped_by_task.items()
+        if fields
+    ]
+    if skipped_messages:
+        typer.echo("Skipped task-specific fields:")
+        for message in skipped_messages:
+            typer.echo(f"- {message}")
+
+    rows = [["task_id", "status", "metric", "value", "source"]]
+    for record, final_row in zip(records, final_rows, strict=True):
+        for field in comparable_fields:
+            parsed = _parse_number(final_row.get(field))
+            if parsed is None:
+                continue
+            rows.append(
+                [
+                    record.task_id,
+                    record.status.value,
+                    field,
+                    _format_number(parsed),
+                    METRICS_RELATIVE_PATH.as_posix(),
+                ]
+            )
+    _table(rows)
 
 
 @app.command("open")

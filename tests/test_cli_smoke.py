@@ -487,6 +487,221 @@ def test_list_limit_empty_and_open_missing_task(tmp_path: Path) -> None:
     assert "task 'task_missing' was not found" in missing.output
 
 
+def test_list_status_filter_and_missing_manifest_are_safe(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    success_command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    failure_command = f'"{sys.executable}" examples/simple-failure/fail.py'
+
+    completed_task = extract_task_id(invoke(tmp_path, ["run", success_command, "--name", "completed-list"]).output)
+    failed_task = extract_task_id(invoke(tmp_path, ["run", failure_command, "--name", "failed-list"]).output)
+    stale_dir = tmp_path / ".lab-sidecar" / "tasks" / "task_missing_manifest"
+    stale_dir.mkdir()
+
+    listed = invoke(tmp_path, ["list", "--limit", "5"])
+    completed = invoke(tmp_path, ["list", "--status", "completed"])
+    failed = invoke(tmp_path, ["list", "--status", "failed"])
+    invalid = invoke(tmp_path, ["list", "--status", "unknown"])
+
+    assert listed.exit_code == 0
+    assert "task_id" in listed.output
+    assert "finished_at" in listed.output
+    assert "artifacts" in listed.output
+    assert completed_task in listed.output
+    assert failed_task in listed.output
+    assert "task_missing_manifest" not in listed.output
+
+    assert completed.exit_code == 0
+    assert completed_task in completed.output
+    assert failed_task not in completed.output
+
+    assert failed.exit_code == 0
+    assert failed_task in failed.output
+    assert completed_task not in failed.output
+
+    assert invalid.exit_code == 2
+
+
+def test_status_dashboard_for_completed_ingested_failed_and_cancelled_tasks(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    success_command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    completed_task = extract_task_id(invoke(tmp_path, ["run", success_command, "--name", "status-complete"]).output)
+    completed_status = invoke(tmp_path, ["status", completed_task])
+    assert completed_status.exit_code == 0
+    assert "Name: status-complete" in completed_status.output
+    assert "Mode: run" in completed_status.output
+    assert f"Artifact dir: .lab-sidecar/tasks/{completed_task}" in completed_status.output
+    assert "Artifact types:" in completed_status.output
+    assert f"labsidecar summarize {completed_task}" in completed_status.output
+
+    ingested_task = extract_task_id(
+        invoke(tmp_path, ["ingest", "examples/csv-comparison", "--name", "status-ingest"]).output
+    )
+    ingested_status = invoke(tmp_path, ["status", ingested_task])
+    assert ingested_status.exit_code == 0
+    assert "Mode: ingest" in ingested_status.output
+    assert "Source: examples/csv-comparison" in ingested_status.output
+
+    failure_command = f'"{sys.executable}" examples/simple-failure/fail.py'
+    failed_task = extract_task_id(invoke(tmp_path, ["run", failure_command]).output)
+    failed_status = invoke(tmp_path, ["status", failed_task])
+    assert failed_status.exit_code == 0
+    assert "Status: failed" in failed_status.output
+    assert "Failure summary:" in failed_status.output
+    assert "Diagnostic log:" in failed_status.output
+    assert f"labsidecar logs {failed_task} --stream stderr --tail 40" in failed_status.output
+
+    script = tmp_path / "long_task.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "for i in range(30):",
+                "    print(f'tick={i}', flush=True)",
+                "    time.sleep(0.5)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    running_task = extract_task_id(invoke(tmp_path, ["run", f'"{sys.executable}" long_task.py', "--background"]).output)
+    wait_for_output(tmp_path, running_task, "tick=0")
+    assert invoke(tmp_path, ["cancel", running_task]).exit_code == 0
+    cancelled_status = invoke(tmp_path, ["status", running_task])
+    assert cancelled_status.exit_code == 0
+    assert "Status: cancelled" in cancelled_status.output
+    assert f"labsidecar artifacts {running_task}" in cancelled_status.output
+    assert f"labsidecar collect {running_task}" not in cancelled_status.output
+
+
+def test_summarize_before_and_after_artifacts_stays_bounded(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command, "--name", "bounded-summary"]).output)
+
+    before = invoke(tmp_path, ["summarize", task_id])
+    assert before.exit_code == 0
+    assert "Name: bounded-summary" in before.output
+    assert "collection summary: (not generated)" in before.output
+    assert "normalized table: (not generated)" in before.output
+    assert "Best val_accuracy=0.86" not in before.output
+    assert "epoch,train_loss,val_loss" not in before.output
+
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["slides", task_id]).exit_code == 0
+
+    after = invoke(tmp_path, ["summarize", task_id])
+    assert after.exit_code == 0
+    assert "rows: 5" in after.output
+    assert "metrics/normalized_metrics.csv" in after.output
+    assert "figures/figure-summary.json" in after.output
+    assert "reports/report-fragment.md" in after.output
+    assert "slides/presentation-draft.pptx" in after.output
+    assert "Best val_accuracy=0.86" not in after.output
+    assert "epoch,train_loss,val_loss" not in after.output
+
+
+def test_summarize_failed_task_and_long_command_are_bounded(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    long_arg = "x" * 180
+    command = f'"{sys.executable}" examples/simple-failure/fail.py --note {long_arg}'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command]).output)
+
+    summary = invoke(tmp_path, ["summarize", task_id])
+
+    assert summary.exit_code == 0
+    assert "Status: failed" in summary.output
+    assert "Failure summary:" in summary.output
+    assert long_arg not in summary.output
+    assert "..." in summary.output
+
+
+def test_compare_two_completed_tasks_with_shared_metrics(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first_source = tmp_path / "run-a"
+    second_source = tmp_path / "run-b"
+    first_source.mkdir()
+    second_source.mkdir()
+    (first_source / "metrics.csv").write_text(
+        "epoch,model,val_accuracy,val_loss\n1,a,0.71,0.52\n2,a,0.82,0.42\n",
+        encoding="utf-8",
+    )
+    (second_source / "metrics.csv").write_text(
+        "epoch,model,val_accuracy,val_loss\n1,b,0.75,0.49\n2,b,0.86,0.37\n",
+        encoding="utf-8",
+    )
+    first_task = extract_task_id(invoke(tmp_path, ["ingest", "run-a", "--name", "run a"]).output)
+    second_task = extract_task_id(invoke(tmp_path, ["ingest", "run-b", "--name", "run b"]).output)
+    assert invoke(tmp_path, ["collect", first_task]).exit_code == 0
+    assert invoke(tmp_path, ["collect", second_task]).exit_code == 0
+
+    result = invoke(tmp_path, ["compare", first_task, second_task])
+
+    assert result.exit_code == 0
+    assert "Compared tasks: 2" in result.output
+    assert "Common numeric fields:" in result.output
+    assert "val_accuracy" in result.output
+    assert "0.82" in result.output
+    assert "0.86" in result.output
+    assert "metrics/normalized_metrics.csv" in result.output
+    assert "a,0.82,0.42" not in result.output
+    assert "b,0.86,0.37" not in result.output
+
+
+def test_compare_missing_metrics_no_common_numeric_and_too_many_tasks(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    metric_tasks: list[str] = []
+    for index in range(5):
+        source = tmp_path / f"run-{index}"
+        source.mkdir()
+        (source / "metrics.csv").write_text(
+            f"epoch,score\n1,{0.7 + index / 100:.2f}\n",
+            encoding="utf-8",
+        )
+        task_id = extract_task_id(invoke(tmp_path, ["ingest", f"run-{index}"]).output)
+        assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+        metric_tasks.append(task_id)
+
+    missing_source = tmp_path / "missing-metrics"
+    missing_source.mkdir()
+    (missing_source / "notes.txt").write_text("no metrics\n", encoding="utf-8")
+    missing_task = extract_task_id(invoke(tmp_path, ["ingest", "missing-metrics"]).output)
+
+    missing = invoke(tmp_path, ["compare", metric_tasks[0], missing_task])
+    too_few = invoke(tmp_path, ["compare", metric_tasks[0]])
+    too_many = invoke(tmp_path, ["compare", *metric_tasks, missing_task])
+
+    assert missing.exit_code == 5
+    assert "metrics are missing" in missing.output
+    assert "labsidecar collect <task_id>" in missing.output
+    assert too_few.exit_code == 2
+    assert "at least 2 task ids" in too_few.output
+    assert too_many.exit_code == 2
+    assert "at most 5 task ids" in too_many.output
+
+    first_text = tmp_path / "text-a"
+    second_text = tmp_path / "text-b"
+    first_text.mkdir()
+    second_text.mkdir()
+    (first_text / "metrics.csv").write_text("model,label\nalpha,good\n", encoding="utf-8")
+    (second_text / "metrics.csv").write_text("model,label\nbeta,better\n", encoding="utf-8")
+    first_text_task = extract_task_id(invoke(tmp_path, ["ingest", "text-a"]).output)
+    second_text_task = extract_task_id(invoke(tmp_path, ["ingest", "text-b"]).output)
+    assert invoke(tmp_path, ["collect", first_text_task]).exit_code == 0
+    assert invoke(tmp_path, ["collect", second_text_task]).exit_code == 0
+
+    no_common_numeric = invoke(tmp_path, ["compare", first_text_task, second_text_task])
+
+    assert no_common_numeric.exit_code == 5
+    assert "no common numeric metric fields" in no_common_numeric.output
+
+
 def test_artifact_chain_prints_next_steps(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     assert invoke(tmp_path, ["init"]).exit_code == 0
