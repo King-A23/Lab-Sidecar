@@ -77,6 +77,7 @@ Stage-specific implementation plans:
 - `docs/post-open-source-stage-1-plan.md`
 - `docs/post-open-source-stage-2-plan.md`
 - `docs/post-open-source-stage-3-plan.md`
+- `docs/post-open-source-stage-4-plan.md`
 
 ## 4. Stage 1: 任务导航与对比
 
