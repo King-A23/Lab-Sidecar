@@ -46,7 +46,7 @@ tools:
 - `generate_report_fragment`
 - `generate_slides`
 
-The stdio server also exposes the V2 bounded delegation mirror:
+The same smoke also lists and exercises the V2 bounded delegation mirror:
 
 - `delegate_experiment_artifacts`
 - `inspect_sidecar_task`
@@ -57,7 +57,28 @@ Tool responses return bounded summaries and artifact paths by default. They do
 not return complete command strings, stdout, stderr, metrics rows, report
 Markdown, worker prompt/response bodies, artifact bodies, or PPT contents. Use
 `preview_sidecar_artifact` for bounded CSV, Markdown, log, image, and PPTX
-previews.
+previews. Preview requests must reference registered task artifacts; external,
+unregistered, raw, unsupported, and worker-audit paths are rejected with bounded
+responses.
+
+Example preview and cancellation calls through an MCP host:
+
+```json
+{"tool": "preview_sidecar_artifact", "arguments": {"task_id": "task_...", "artifact_path": "metrics/normalized_metrics.csv", "max_rows": 1}}
+{"tool": "preview_sidecar_artifact", "arguments": {"task_id": "task_...", "artifact_path": "reports/report-fragment.md", "max_lines": 5}}
+{"tool": "cancel_sidecar_task", "arguments": {"task_id": "task_..."}}
+```
+
+Use `package <task_id>` from the CLI when the goal is a shareable task folder,
+not a host response. Use explicit `collect --config` for nested or messy result
+directories; the MCP adapter should not be treated as broad recursive file
+discovery.
+
+If the repo-scoped Codex plugin guidance changes, validate the plugin scaffold:
+
+```bash
+python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
+```
 
 For V2 Codex-plugin-like host setup, smoke guidance, safety boundaries, and MCP
 mirroring details, see `docs/v2-host-integration.md`.

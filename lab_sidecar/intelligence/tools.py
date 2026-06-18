@@ -123,7 +123,25 @@ def cancel_sidecar_task(
     task_id: str,
 ) -> dict[str, Any]:
     root = Path(workspace_path).resolve()
-    record = RunnerService(root).cancel(task_id)
+    try:
+        record = RunnerService(root).cancel(task_id)
+    except FileNotFoundError as exc:
+        return _cancel_not_applicable_response(
+            task_id=task_id,
+            headline=f"Task {task_id} could not be cancelled because it was not found.",
+            warning=str(exc),
+            current_status=None,
+            risk_flag="cancel_sidecar_task_missing",
+        )
+    except RuntimeError as exc:
+        current_status = str(exc)
+        return _cancel_not_applicable_response(
+            task_id=task_id,
+            headline=f"Task {task_id} is not running; cancellation is not applicable.",
+            warning=f"Current status: {current_status}",
+            current_status=current_status,
+            risk_flag="cancel_sidecar_task_not_applicable",
+        )
     return _tool_response(
         root=root,
         record=record,
@@ -413,6 +431,29 @@ def _tool_response(
         "warnings": warnings[:10],
         "next_actions": next_actions,
         "risk_flags": risk_flags,
+        "omitted": omitted_contract(),
+    }
+
+
+def _cancel_not_applicable_response(
+    task_id: str,
+    headline: str,
+    warning: str,
+    current_status: str | None,
+    risk_flag: str,
+) -> dict[str, Any]:
+    summary: dict[str, Any] = {"headline": headline}
+    if current_status is not None:
+        summary["current_status"] = current_status
+    return {
+        "schema_version": "2.1",
+        "task_id": task_id,
+        "status": "not_cancelled",
+        "summary": summary,
+        "artifacts": [],
+        "warnings": [warning],
+        "next_actions": [f"inspect_sidecar_task {task_id}"] if current_status is not None else [],
+        "risk_flags": [risk_flag],
         "omitted": omitted_contract(),
     }
 

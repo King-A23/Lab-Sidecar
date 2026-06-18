@@ -146,6 +146,29 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
                     timeout=30,
                 )
                 record_progress("cancel_experiment:done", {"task_status": cancel_result.get("task_status")})
+                record_progress("v2_cancel_run:start")
+                v2_cancel_run_result = await _call_tool(
+                    session,
+                    "run_experiment",
+                    {
+                        "command": _cancel_command(workspace),
+                        "background": True,
+                    },
+                    timeout=60,
+                )
+                v2_cancel_task_id = v2_cancel_run_result["task_id"]
+                record_progress(
+                    "v2_cancel_run:done",
+                    {"task_id": v2_cancel_task_id, "task_status": v2_cancel_run_result.get("task_status")},
+                )
+                record_progress("cancel_sidecar_task:start", {"task_id": v2_cancel_task_id})
+                v2_cancel_result = await _call_tool(
+                    session,
+                    "cancel_sidecar_task",
+                    {"task_id": v2_cancel_task_id},
+                    timeout=30,
+                )
+                record_progress("cancel_sidecar_task:done", {"status": v2_cancel_result.get("status")})
                 record_progress("blocked_command:start")
                 blocked_result = await _call_tool(
                     session,
@@ -199,6 +222,12 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         raise RuntimeError(f"cancel smoke task did not start in background: {cancel_run_result}")
     if cancel_result.get("task_status") != "cancelled":
         raise RuntimeError(f"cancel_experiment did not cancel task: {cancel_result}")
+    if v2_cancel_run_result.get("task_status") != "running":
+        raise RuntimeError(f"V2 cancel smoke task did not start in background: {v2_cancel_run_result}")
+    if v2_cancel_result.get("status") != "cancelled":
+        raise RuntimeError(f"cancel_sidecar_task did not cancel task: {v2_cancel_result}")
+    if v2_cancel_result.get("omitted", {}).get("worker_prompt_response") != "omitted_by_default":
+        raise RuntimeError(f"V2 cancel response did not preserve omitted contract: {v2_cancel_result}")
     if blocked_result.get("summary", {}).get("status") != "blocked":
         raise RuntimeError(f"destructive command was not blocked: {blocked_result}")
 
@@ -219,6 +248,8 @@ async def _run_smoke(workspace: Path) -> dict[str, Any]:
         "v2_preview_type": v2_preview_result["preview_type"],
         "cancel_task_id": cancel_task_id,
         "cancel_status": cancel_result["task_status"],
+        "v2_cancel_task_id": v2_cancel_task_id,
+        "v2_cancel_status": v2_cancel_result["status"],
         "blocked_command_status": blocked_result["summary"]["status"],
         "omitted_contract": slides_result["omitted"],
         "artifact_count": len(slides_result["artifacts"]),

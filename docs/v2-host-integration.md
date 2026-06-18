@@ -48,7 +48,28 @@ The host should not expect complete command strings, full stdout, stderr,
 datasets, report bodies, PPTX contents, prompt or response transcripts, or
 artifact bodies in default tool responses.
 
-## Phase 2.4 Preview Contract
+Canonical response shape:
+
+```json
+{
+  "schema_version": "2.1",
+  "task_id": "task_...",
+  "status": "completed",
+  "summary": {"headline": "...", "task": {}, "outputs": {}},
+  "artifacts": [{"artifact_id": "metrics_normalized_csv", "path": "metrics/normalized_metrics.csv"}],
+  "warnings": [],
+  "next_actions": ["inspect_sidecar_task task_..."],
+  "risk_flags": [],
+  "omitted": {
+    "full_stdout": "omitted_by_default",
+    "metrics_rows": "omitted_by_default",
+    "worker_prompt_response": "omitted_by_default",
+    "artifact_bodies": "omitted_by_default"
+  }
+}
+```
+
+## Stage 4 Preview Contract
 
 `preview_sidecar_artifact` is the V2 path for asking for more
 artifact detail. It must be a bounded preview tool, not a generic file reader.
@@ -67,10 +88,47 @@ Required rejection or omission cases:
 - unsupported artifact types
 - complete artifact bodies
 - unbounded row, line, byte, or slide reads
-- raw worker prompt or response content
+- raw source references and worker prompt or response content
+
+Copyable examples:
+
+```python
+preview_sidecar_artifact(".", task_id, "metrics/normalized_metrics.csv", max_rows=1)
+preview_sidecar_artifact(".", task_id, "reports/report-fragment.md", max_lines=5)
+preview_sidecar_artifact(".", task_id, "stdout.log", max_lines=20)
+preview_sidecar_artifact(".", task_id, "figures/val_accuracy.png")
+preview_sidecar_artifact(".", task_id, "slides/presentation-draft.pptx")
+```
+
+CSV, Markdown, and log previews may return fewer rows or lines than requested
+to avoid returning a complete artifact body. Image previews return metadata,
+not bytes. PPTX previews return slide count and title metadata, not slide XML
+or embedded media. Requests for workspace-external paths, unregistered files,
+`raw/source_refs.json`, or `intelligence/**` worker audit files should return a
+bounded rejection.
 
 Host smoke should verify delegate, inspect, preview, and cancel without
 simulating previews through plain file reads.
+
+## When To Delegate
+
+Delegate to Lab-Sidecar when the main host would otherwise need to run a local
+experiment, ingest CSV/JSON results, collect metrics, generate figures, draft a
+report or slide deck, package a task, or monitor/cancel a long local task while
+keeping noisy logs and rows out of the main context.
+
+Do not delegate ordinary source-code edits, unit-test runs whose main value is
+repository feedback, arbitrary file browsing, full artifact dumps, destructive
+or untrusted shell work, remote execution, hosted services, cloud sync, generic
+multi-agent orchestration, or requests that require complete logs/rows/report
+bodies in the host response.
+
+For nested or messy result directories, use explicit `collect --config`
+semantics rather than broad automatic discovery. Stage 3 configs can declare
+`sources.include`, `sources.exclude`, field alias lists, units, and groups.
+For handoff, use `package <task_id>`; package exports are allowlisted and omit
+full logs, raw source refs, worker prompt/response bodies, sandbox files, and
+unrelated workspace files by default.
 
 ## Local Plugin-Like Smoke
 
@@ -133,6 +191,9 @@ Targeted tests cover:
 - PPTX preview returns slide count and summary metadata rather than slide XML
 - log preview returns only the requested tail
 - external paths and unsupported artifact types are rejected
+- raw and worker audit paths are rejected
+- completed or missing task cancellation returns a bounded not-cancelled
+  response
 
 ## Codex MCP Configuration
 
@@ -164,7 +225,7 @@ Run the MCP stdio smoke:
 python scripts/mcp_stdio_smoke.py --workspace "${TMPDIR:-/tmp}/lab-sidecar-v2-host-mcp"
 ```
 
-This smoke lists the deterministic V1 tools:
+This smoke lists and exercises the deterministic V1 tools:
 
 - `run_experiment`
 - `inspect_results`
@@ -173,8 +234,8 @@ This smoke lists the deterministic V1 tools:
 - `generate_report_fragment`
 - `generate_slides`
 
-The stdio server also registers these V2 mirror tools, covered by direct MCP
-adapter tests:
+The smoke also lists and exercises the V2 mirror tools for delegate, inspect,
+preview, and cancellation:
 
 - `delegate_experiment_artifacts`
 - `inspect_sidecar_task`

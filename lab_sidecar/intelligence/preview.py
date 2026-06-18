@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,12 @@ MAX_PREVIEW_ROWS = 20
 MAX_PREVIEW_LINES = 80
 MAX_LOG_TAIL_LINES = 80
 SUPPORTED_SUFFIXES = {".csv", ".md", ".markdown", ".png", ".jpg", ".jpeg", ".pptx", ".log", ".txt"}
+DENIED_PREVIEW_NAMES = {
+    "ai-provider-prompt.json",
+    "ai-provider-response.json",
+    "prompt.md",
+    "response.json",
+}
 
 
 class ArtifactPreviewError(ValueError):
@@ -109,6 +116,8 @@ def _resolve_allowed_artifact(
 
     if artifact_type is None:
         raise ArtifactPreviewError("artifact is not registered for this task")
+    if _is_denied_preview(logical, artifact_type):
+        raise ArtifactPreviewError("artifact preview is not available for raw or worker audit content")
 
     resolved = _resolve_registered_artifact_path(logical, root, task_path)
     if not is_path_within(resolved, task_path.resolve()):
@@ -118,6 +127,14 @@ def _resolve_allowed_artifact(
     if resolved.suffix.lower() not in SUPPORTED_SUFFIXES:
         raise ArtifactPreviewError("unsupported artifact preview type")
     return resolved, logical, artifact_type
+
+
+def _is_denied_preview(logical: str, artifact_type: str) -> bool:
+    path = Path(logical)
+    parts = set(path.parts)
+    if artifact_type == "raw":
+        return True
+    return "intelligence" in parts or path.name in DENIED_PREVIEW_NAMES
 
 
 def _task_relative_logical(logical: str, task_path: Path, root: Path) -> str:
@@ -145,45 +162,61 @@ def _csv_preview(path: Path, max_rows: int) -> dict[str, Any]:
     with path.open(newline="", encoding="utf-8", errors="replace") as fh:
         reader = csv.DictReader(fh)
         columns = list(reader.fieldnames or [])
-        truncated = False
         for row in reader:
-            if len(rows) < max_rows:
-                rows.append(dict(row))
-                continue
-            truncated = True
-            break
+            rows.append(dict(row))
+            if len(rows) > max_rows:
+                break
+    returned, truncated, withheld_complete_body = _bounded_preview_items(rows, max_rows)
     return {
         "columns": columns,
-        "rows": rows,
-        "row_count_returned": len(rows),
+        "rows": returned,
+        "row_count_returned": len(returned),
         "truncated": truncated,
+        "withheld_complete_body": withheld_complete_body,
     }
 
 
 def _text_lines_preview(path: Path, max_lines: int) -> dict[str, Any]:
     lines: list[str] = []
-    truncated = False
     with path.open(encoding="utf-8", errors="replace") as fh:
         for line in fh:
-            if len(lines) < max_lines:
-                lines.append(line.rstrip("\n")[:1000])
-                continue
-            truncated = True
-            break
+            lines.append(line.rstrip("\n")[:1000])
+            if len(lines) > max_lines:
+                break
+    returned, truncated, withheld_complete_body = _bounded_preview_items(lines, max_lines)
     return {
-        "lines": lines,
-        "line_count_returned": len(lines),
+        "lines": returned,
+        "line_count_returned": len(returned),
         "truncated": truncated,
+        "withheld_complete_body": withheld_complete_body,
     }
 
 
 def _log_preview(path: Path, max_lines: int) -> dict[str, Any]:
-    lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    returned = [line[:1000] for line in lines[-max_lines:]]
+    buffered: deque[str] = deque(maxlen=max_lines + 1)
+    total_lines = 0
+    with path.open(encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            total_lines += 1
+            buffered.append(line.rstrip("\n")[:1000])
+    lines = list(buffered)
+    if total_lines > max_lines:
+        returned = lines[-max_lines:]
+        truncated = True
+        withheld_complete_body = False
+    elif lines:
+        returned = lines[1:]
+        truncated = True
+        withheld_complete_body = True
+    else:
+        returned = []
+        truncated = False
+        withheld_complete_body = False
     return {
         "tail": returned,
         "line_count_returned": len(returned),
-        "truncated": len(lines) > len(returned),
+        "truncated": truncated,
+        "withheld_complete_body": withheld_complete_body,
     }
 
 
@@ -223,3 +256,11 @@ def _bounded(value: int, minimum: int, maximum: int) -> int:
     except (TypeError, ValueError):
         parsed = maximum
     return min(max(parsed, minimum), maximum)
+
+
+def _bounded_preview_items(items: list[Any], maximum: int) -> tuple[list[Any], bool, bool]:
+    if len(items) > maximum:
+        return items[:maximum], True, False
+    if items:
+        return items[:-1], True, True
+    return [], False, False

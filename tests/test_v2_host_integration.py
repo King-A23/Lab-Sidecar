@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 
 from lab_sidecar.core.config import init_workspace
+from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
+from lab_sidecar.core.models import ArtifactRecord
 from lab_sidecar.intelligence import (
     cancel_sidecar_task,
     delegate_experiment_artifacts,
@@ -64,6 +66,47 @@ def test_host_smoke_delegate_inspect_preview_and_cancel(tmp_path: Path) -> None:
     assert csv_preview["preview"]["row_count_returned"] == 2
     assert cancelled["status"] == "cancelled"
     assert "ready" not in json.dumps(cancelled)
+
+
+def test_cancel_completed_and_missing_tasks_return_bounded_not_applicable(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    init_workspace(tmp_path)
+
+    delegated = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="Generate metrics for completed cancellation test.",
+        command=simple_success_command(),
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+
+    completed_cancel = cancel_sidecar_task(tmp_path, delegated["task_id"])
+    missing_cancel = cancel_sidecar_task(tmp_path, "task_missing")
+    serialized = json.dumps({"completed": completed_cancel, "missing": missing_cancel})
+
+    assert completed_cancel["status"] == "not_cancelled"
+    assert completed_cancel["summary"]["current_status"] == "completed"
+    assert completed_cancel["risk_flags"] == ["cancel_sidecar_task_not_applicable"]
+    assert missing_cancel["status"] == "not_cancelled"
+    assert missing_cancel["risk_flags"] == ["cancel_sidecar_task_missing"]
+    assert "Best val_accuracy=0.86" not in serialized
+    assert completed_cancel["omitted"]["full_stdout"] == "omitted_by_default"
+    assert missing_cancel["omitted"]["worker_prompt_response"] == "omitted_by_default"
+
+
+def test_inspect_after_v2_cancel_returns_cancelled_state_without_log_body(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    script = tmp_path / "long_task.py"
+    script.write_text("import time\nprint('cancel-ready', flush=True)\ntime.sleep(30)\n", encoding="utf-8")
+    running = RunnerService(tmp_path).run(f'"{sys.executable}" long_task.py', background=True)
+
+    cancelled = cancel_sidecar_task(tmp_path, running.task_id)
+    inspected = inspect_sidecar_task(tmp_path, running.task_id)
+
+    assert cancelled["status"] == "cancelled"
+    assert inspected["status"] == "cancelled"
+    assert "cancel-ready" not in json.dumps(inspected)
+    assert inspected["omitted"]["full_stdout"] == "omitted_by_default"
 
 
 def test_preview_rejects_external_and_unregistered_paths(tmp_path: Path) -> None:
@@ -145,6 +188,51 @@ def test_preview_does_not_return_complete_artifact_bodies_by_default(tmp_path: P
     assert "presentation-draft.pptx" not in serialized
 
 
+def test_preview_withholds_complete_small_csv_markdown_and_log_bodies(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    script = tmp_path / "tiny_artifacts.py"
+    script.write_text(
+        "from pathlib import Path\n"
+        "print('tiny-log-line', flush=True)\n"
+        "Path('metrics.csv').write_text('epoch,accuracy\\n1,0.7\\n2,0.8\\n', encoding='utf-8')\n",
+        encoding="utf-8",
+    )
+    result = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="Generate tiny artifacts for preview body withholding.",
+        command=f'"{sys.executable}" tiny_artifacts.py',
+        desired_outputs=["report"],
+        intelligent_mode="off",
+    )
+    inspected = inspect_sidecar_task(tmp_path, result["task_id"])
+
+    csv_result = preview_sidecar_artifact(
+        tmp_path,
+        result["task_id"],
+        artifact_path(inspected, "metrics_normalized_csv"),
+        max_rows=20,
+    )
+    report_result = preview_sidecar_artifact(
+        tmp_path,
+        result["task_id"],
+        artifact_path(inspected, "report_fragment_md"),
+        max_lines=80,
+    )
+    log_result = preview_sidecar_artifact(
+        tmp_path,
+        result["task_id"],
+        artifact_path(inspected, "log_stdout"),
+        max_lines=80,
+    )
+
+    assert csv_result["preview"]["withheld_complete_body"] is True
+    assert csv_result["preview"]["row_count_returned"] == 1
+    assert report_result["preview"]["withheld_complete_body"] is True
+    assert log_result["preview"]["withheld_complete_body"] is True
+    assert log_result["preview"]["line_count_returned"] == 0
+    assert "tiny-log-line" not in json.dumps(log_result)
+
+
 def test_preview_rejects_unsupported_registered_artifact(tmp_path: Path) -> None:
     init_workspace(tmp_path)
     source = tmp_path / "result.bin"
@@ -154,6 +242,78 @@ def test_preview_rejects_unsupported_registered_artifact(tmp_path: Path) -> None
 
     assert result["status"] == "rejected"
     assert result["risk_flags"] == ["artifact_preview_rejected"]
+
+
+def test_preview_explicitly_rejects_registered_raw_and_worker_audit_artifacts(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    source = tmp_path / "result.txt"
+    source.write_text("raw result body\n", encoding="utf-8")
+    record = RunnerService(tmp_path).ingest_source(source)
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / record.task_id
+    raw_notes = task_path / "raw" / "raw-notes.txt"
+    raw_notes.write_text("raw secret body\n", encoding="utf-8")
+    audit_dir = task_path / "intelligence" / "worker_run_test"
+    audit_dir.mkdir(parents=True)
+    audit_notes = audit_dir / "prompt.md"
+    audit_notes.write_text("worker prompt body\n", encoding="utf-8")
+
+    stored = load_task(tmp_path, record.task_id)
+    stored.artifacts.extend(
+        [
+            ArtifactRecord(
+                artifact_id="raw_notes_txt",
+                type="raw",
+                path=f"{stored.paths.task_dir}/raw/raw-notes.txt",
+                description="Raw notes.",
+            ),
+            ArtifactRecord(
+                artifact_id="worker_prompt_md",
+                type="worker",
+                path=f"{stored.paths.task_dir}/intelligence/worker_run_test/prompt.md",
+                description="Worker prompt.",
+            ),
+        ]
+    )
+    write_manifest(manifest_path(tmp_path, record.task_id), stored)
+
+    raw_preview = preview_sidecar_artifact(tmp_path, record.task_id, f"{stored.paths.task_dir}/raw/raw-notes.txt")
+    audit_preview = preview_sidecar_artifact(
+        tmp_path,
+        record.task_id,
+        f"{stored.paths.task_dir}/intelligence/worker_run_test/prompt.md",
+    )
+    serialized = json.dumps({"raw": raw_preview, "audit": audit_preview})
+
+    assert raw_preview["status"] == "rejected"
+    assert audit_preview["status"] == "rejected"
+    assert "raw secret body" not in serialized
+    assert "worker prompt body" not in serialized
+
+
+def test_preview_rejects_worker_audit_paths_even_when_task_local(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    init_workspace(tmp_path)
+    result = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="Generate worker audit files for preview rejection.",
+        command=simple_success_command(),
+        desired_outputs=["metrics"],
+        intelligent_mode="auto",
+    )
+    worker_run_id = result["summary"]["intelligence"]["worker_run_id"]
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / result["task_id"]
+    prompt_path = task_path / "intelligence" / worker_run_id / "ai-provider-prompt.json"
+    prompt_path.write_text('{"prompt":"secret worker prompt"}\n', encoding="utf-8")
+
+    preview = preview_sidecar_artifact(
+        tmp_path,
+        result["task_id"],
+        f".lab-sidecar/tasks/{result['task_id']}/intelligence/{worker_run_id}/ai-provider-prompt.json",
+    )
+
+    assert preview["status"] == "rejected"
+    assert preview["risk_flags"] == ["artifact_preview_rejected"]
+    assert "secret worker prompt" not in json.dumps(preview)
 
 
 def test_preview_caps_large_requested_limits(tmp_path: Path) -> None:

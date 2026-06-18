@@ -209,6 +209,13 @@ def _omitted_entries(root: Path, task_path: Path, record: TaskRecord) -> list[di
         )
     intelligence_path = task_path / "intelligence"
     if intelligence_path.exists():
+        _add_omitted_if_exists(
+            omitted,
+            intelligence_path,
+            task_path,
+            "worker",
+            "worker audit files are omitted by default",
+        )
         for audit_path in sorted(
             [
                 *intelligence_path.glob("*/ai-provider-prompt.json"),

@@ -231,6 +231,49 @@ def test_mcp_background_long_task_returns_task_id_without_log_body(tmp_path: Pat
     assert inspected["task_status"] == "cancelled"
 
 
+def test_mcp_cancel_completed_and_missing_tasks_are_bounded(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    init_workspace(tmp_path)
+    tools = LabSidecarMCPTools(tmp_path)
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = tools.run_experiment(command, background=False)["task_id"]
+
+    completed_cancel = tools.cancel_experiment(task_id)
+    missing_cancel = tools.cancel_experiment("task_missing")
+    serialized = str({"completed": completed_cancel, "missing": missing_cancel})
+
+    assert completed_cancel["task_status"] == "completed"
+    assert completed_cancel["summary"]["cancellation"]["status"] == "not_cancelled"
+    assert completed_cancel["summary"]["cancellation"]["current_status"] == "completed"
+    assert completed_cancel["omitted"]["cancellation"] == "not_applicable"
+    assert missing_cancel["task_id"] is None
+    assert missing_cancel["summary"]["status"] == "not_cancelled"
+    assert missing_cancel["omitted"]["cancellation"] == "not_applicable"
+    assert "Best val_accuracy=0.86" not in serialized
+
+
+def test_mcp_v2_cancel_completed_and_missing_tasks_are_bounded(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    init_workspace(tmp_path)
+    tools = LabSidecarMCPTools(tmp_path)
+    delegated = tools.delegate_experiment_artifacts(
+        user_goal="Generate metrics for V2 MCP cancellation test.",
+        command=f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv',
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+
+    completed_cancel = tools.cancel_sidecar_task(delegated["task_id"])
+    missing_cancel = tools.cancel_sidecar_task("task_missing")
+
+    assert completed_cancel["status"] == "not_cancelled"
+    assert completed_cancel["summary"]["current_status"] == "completed"
+    assert completed_cancel["risk_flags"] == ["cancel_sidecar_task_not_applicable"]
+    assert missing_cancel["status"] == "not_cancelled"
+    assert missing_cancel["risk_flags"] == ["cancel_sidecar_task_missing"]
+    assert "Best val_accuracy=0.86" not in str(completed_cancel)
+
+
 def test_mcp_v2_delegate_inspect_and_preview_use_bounded_context(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     init_workspace(tmp_path)

@@ -103,7 +103,38 @@ class LabSidecarMCPTools:
         )
 
     def cancel_experiment(self, task_id: str) -> dict[str, Any]:
-        record = RunnerService(self.root).cancel(task_id)
+        try:
+            record = RunnerService(self.root).cancel(task_id)
+        except FileNotFoundError as exc:
+            return base_response(
+                None,
+                summary={
+                    "status": "not_cancelled",
+                    "task_id": task_id,
+                    "headline": f"Task {task_id} could not be cancelled because it was not found.",
+                },
+                warnings=[str(exc)],
+                next_actions=[],
+                omitted={"cancellation": "not_applicable"},
+            )
+        except RuntimeError as exc:
+            current_status = str(exc)
+            record = load_task(self.root, task_id)
+            return base_response(
+                record,
+                summary={
+                    **task_summary(self.root, record),
+                    "cancellation": {
+                        "status": "not_cancelled",
+                        "reason": "task is not running",
+                        "current_status": current_status,
+                    },
+                },
+                artifacts=artifact_list(record),
+                warnings=[f"Current status: {current_status}"],
+                next_actions=[f"inspect_results {record.task_id}"],
+                omitted={"cancellation": "not_applicable"},
+            )
         return base_response(
             record,
             summary=task_summary(self.root, record),

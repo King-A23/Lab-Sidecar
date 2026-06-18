@@ -223,6 +223,8 @@ V2 bounded delegation tools:
 
 Default MCP/V2 responses return task ids, compact summaries, risk flags, next actions, and artifact metadata. Complete command strings, stdout/stderr, metrics rows, report bodies, PPT contents, worker prompt/response bodies, full data files, and artifact bytes are omitted by default. Use `preview_sidecar_artifact` for bounded detail.
 
+`preview_sidecar_artifact` is task-artifact scoped. It supports bounded CSV rows, Markdown lines, log tails, image metadata, and PPTX metadata. It rejects workspace-external, unregistered, raw, unsupported, and worker-audit paths. If the goal is to share results, use `package <task_id>`; if results are nested or messy, use explicit `collect --config` rather than broad automatic discovery.
+
 The optional stdio server entrypoint is:
 
 ```bash
@@ -263,6 +265,12 @@ Run the MCP stdio smoke when MCP behavior is in scope:
 
 ```bash
 python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-mcp-stdio-smoke
+```
+
+Validate the repo-scoped Codex plugin guidance when plugin files change:
+
+```bash
+python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
 ```
 
 Build a local package artifact without publishing:
