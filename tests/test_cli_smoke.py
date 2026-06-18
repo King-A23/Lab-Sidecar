@@ -622,6 +622,176 @@ def test_summarize_failed_task_and_long_command_are_bounded(tmp_path: Path) -> N
     assert "..." in summary.output
 
 
+def test_package_completed_task_exports_allowlisted_artifacts_only(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command, "--name", "package-success"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["slides", task_id]).exit_code == 0
+
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    (task_path / "worker.log").write_text("worker transcript body\n", encoding="utf-8")
+    worker_run_dir = task_path / "intelligence" / "worker_run_test"
+    (worker_run_dir / "sandbox").mkdir(parents=True)
+    (worker_run_dir / "sandbox" / "scratch.txt").write_text("scratch\n", encoding="utf-8")
+    (worker_run_dir / "ai-provider-prompt.json").write_text('{"prompt":"secret"}\n', encoding="utf-8")
+    (worker_run_dir / "ai-provider-response.json").write_text('{"response":"secret"}\n', encoding="utf-8")
+
+    package_path = tmp_path / f"lab-sidecar-package-{task_id}"
+    result = invoke(tmp_path, ["package", task_id, "--output", package_path.as_posix()])
+
+    assert result.exit_code == 0
+    assert "Package created:" in result.output
+    assert "Type: result" in result.output
+    for relative in [
+        "README.md",
+        "manifest.json",
+        "package-summary.json",
+        "artifact-index.json",
+        "redaction-notes.md",
+        "reproduce/command.txt",
+        "reproduce/env.json",
+        "reproduce/git.json",
+        "reproduce/dependencies.json",
+        "metrics/normalized_metrics.csv",
+        "metrics/normalized_metrics.json",
+        "metrics/collection-summary.json",
+        "figures/figure-spec.yaml",
+        "figures/figure-summary.json",
+        "reports/report-fragment.md",
+        "reports/report-summary.json",
+        "slides/presentation-draft.pptx",
+        "slides/slides-summary.json",
+    ]:
+        assert (package_path / relative).is_file(), relative
+    assert list((package_path / "figures").glob("*.png"))
+    assert list((package_path / "figures").glob("*.svg"))
+
+    summary = json.loads((package_path / "package-summary.json").read_text(encoding="utf-8"))
+    index = json.loads((package_path / "artifact-index.json").read_text(encoding="utf-8"))
+    readme = (package_path / "README.md").read_text(encoding="utf-8")
+    redaction_notes = (package_path / "redaction-notes.md").read_text(encoding="utf-8")
+    included_paths = {item["package_path"] for item in index["included"]}
+    omitted_paths = {item["path"] for item in index["omitted"]}
+
+    assert summary["package_type"] == "result"
+    assert summary["task"]["task_id"] == task_id
+    assert summary["task"]["name"] == "package-success"
+    assert "metrics/normalized_metrics.csv" in included_paths
+    assert "slides/presentation-draft.pptx" in included_paths
+    assert "stdout.log" in omitted_paths
+    assert "stderr.log" in omitted_paths
+    assert "worker.log" in omitted_paths
+    assert "intelligence/worker_run_test/ai-provider-prompt.json" in omitted_paths
+    assert "intelligence/worker_run_test/ai-provider-response.json" in omitted_paths
+    assert "intelligence/worker_run_test/sandbox" in omitted_paths
+    assert ".lab-sidecar/index.sqlite" in omitted_paths
+    assert "Lab-Sidecar Result Package" in readme
+    assert "Failed Task Diagnostic Package" not in readme
+    assert "full stdout/stderr logs" in redaction_notes
+    assert not (package_path / "stdout.log").exists()
+    assert not (package_path / "stderr.log").exists()
+    assert not (package_path / "worker.log").exists()
+    assert not (package_path / "intelligence").exists()
+    assert not (package_path / ".lab-sidecar" / "index.sqlite").exists()
+    assert not (package_path / "examples").exists()
+    assert not (package_path / "metrics.csv").exists()
+
+
+def test_package_failed_task_is_diagnostic_and_omits_full_logs(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    command = f'"{sys.executable}" examples/simple-failure/fail.py'
+    task_id = extract_task_id(invoke(tmp_path, ["run", command, "--name", "package-failure"]).output)
+
+    package_path = tmp_path / f"lab-sidecar-package-{task_id}"
+    result = invoke(tmp_path, ["package", task_id, "--output", package_path.as_posix()])
+
+    assert result.exit_code == 0
+    assert "Type: diagnostic" in result.output
+    assert (package_path / "manifest.json").is_file()
+    assert (package_path / "README.md").is_file()
+    assert (package_path / "redaction-notes.md").is_file()
+    assert (package_path / "reproduce" / "command.txt").is_file()
+    assert not (package_path / "stderr.log").exists()
+    assert not (package_path / "stdout.log").exists()
+
+    readme = (package_path / "README.md").read_text(encoding="utf-8")
+    summary = json.loads((package_path / "package-summary.json").read_text(encoding="utf-8"))
+    index = json.loads((package_path / "artifact-index.json").read_text(encoding="utf-8"))
+
+    assert "Failed Task Diagnostic Package" in readme
+    assert "not a successful experiment summary" in readme
+    assert "FileNotFoundError" in readme
+    assert summary["package_type"] == "diagnostic"
+    assert summary["task"]["status"] == "failed"
+    assert summary["task"]["failure_summary"]
+    unavailable_paths = {item["path"] for item in index["unavailable"]}
+    omitted_paths = {item["path"] for item in index["omitted"]}
+    assert "metrics/normalized_metrics.csv" in unavailable_paths
+    assert "figures/figure-summary.json" in unavailable_paths
+    assert "stdout.log" in omitted_paths
+    assert "stderr.log" in omitted_paths
+
+
+def test_package_ingested_task_omits_raw_source_refs_and_source_files(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(
+        invoke(tmp_path, ["ingest", "examples/csv-comparison", "--name", "package-ingest"]).output
+    )
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    package_path = tmp_path / f"lab-sidecar-package-{task_id}"
+    result = invoke(tmp_path, ["package", task_id, "--output", package_path.as_posix()])
+
+    assert result.exit_code == 0
+    assert "Type: result" in result.output
+    assert (package_path / "metrics" / "normalized_metrics.csv").is_file()
+    assert not (package_path / "raw" / "source_refs.json").exists()
+    assert not (package_path / "examples").exists()
+
+    index = json.loads((package_path / "artifact-index.json").read_text(encoding="utf-8"))
+    omitted_paths = {item["path"] for item in index["omitted"]}
+    unavailable_paths = {item["path"] for item in index["unavailable"]}
+
+    assert "raw/source_refs.json" in omitted_paths
+    assert "examples/csv-comparison" in omitted_paths
+    assert "reproduce/command.txt" in unavailable_paths
+
+
+def test_package_missing_task_and_invalid_output_path(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    missing = invoke(tmp_path, ["package", "task_missing", "--output", "missing-package"])
+    assert missing.exit_code == 3
+    assert "task 'task_missing' was not found" in missing.output
+
+    task_id = extract_task_id(
+        invoke(tmp_path, ["run", f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv']).output
+    )
+    output_file = tmp_path / "not-a-package-dir"
+    output_file.write_text("occupied\n", encoding="utf-8")
+
+    invalid = invoke(tmp_path, ["package", task_id, "--output", output_file.as_posix()])
+    assert invalid.exit_code == 2
+    assert "package output path is not usable" in invalid.output
+    assert "not a directory" in invalid.output
+
+    non_empty_dir = tmp_path / "occupied-package-dir"
+    non_empty_dir.mkdir()
+    (non_empty_dir / "existing.txt").write_text("keep me\n", encoding="utf-8")
+
+    invalid_non_empty = invoke(tmp_path, ["package", task_id, "--output", non_empty_dir.as_posix()])
+    assert invalid_non_empty.exit_code == 2
+    assert "package output path is not usable" in invalid_non_empty.output
+    assert "not empty" in invalid_non_empty.output
+
+
 def test_compare_two_completed_tasks_with_shared_metrics(tmp_path: Path) -> None:
     assert invoke(tmp_path, ["init"]).exit_code == 0
     first_source = tmp_path / "run-a"

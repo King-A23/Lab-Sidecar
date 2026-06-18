@@ -71,6 +71,7 @@ python -m lab_sidecar.cli.app collect "$TASK_ID"
 python -m lab_sidecar.cli.app figures "$TASK_ID"
 python -m lab_sidecar.cli.app report "$TASK_ID"
 python -m lab_sidecar.cli.app slides "$TASK_ID"
+python -m lab_sidecar.cli.app package "$TASK_ID" --output "lab-sidecar-package-$TASK_ID"
 python -m lab_sidecar.cli.app artifacts "$TASK_ID"
 python -m lab_sidecar.cli.app open "$TASK_ID"
 ```
@@ -91,6 +92,8 @@ Expected files:
   slides/presentation-draft.pptx
   slides/slides-summary.json
 ```
+
+The `package` command creates a shareable, inspectable single-task folder with `README.md`, `manifest.json`, `package-summary.json`, `artifact-index.json`, `redaction-notes.md`, reproduce metadata, and generated metrics/figures/report/slides artifacts when present. By default it does not copy full `stdout.log` or `stderr.log`, raw source files, `.lab-sidecar/index.sqlite`, worker prompt/response bodies, temporary sandbox files, or unrelated workspace files. Failed tasks package as diagnostic folders and are labeled as failed-task diagnostics, not successful experiment summaries.
 
 For an existing-results path, try:
 
@@ -126,6 +129,7 @@ Both `labsidecar` and `lab-sidecar` console scripts point at the same CLI after 
 | `list --limit 20 [--status completed]` | Show recent tasks from task manifests with scan-friendly status, timestamp, artifact, and name columns. |
 | `summarize <task_id>` | Print a bounded task digest with major artifact paths and summary counts, without full logs or artifact bodies. |
 | `compare <task_id> <task_id> [...]` | Compare final-row shared numeric metrics for 2-5 collected local tasks. |
+| `package <task_id> --output <dir>` | Create a shareable single-task result or diagnostic package from allowlisted artifacts. |
 | `open <task_id>` | Print the absolute task artifact directory path. |
 | `logs <task_id> --tail 20` | Print bounded stdout/stderr tails. |
 | `artifacts <task_id>` | List artifacts recorded in `manifest.json`. |

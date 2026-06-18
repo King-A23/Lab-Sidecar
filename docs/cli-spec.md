@@ -297,6 +297,117 @@ Hint: check whether the task directory still exists under .lab-sidecar/tasks/.
 
 必须。
 
+## `labsidecar package <task_id> --output <dir>`
+
+**用途**
+
+为单个任务创建一个可分享、可检查的结果包或失败诊断包。输出是一个普通目录，适合交给同学、导师、reviewer 或主 Agent 查看。它只复制 Stage 2 allowlist 中的交付物，不把整个 `.lab-sidecar/tasks/<task_id>/` 实现目录打包。
+
+成功任务会标记为 result package。失败、取消或仍在运行的任务会标记为 diagnostic package；失败任务 README 必须明确说明这是失败任务诊断包，不是成功实验总结。
+
+**参数**
+
+- 必需：`<task_id>`
+- 必需：`--output <dir>` 或 `-o <dir>`，目标 package 目录。目录不存在时会创建；目录已存在时必须为空。
+
+**成功输出示例**
+
+```text
+Package created: /tmp/lab-sidecar-package-task_20260531_160210_3b20ef
+Type: result
+Included files: 18
+Omitted by default: 4
+Unavailable optional files: 0
+```
+
+失败任务示例：
+
+```text
+Package created: /tmp/lab-sidecar-package-task_20260531_160315_aa22bb
+Type: diagnostic
+Included files: 5
+Omitted by default: 3
+Unavailable optional files: 9
+```
+
+**Package 目录形状**
+
+```text
+lab-sidecar-package-<task_id>/
+  README.md
+  manifest.json
+  package-summary.json
+  artifact-index.json
+  redaction-notes.md
+  reproduce/
+  metrics/
+  figures/
+  reports/
+  slides/
+```
+
+**默认会包含哪些文件**
+
+- `manifest.json`
+- `reproduce/command.txt`、`reproduce/env.json`、`reproduce/git.json`、`reproduce/dependencies.json`（若存在）
+- `metrics/normalized_metrics.csv`、`metrics/normalized_metrics.json`、`metrics/collection-summary.json`（若存在）
+- `figures/*.png`、`figures/*.svg`、`figures/figure-spec.yaml`、`figures/figure-summary.json`（若存在）
+- `reports/report-fragment.md`、`reports/report-summary.json`（若存在）
+- `slides/presentation-draft.pptx`、`slides/slides-summary.json`（若存在）
+- package 自身的 `README.md`、`package-summary.json`、`artifact-index.json`、`redaction-notes.md`
+
+缺失的可选 artifact 会记录到 `artifact-index.json` 的 `unavailable` 列表，不应导致 package 失败。
+
+**默认不会包含哪些文件**
+
+- 完整 `stdout.log`
+- 完整 `stderr.log`
+- raw source files 与 `raw/source_refs.json`
+- `.lab-sidecar/index.sqlite`
+- worker prompt/response bodies
+- worker transcript / worker log
+- temporary sandbox files
+- unrelated workspace files
+
+这些默认 omission 会写入 `redaction-notes.md` 和 `artifact-index.json`。
+
+**失败输出示例**
+
+```text
+Error: task 'task_missing' was not found.
+Hint: run 'labsidecar list' to find available task ids.
+```
+
+```text
+Error: package output path is not usable.
+Reason: /tmp/package-output already exists and is not empty
+```
+
+**会读取哪些文件**
+
+- `manifest.json`
+- allowlist 中列出的 task-local artifact
+- task-local generated figure PNG/SVG files
+- 只检查是否存在的默认 omission 文件，如 `stdout.log`、`stderr.log`、worker audit、sandbox、`.lab-sidecar/index.sqlite`
+
+**会写入哪些文件**
+
+- 目标 package 目录
+- `README.md`
+- `manifest.json`
+- `package-summary.json`
+- `artifact-index.json`
+- `redaction-notes.md`
+- allowlist artifact copies
+
+**是否会修改用户原始文件**
+
+不会。
+
+**Stage 2 是否必须实现**
+
+必须。
+
 ## `labsidecar compare <task_id_a> <task_id_b> [task_id...]`
 
 **用途**

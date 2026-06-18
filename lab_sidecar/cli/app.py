@@ -36,6 +36,11 @@ from lab_sidecar.slides.service import (
     SlidesGenerationService,
     SlidesWriteError,
 )
+from lab_sidecar.storage.package_export import (
+    PackageExportError,
+    PackageOutputError,
+    export_task_package,
+)
 
 
 app = typer.Typer(help="Local-first research sidecar for AI agents and experiment workflows.")
@@ -561,6 +566,42 @@ def summarize(task_id: str) -> None:
         typer.echo(failure_summary)
 
     _echo_next(*_next_commands_for(record))
+
+
+@app.command("package")
+def package_task(
+    task_id: str = typer.Argument(..., help="Task id to package."),
+    output: Path = typer.Option(..., "--output", "-o", help="Destination package directory."),
+) -> None:
+    """Create a shareable single-task result or diagnostic package."""
+    root = _root()
+    try:
+        record = RunnerService(root).refresh(task_id)
+    except FileNotFoundError:
+        _fail(
+            f"Error: task '{task_id}' was not found.\n"
+            "Hint: run 'labsidecar list' to find available task ids.",
+            code=3,
+        )
+
+    try:
+        result = export_task_package(root, record, output)
+    except PackageOutputError as exc:
+        _fail(
+            f"Error: package output path is not usable.\nReason: {exc}",
+            code=2,
+        )
+    except PackageExportError as exc:
+        _fail(
+            f"Error: package could not be created for task '{task_id}'.\nReason: {exc}",
+            code=1,
+        )
+
+    typer.echo(f"Package created: {result.path}")
+    typer.echo(f"Type: {result.package_type}")
+    typer.echo(f"Included files: {result.included_count}")
+    typer.echo(f"Omitted by default: {result.omitted_count}")
+    typer.echo(f"Unavailable optional files: {result.unavailable_count}")
 
 
 @app.command()
