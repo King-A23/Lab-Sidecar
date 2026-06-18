@@ -155,6 +155,7 @@ class FigureSpec:
     group_by: str | None = None
     aggregation: str | None = None
     source: str = "metrics/normalized_metrics.csv"
+    units: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -169,7 +170,11 @@ class FigurePlan:
     errors: list[str] = field(default_factory=list)
 
 
-def build_auto_figure_plan(df: pd.DataFrame) -> FigurePlan:
+def build_auto_figure_plan(
+    df: pd.DataFrame,
+    units: dict[str, str] | None = None,
+    groups: dict[str, str] | None = None,
+) -> FigurePlan:
     warnings: list[str] = []
     skipped: list[dict[str, str]] = []
     if df.empty:
@@ -178,14 +183,18 @@ def build_auto_figure_plan(df: pd.DataFrame) -> FigurePlan:
 
     x_column = _process_axis(df)
     if x_column:
-        specs = _build_line_specs(df, x_column, warnings, skipped)
+        specs = _build_line_specs(df, x_column, warnings, skipped, units or {}, groups or {})
         return FigurePlan(specs=specs, warnings=warnings, skipped_candidates=skipped)
 
-    specs = _build_bar_specs(df, warnings, skipped)
+    specs = _build_bar_specs(df, warnings, skipped, units or {})
     return FigurePlan(specs=specs, warnings=warnings, skipped_candidates=skipped)
 
 
-def build_explicit_figure_plan(df: pd.DataFrame, spec: FigureSpec) -> FigurePlan:
+def build_explicit_figure_plan(
+    df: pd.DataFrame,
+    spec: FigureSpec,
+    units: dict[str, str] | None = None,
+) -> FigurePlan:
     errors: list[str] = []
     skipped: list[dict[str, str]] = []
 
@@ -202,6 +211,7 @@ def build_explicit_figure_plan(df: pd.DataFrame, spec: FigureSpec) -> FigurePlan
         skipped.append(_skip(spec.figure_id, reason, chart_type=spec.chart_type, x=spec.x, y=spec.y))
         return FigurePlan(specs=[], skipped_candidates=skipped, errors=errors)
 
+    spec.units = _spec_units(spec, units or {})
     return FigurePlan(specs=[spec])
 
 
@@ -249,6 +259,8 @@ def _build_line_specs(
     x_column: str,
     warnings: list[str],
     skipped: list[dict[str, str]],
+    units: dict[str, str],
+    groups: dict[str, str],
 ) -> list[FigureSpec]:
     numeric_columns = _numeric_columns(df)
     metric_columns = [
@@ -262,7 +274,7 @@ def _build_line_specs(
         skipped.append(_skip("auto_line", reason, chart_type="line", x=x_column))
         return []
 
-    group_by = _first_existing_column(df, LINE_GROUP_PRIORITY)
+    group_by = _configured_group_column(df, groups) or _first_existing_column(df, LINE_GROUP_PRIORITY)
     if group_by:
         group_count = int(df[group_by].nunique(dropna=False))
         if group_count > MAX_COMPARISON_LINES:
@@ -298,6 +310,7 @@ def _build_line_specs(
                 x=x_column,
                 y=y_column,
                 group_by=group_by,
+                units=_field_units([x_column, y_column, group_by], units),
                 output=FigureOutput(
                     png=f"figures/{figure_id}.png",
                     svg=f"figures/{figure_id}.svg",
@@ -311,6 +324,7 @@ def _build_bar_specs(
     df: pd.DataFrame,
     warnings: list[str],
     skipped: list[dict[str, str]],
+    units: dict[str, str],
 ) -> list[FigureSpec]:
     category = _first_existing_column(df, BAR_CATEGORY_PRIORITY)
     if not category:
@@ -353,6 +367,7 @@ def _build_bar_specs(
             x=category,
             y=metric,
             aggregation="mean",
+            units=_field_units([category, metric], units),
             output=FigureOutput(
                 png=f"figures/{figure_id}.png",
                 svg=f"figures/{figure_id}.svg",
@@ -477,6 +492,25 @@ def _first_existing_column(df: pd.DataFrame, priority: list[str]) -> str | None:
         if column in df.columns:
             return column
     return None
+
+
+def _configured_group_column(df: pd.DataFrame, groups: dict[str, str]) -> str | None:
+    for key in ["primary", "secondary"]:
+        column = groups.get(key)
+        if column in df.columns:
+            return column
+    for column in groups.values():
+        if column in df.columns:
+            return column
+    return None
+
+
+def _field_units(fields: list[str | None], units: dict[str, str]) -> dict[str, str]:
+    return {field: units[field] for field in fields if field and field in units}
+
+
+def _spec_units(spec: FigureSpec, units: dict[str, str]) -> dict[str, str]:
+    return _field_units(_required_metric_fields(spec), units)
 
 
 def _select_priority_columns(priority: list[str], columns: list[str]) -> list[str]:

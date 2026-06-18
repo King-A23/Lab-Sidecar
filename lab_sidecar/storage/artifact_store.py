@@ -8,6 +8,7 @@ from lab_sidecar.core.paths import to_manifest_path
 from lab_sidecar.core.provenance import file_provenance
 
 SOURCE_CANDIDATE_SUFFIXES = {".csv", ".json", ".log", ".txt", ".md"}
+MAX_RECURSIVE_SOURCE_REF_FILES = 1000
 
 
 def default_task_artifacts(task_dir: Path, root: Path) -> list[ArtifactRecord]:
@@ -134,9 +135,13 @@ def build_source_refs(source: Path, root: Path) -> dict:
                 candidate_files.append(child_summary["path"])
         children.append(child_summary)
 
+    candidate_refs, truncated = _recursive_candidate_file_refs(resolved, root)
     data["children"] = children
     data["child_count"] = len(children)
     data["candidate_files"] = candidate_files
+    data["candidate_file_refs"] = candidate_refs
+    data["candidate_file_count"] = len(candidate_refs)
+    data["candidate_files_truncated"] = truncated
     return data
 
 
@@ -148,3 +153,23 @@ def _mtime_iso(timestamp: float) -> str:
     from datetime import datetime, timezone
 
     return datetime.fromtimestamp(timestamp, timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def _recursive_candidate_file_refs(source: Path, root: Path) -> tuple[list[dict], bool]:
+    refs: list[dict] = []
+    for child in sorted(source.rglob("*"), key=lambda item: item.as_posix().lower()):
+        if not child.is_file() or child.suffix.lower() not in SOURCE_CANDIDATE_SUFFIXES:
+            continue
+        child_stat = child.stat()
+        item = {
+            "path": to_manifest_path(child.resolve(), root),
+            "name": child.name,
+            "suffix": child.suffix.lower(),
+            "modified_at": _mtime_iso(child_stat.st_mtime),
+            "is_candidate": True,
+        }
+        item.update(file_provenance(child))
+        refs.append(item)
+        if len(refs) >= MAX_RECURSIVE_SOURCE_REF_FILES:
+            return refs, True
+    return refs, False

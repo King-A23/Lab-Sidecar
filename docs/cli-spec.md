@@ -633,13 +633,77 @@ Hint: provide a mapping file with --config.
 
 - `manifest.json`
 - `raw/source_refs.json`
-- 任务关联的 CSV、JSON、log
+- 任务关联的 CSV、JSON
 - 可选的显式配置文件
+
+**显式 messy-results 配置**
+
+`--config` 继续兼容旧形态：
+
+```yaml
+sources:
+  - results/run_a.csv
+fields:
+  epoch: iter
+  method: algo
+  seed: trial
+  accuracy: score_pct
+units:
+  accuracy: ratio
+```
+
+Stage 3 增加的确定性配置形态：
+
+```yaml
+sources:
+  include:
+    - messy-results/**/*.csv
+  exclude:
+    - messy-results/**/debug*.csv
+    - messy-results/**/scratch/*
+fields:
+  epoch:
+    sources: [epoch, step, iter]
+  method:
+    sources: [model, method, algo, variant]
+  seed:
+    sources: [seed, trial, run_id]
+  accuracy:
+    sources: [val_accuracy, score_pct, acc]
+    unit: ratio
+  latency_ms:
+    sources: [runtime_ms, latency_ms, time_ms]
+    unit: ms
+groups:
+  primary: method
+  secondary: seed
+```
+
+配置规则：
+
+- `sources.include` 可以显式使用递归 glob；默认自动扫描仍保持保守，不递归扫描整个工作区。
+- `sources.exclude` 会从显式匹配结果中排除 debug、scratch 等文件，并在 `collection-summary.json` 中记录跳过原因。
+- 对 ingest 任务，显式来源必须属于 `raw/source_refs.json` 记录的导入来源；工作区外路径会被拒绝。
+- `fields` 的每个目标字段可以是单个来源字段，也可以是 `sources` 别名列表；匹配到的来源字段会记录到 `matched_source_fields`。
+- `units` 和字段内联 `unit` 会记录到 summary；同一目标字段的显式单位冲突、或 `runtime_ms` / `runtime_s` 这类来源字段混用，会写入 `unit_diagnostics`。
+- 当前不会自动换算单位，也不会解析 TensorBoard、二进制格式、notebook 或未配置的 log。
+
+**失败与诊断**
+
+`collect --config` 失败时仍会尽量写入 `metrics/collection-summary.json`。常见 `skipped_files.reason` 包括：
+
+- `configured_source_missing`
+- `outside_workspace`
+- `not_in_source_refs`
+- `unsupported_configured_source`
+- `configured_source_excluded`
+- `missing_configured_field`
 
 **会写入哪些文件**
 
 - `metrics/normalized_metrics.csv`
 - `metrics/normalized_metrics.json`
+- `metrics/collection-summary.json`
 - 更新后的 `manifest.json`
 - `.lab-sidecar/index.sqlite`
 
@@ -681,6 +745,7 @@ Reason: required field 'epoch' is missing from normalized_metrics.csv.
 
 - `manifest.json`
 - `metrics/normalized_metrics.csv`
+- `metrics/collection-summary.json`（若存在，用于单位与分组元数据）
 - 可选图表配置文件
 
 **会写入哪些文件**
@@ -688,6 +753,7 @@ Reason: required field 'epoch' is missing from normalized_metrics.csv.
 - `figures/*.png`
 - `figures/*.svg`
 - `figures/figure-spec.yaml`
+- `figures/figure-summary.json`
 - 更新后的 `manifest.json`
 - `.lab-sidecar/index.sqlite`
 

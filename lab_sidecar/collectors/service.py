@@ -53,6 +53,7 @@ class _CollectedFile:
     source_provenance: dict[str, Any] = field(default_factory=dict)
     detected_fields: list[str] = field(default_factory=list)
     mapped_fields: list[str] = field(default_factory=list)
+    matched_source_fields: dict[str, list[str]] = field(default_factory=dict)
 
 
 class MetricsCollectionService:
@@ -72,23 +73,43 @@ class MetricsCollectionService:
         config = self._load_config(config_path) if config_path else None
         auto_candidates = scan_metric_candidates(self.root, record)
         warnings: list[str] = []
+        diagnostics: list[dict[str, str]] = []
+        if config:
+            diagnostics.extend(config.diagnostics)
+            warnings.extend(item["message"] for item in config.diagnostics if item.get("message"))
         skipped_files: list[dict[str, str]] = []
-        candidates = self._select_candidates(record, auto_candidates, config, warnings, skipped_files)
+        candidates = self._select_candidates(
+            record,
+            auto_candidates,
+            config,
+            warnings,
+            skipped_files,
+            diagnostics,
+        )
         rows: list[dict[str, object]] = []
         collected_files: list[_CollectedFile] = []
 
         for candidate in candidates:
             try:
-                file_rows, detected_fields, mapped_fields, file_warnings = self._collect_candidate(candidate, config)
+                (
+                    file_rows,
+                    detected_fields,
+                    mapped_fields,
+                    matched_source_fields,
+                    file_warnings,
+                ) = self._collect_candidate(candidate, config)
             except _CandidateSkipped as exc:
                 source_file = to_manifest_path(candidate.path, self.root)
                 warnings.append(exc.message)
                 skipped_files.append({"source_file": source_file, "reason": exc.reason})
+                diagnostics.append({"source_file": source_file, "reason": exc.reason, "message": exc.message})
                 continue
             except Exception as exc:
                 source_file = to_manifest_path(candidate.path, self.root)
-                warnings.append(f"Failed to parse {source_file}: {exc}")
+                message = f"Failed to parse {source_file}: {exc}"
+                warnings.append(message)
                 skipped_files.append({"source_file": source_file, "reason": "parse_failed"})
+                diagnostics.append({"source_file": source_file, "reason": "parse_failed", "message": message})
                 continue
 
             source_file = to_manifest_path(candidate.path, self.root)
@@ -108,16 +129,27 @@ class MetricsCollectionService:
                     source_provenance=file_provenance(candidate.path),
                     detected_fields=detected_fields,
                     mapped_fields=mapped_fields,
+                    matched_source_fields=matched_source_fields,
                 )
             )
 
         detected_fields = _merge_detected_fields(collected_files)
+        unit_diagnostics = _unit_diagnostics(config, collected_files) if config else []
+        diagnostics.extend(unit_diagnostics)
+        existing_warnings = set(warnings)
+        for diagnostic in unit_diagnostics:
+            message = diagnostic.get("message")
+            if message and message not in existing_warnings:
+                warnings.append(message)
+                existing_warnings.add(message)
         summary = self._build_summary(
             record=record,
             candidates=candidates,
             collected_files=collected_files,
             skipped_files=skipped_files,
             warnings=warnings,
+            diagnostics=diagnostics,
+            unit_diagnostics=unit_diagnostics,
             detected_fields=detected_fields,
             row_count=len(rows),
             config_path=config_path,
@@ -169,6 +201,7 @@ class MetricsCollectionService:
         config: MetricsCollectionConfig | None,
         warnings: list[str],
         skipped_files: list[dict[str, str]],
+        diagnostics: list[dict[str, str]],
     ) -> list[CandidateFile]:
         if config is None or not config.has_explicit_sources:
             return auto_candidates
@@ -177,40 +210,43 @@ class MetricsCollectionService:
             root=self.root,
             record=record,
             patterns=config.sources,
+            exclude_patterns=config.exclude_sources,
         )
         warnings.extend(source_warnings)
         skipped_files.extend(source_skips)
+        diagnostics.extend(_diagnostics_from_skipped_files(source_skips))
         return selected
 
     def _collect_candidate(
         self,
         candidate: CandidateFile,
         config: MetricsCollectionConfig | None,
-    ) -> tuple[list[dict[str, object]], list[str], list[str], list[str]]:
+    ) -> tuple[list[dict[str, object]], list[str], list[str], dict[str, list[str]], list[str]]:
         if config is not None and config.has_field_mappings:
             return self._collect_explicit_candidate(candidate, config)
 
         suffix = candidate.path.suffix.lower()
         if suffix == ".csv":
             result = collect_csv(candidate.path)
-            return result.rows, result.detected_fields, [], []
+            return result.rows, result.detected_fields, [], {}, []
         if suffix == ".json":
             result = collect_json(candidate.path)
-            return result.rows, result.detected_fields, [], result.warnings
-        return [], [], [], []
+            return result.rows, result.detected_fields, [], {}, result.warnings
+        return [], [], [], {}, []
 
     def _collect_explicit_candidate(
         self,
         candidate: CandidateFile,
         config: MetricsCollectionConfig,
-    ) -> tuple[list[dict[str, object]], list[str], list[str], list[str]]:
+    ) -> tuple[list[dict[str, object]], list[str], list[str], dict[str, list[str]], list[str]]:
         raw_rows, warnings = _read_candidate_rows(candidate)
         if not raw_rows:
-            return [], [], [], warnings
+            return [], [], [], {}, warnings
 
         source_file = to_manifest_path(candidate.path, self.root)
         mapped_rows: list[dict[str, object]] = []
         missing_by_target: dict[str, list[str]] = {}
+        matched_source_fields: dict[str, list[str]] = {}
         for row in raw_rows:
             mapped: dict[str, object] = {}
             row_complete = True
@@ -222,6 +258,7 @@ class MetricsCollectionService:
                         missing_by_target[mapping.target] = list(mapping.sources)
                     continue
                 mapped[mapping.target] = value
+                _append_unique(matched_source_fields.setdefault(mapping.target, []), _source_field)
             if row_complete:
                 mapped["source_file"] = source_file
                 mapped_rows.append(mapped)
@@ -237,7 +274,7 @@ class MetricsCollectionService:
             )
 
         detected_fields = [mapping.target for mapping in config.field_mappings]
-        return mapped_rows, detected_fields, detected_fields, warnings
+        return mapped_rows, detected_fields, detected_fields, matched_source_fields, warnings
 
     def _build_summary(
         self,
@@ -246,6 +283,8 @@ class MetricsCollectionService:
         collected_files: list[_CollectedFile],
         skipped_files: list[dict[str, str]],
         warnings: list[str],
+        diagnostics: list[dict[str, str]],
+        unit_diagnostics: list[dict[str, str]],
         detected_fields: list[str],
         row_count: int,
         config_path: Path | None,
@@ -260,6 +299,7 @@ class MetricsCollectionService:
             "config_path": to_manifest_path(config_path, self.root) if config_path else None,
             "config": config.to_summary() if config else None,
             "units": dict(config.units) if config else {},
+            "groups": dict(config.groups) if config else {},
             "candidate_count": len(candidates),
             "candidates": [
                 {
@@ -278,11 +318,15 @@ class MetricsCollectionService:
                     "source_provenance": item.source_provenance,
                     "detected_fields": item.detected_fields,
                     "mapped_fields": item.mapped_fields,
+                    "matched_source_fields": item.matched_source_fields,
                 }
                 for item in collected_files
             ],
             "skipped_files": skipped_files,
             "warnings": warnings,
+            "diagnostics": diagnostics,
+            "unit_diagnostics": unit_diagnostics,
+            "matched_source_fields": _merge_matched_source_fields(collected_files),
             "row_count": row_count,
             "detected_fields": detected_fields,
             "output_files": [to_manifest_path(path, self.root) for path in outputs] if row_count else [],
@@ -363,6 +407,7 @@ def _configured_candidates(
     root: Path,
     record: TaskRecord,
     patterns: tuple[str, ...],
+    exclude_patterns: tuple[str, ...] = (),
 ) -> tuple[list[CandidateFile], list[str], list[dict[str, str]]]:
     selected: dict[str, CandidateFile] = {}
     warnings: list[str] = []
@@ -370,25 +415,39 @@ def _configured_candidates(
     allowed_files = _allowed_source_files(root, record)
 
     for pattern in patterns:
+        if _pattern_outside_workspace(root, pattern):
+            message = f"Configured source is outside the workspace: {pattern}"
+            warnings.append(message)
+            skipped_files.append({"source_file": pattern, "reason": "outside_workspace", "message": message})
+            continue
         matches = _resolve_source_pattern(root, pattern)
         if not matches:
-            warnings.append(f"Configured source matched no files: {pattern}")
-            skipped_files.append({"source_file": pattern, "reason": "configured_source_missing"})
+            message = f"Configured source matched no files: {pattern}"
+            warnings.append(message)
+            skipped_files.append({"source_file": pattern, "reason": "configured_source_missing", "message": message})
             continue
 
         for path in matches:
             source_file = to_manifest_path(path, root)
-            if path.suffix.lower() not in SUPPORTED_SUFFIXES:
-                warnings.append(f"Configured source is not a supported CSV/JSON file: {source_file}")
-                skipped_files.append({"source_file": source_file, "reason": "unsupported_configured_source"})
+            if _matches_any_source_pattern(root, path, exclude_patterns):
+                skipped_files.append({"source_file": source_file, "reason": "configured_source_excluded"})
                 continue
             if not _is_within(path, root):
-                warnings.append(f"Configured source is outside the workspace: {source_file}")
-                skipped_files.append({"source_file": source_file, "reason": "outside_workspace"})
+                message = f"Configured source is outside the workspace: {source_file}"
+                warnings.append(message)
+                skipped_files.append({"source_file": source_file, "reason": "outside_workspace", "message": message})
+                continue
+            if path.suffix.lower() not in SUPPORTED_SUFFIXES:
+                message = f"Configured source is not a supported CSV/JSON file: {source_file}"
+                warnings.append(message)
+                skipped_files.append(
+                    {"source_file": source_file, "reason": "unsupported_configured_source", "message": message}
+                )
                 continue
             if allowed_files is not None and path.resolve().as_posix() not in allowed_files:
-                warnings.append(f"Configured source is not part of this task source refs: {source_file}")
-                skipped_files.append({"source_file": source_file, "reason": "not_in_source_refs"})
+                message = f"Configured source is not part of this task source refs: {source_file}"
+                warnings.append(message)
+                skipped_files.append({"source_file": source_file, "reason": "not_in_source_refs", "message": message})
                 continue
             selected[path.resolve().as_posix()] = CandidateFile(path=path.resolve(), origin="config")
 
@@ -417,6 +476,11 @@ def _allowed_source_files(root: Path, record: TaskRecord) -> set[str] | None:
     if refs.get("source_type") == "file" and isinstance(refs.get("source_path"), str):
         files.append(refs["source_path"])
     elif refs.get("source_type") == "directory":
+        candidate_refs = refs.get("candidate_file_refs")
+        if isinstance(candidate_refs, list):
+            for item in candidate_refs:
+                if isinstance(item, dict) and isinstance(item.get("path"), str):
+                    files.append(item["path"])
         candidate_files = refs.get("candidate_files")
         if isinstance(candidate_files, list):
             files.extend(item for item in candidate_files if isinstance(item, str))
@@ -463,6 +527,47 @@ def _has_glob_magic(value: str) -> bool:
     return any(char in value for char in "*?[")
 
 
+def _pattern_outside_workspace(root: Path, pattern: str) -> bool:
+    prefix = _static_pattern_prefix(root, pattern)
+    return not _is_within(prefix, root)
+
+
+def _static_pattern_prefix(root: Path, pattern: str) -> Path:
+    path = Path(pattern)
+    if not _has_glob_magic(pattern):
+        return path.resolve() if path.is_absolute() else (root / path).resolve()
+    parts: list[str] = []
+    for part in path.parts:
+        if _has_glob_magic(part):
+            break
+        parts.append(part)
+    if not parts:
+        return root.resolve()
+    prefix = Path(*parts)
+    return prefix.resolve() if prefix.is_absolute() else (root / prefix).resolve()
+
+
+def _matches_any_source_pattern(root: Path, path: Path, patterns: tuple[str, ...]) -> bool:
+    if not patterns:
+        return False
+    resolved = path.resolve()
+    try:
+        relative = resolved.relative_to(root.resolve()).as_posix()
+    except ValueError:
+        relative = resolved.as_posix()
+    for pattern in patterns:
+        normalized = pattern.replace("\\", "/")
+        pattern_path = Path(pattern)
+        if pattern_path.is_absolute():
+            base_pattern = pattern_path.as_posix()
+            if fnmatch.fnmatch(resolved.as_posix(), base_pattern):
+                return True
+            continue
+        if fnmatch.fnmatch(relative, normalized):
+            return True
+    return False
+
+
 def _read_candidate_rows(candidate: CandidateFile) -> tuple[list[dict[str, object]], list[str]]:
     suffix = candidate.path.suffix.lower()
     if suffix == ".csv":
@@ -506,6 +611,134 @@ def _merge_detected_fields(collected_files: list[_CollectedFile]) -> list[str]:
             if field_name not in fields:
                 fields.append(field_name)
     return fields
+
+
+def _merge_matched_source_fields(collected_files: list[_CollectedFile]) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {}
+    for item in collected_files:
+        for target, source_fields in item.matched_source_fields.items():
+            target_fields = merged.setdefault(target, [])
+            for source_field in source_fields:
+                _append_unique(target_fields, source_field)
+    return merged
+
+
+def _diagnostics_from_skipped_files(skipped_files: list[dict[str, str]]) -> list[dict[str, str]]:
+    diagnostics: list[dict[str, str]] = []
+    for item in skipped_files:
+        if item.get("message"):
+            diagnostics.append(
+                {
+                    "source_file": item.get("source_file", ""),
+                    "reason": item.get("reason", ""),
+                    "message": item["message"],
+                }
+            )
+    return diagnostics
+
+
+def _append_unique(items: list[str], item: str) -> None:
+    if item not in items:
+        items.append(item)
+
+
+def _unit_diagnostics(
+    config: MetricsCollectionConfig,
+    collected_files: list[_CollectedFile],
+) -> list[dict[str, str]]:
+    diagnostics: list[dict[str, str]] = []
+    matched = _merge_matched_source_fields(collected_files)
+    for mapping in config.field_mappings:
+        source_fields = matched.get(mapping.target, [])
+        source_units = _named_source_units(source_fields)
+        unit_values = sorted(set(source_units.values()))
+        if len(unit_values) > 1:
+            diagnostics.append(
+                {
+                    "reason": "mixed_source_units",
+                    "field": mapping.target,
+                    "source_fields": ", ".join(source_fields),
+                    "message": (
+                        f"Mapped field '{mapping.target}' matched source fields with mixed unit suffixes: "
+                        f"{_format_source_units(source_units)}."
+                    ),
+                }
+            )
+            continue
+
+        configured_unit = mapping.unit
+        if configured_unit and source_units:
+            inferred_units = set(source_units.values())
+            if len(inferred_units) == 1:
+                inferred_unit = next(iter(inferred_units))
+                if _canonical_unit(configured_unit) != inferred_unit:
+                    diagnostics.append(
+                        {
+                            "reason": "configured_unit_conflict",
+                            "field": mapping.target,
+                            "source_fields": ", ".join(source_fields),
+                            "message": (
+                                f"Configured unit for '{mapping.target}' is '{configured_unit}', "
+                                f"but matched source field(s) suggest '{inferred_unit}': "
+                                f"{', '.join(source_fields)}."
+                            ),
+                        }
+                    )
+    return diagnostics
+
+
+def _named_source_units(source_fields: list[str]) -> dict[str, str]:
+    units: dict[str, str] = {}
+    for field_name in source_fields:
+        unit = _field_unit_suffix(field_name)
+        if unit:
+            units[field_name] = unit
+    return units
+
+
+def _field_unit_suffix(field_name: str) -> str | None:
+    normalized = field_name.strip().lower()
+    suffixes = (
+        ("_milliseconds", "ms"),
+        ("_millisecond", "ms"),
+        ("_ms", "ms"),
+        ("_seconds", "s"),
+        ("_second", "s"),
+        ("_secs", "s"),
+        ("_sec", "s"),
+        ("_s", "s"),
+        ("_mb", "mb"),
+        ("_megabytes", "mb"),
+        ("_megabyte", "mb"),
+        ("_gb", "gb"),
+        ("_gigabytes", "gb"),
+        ("_gigabyte", "gb"),
+    )
+    for suffix, unit in suffixes:
+        if normalized.endswith(suffix):
+            return unit
+    return None
+
+
+def _canonical_unit(unit: str) -> str:
+    normalized = unit.strip().lower()
+    aliases = {
+        "millisecond": "ms",
+        "milliseconds": "ms",
+        "second": "s",
+        "seconds": "s",
+        "sec": "s",
+        "secs": "s",
+        "megabyte": "mb",
+        "megabytes": "mb",
+        "gigabyte": "gb",
+        "gigabytes": "gb",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _format_source_units(source_units: dict[str, str]) -> str:
+    return ", ".join(f"{source}={unit}" for source, unit in sorted(source_units.items()))
 
 
 def _upsert_artifact(record: TaskRecord, artifact: ArtifactRecord) -> None:

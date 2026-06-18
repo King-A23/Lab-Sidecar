@@ -61,8 +61,8 @@ def _render_line(df: pd.DataFrame, spec: FigureSpec, png_path: Path, svg_path: P
             ax.plot(series[spec.x], series[spec.y], marker="o", linewidth=2, color=PALETTE[0])
 
         ax.set_title(spec.title)
-        ax.set_xlabel(_axis_label(spec.x))
-        ax.set_ylabel(_axis_label(spec.y))
+        ax.set_xlabel(_axis_label(spec, spec.x))
+        ax.set_ylabel(_axis_label(spec, spec.y))
         ax.grid(True, color="#E5E5E5", linewidth=0.8)
         fig.tight_layout()
         _save(fig, png_path, svg_path)
@@ -89,8 +89,8 @@ def _render_bar(df: pd.DataFrame, spec: FigureSpec, png_path: Path, svg_path: Pa
         colors = [PALETTE[index % len(PALETTE)] for index in range(len(grouped))]
         ax.bar(grouped[spec.x], grouped[spec.y], color=colors)
         ax.set_title(spec.title)
-        ax.set_xlabel(_axis_label(spec.x))
-        ax.set_ylabel(_axis_label(spec.y))
+        ax.set_xlabel(_axis_label(spec, spec.x))
+        ax.set_ylabel(_axis_label(spec, spec.y))
         ax.grid(True, axis="y", color="#E5E5E5", linewidth=0.8)
         ax.set_axisbelow(True)
         if len(grouped) > 4:
@@ -121,8 +121,12 @@ def _save(fig, png_path: Path, svg_path: Path) -> None:
     fig.savefig(svg_path, bbox_inches="tight", facecolor="white")
 
 
-def _axis_label(value: str) -> str:
-    return friendly_label(value)
+def _axis_label(spec: FigureSpec, value: str) -> str:
+    label = friendly_label(value)
+    unit = spec.units.get(value)
+    if unit and f"({unit})" not in label:
+        return f"{label} ({unit})"
+    return label
 
 
 def _legend_label(value: object, group_by: str) -> str:

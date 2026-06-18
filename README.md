@@ -106,6 +106,43 @@ python -m lab_sidecar.cli.app report "$TASK_ID"
 python -m lab_sidecar.cli.app slides "$TASK_ID"
 ```
 
+For nested or messy result directories, keep discovery explicit with
+`collect --config`. The older config shapes still work, including
+`sources: results.csv`, `sources: [results/*.csv]`, `fields: {accuracy:
+score_pct}`, and top-level `units`. Stage 3 also supports include/exclude
+source lists and field alias lists:
+
+```yaml
+sources:
+  include:
+    - messy-results/**/*.csv
+  exclude:
+    - messy-results/**/debug*.csv
+    - messy-results/**/scratch/*
+fields:
+  epoch:
+    sources: [epoch, step, iter]
+  method:
+    sources: [model, method, algo, variant]
+  seed:
+    sources: [seed, trial, run_id]
+  accuracy:
+    sources: [val_accuracy, score_pct, acc]
+    unit: ratio
+  latency_ms:
+    sources: [runtime_ms, latency_ms, time_ms]
+    unit: ms
+groups:
+  primary: method
+  secondary: seed
+```
+
+Configured sources must stay inside the local workspace and, for ingested
+tasks, inside the ingested source refs. Missing sources, missing mapped
+fields, unsupported file types, excluded files, and unit conflicts are recorded
+in `metrics/collection-summary.json`. Lab-Sidecar does not recursively scan
+entire workspaces by default and does not convert units automatically.
+
 To compare a small set of collected local tasks, pass two to five task ids:
 
 ```bash

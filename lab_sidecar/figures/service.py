@@ -83,7 +83,8 @@ class FigureGenerationService:
         summary_path = figures_dir / "figure-summary.json"
 
         df = self._read_metrics(metrics_path)
-        plan = self._build_plan(df, explicit_spec)
+        metrics_metadata = _read_metrics_summary(task_path)
+        plan = self._build_plan(df, explicit_spec, metrics_metadata)
         if not plan.specs:
             summary = self._build_summary(
                 record=record,
@@ -93,6 +94,7 @@ class FigureGenerationService:
                 errors=plan.errors,
                 metrics_path=metrics_path,
                 spec_input_path=spec_path,
+                metrics_metadata=metrics_metadata,
             )
             _write_json(summary_path, summary)
             raise NoFiguresGeneratedError(
@@ -134,6 +136,7 @@ class FigureGenerationService:
                 errors=errors,
                 metrics_path=metrics_path,
                 spec_input_path=spec_path,
+                metrics_metadata=metrics_metadata,
             )
             _write_json(summary_path, summary)
             raise NoFiguresGeneratedError(
@@ -151,6 +154,8 @@ class FigureGenerationService:
                 "generated_at": _now_iso(),
                 "source_metrics": to_manifest_path(metrics_path, self.root),
                 "spec_input_path": to_manifest_path(spec_path, self.root) if spec_path else None,
+                "units": metrics_metadata["units"],
+                "groups": metrics_metadata["groups"],
                 "figures": [item.spec.to_dict() for item in generated],
                 "warnings": warnings,
                 "skipped_candidates": skipped_candidates,
@@ -165,6 +170,7 @@ class FigureGenerationService:
             errors=errors,
             metrics_path=metrics_path,
             spec_input_path=spec_path,
+            metrics_metadata=metrics_metadata,
         )
         _write_json(summary_path, summary)
 
@@ -198,10 +204,19 @@ class FigureGenerationService:
         except FigureSpecValidationError as exc:
             raise FigureSpecLoadError(str(exc)) from exc
 
-    def _build_plan(self, df: pd.DataFrame, explicit_spec: FigureSpec | None) -> FigurePlan:
+    def _build_plan(
+        self,
+        df: pd.DataFrame,
+        explicit_spec: FigureSpec | None,
+        metrics_metadata: dict[str, dict[str, str]],
+    ) -> FigurePlan:
         if explicit_spec is None:
-            return build_auto_figure_plan(df)
-        return build_explicit_figure_plan(df, explicit_spec)
+            return build_auto_figure_plan(
+                df,
+                units=metrics_metadata["units"],
+                groups=metrics_metadata["groups"],
+            )
+        return build_explicit_figure_plan(df, explicit_spec, units=metrics_metadata["units"])
 
     def _read_metrics(self, metrics_path: Path) -> pd.DataFrame:
         try:
@@ -221,6 +236,7 @@ class FigureGenerationService:
         errors: list[str],
         metrics_path: Path,
         spec_input_path: Path | None,
+        metrics_metadata: dict[str, dict[str, str]],
     ) -> dict[str, Any]:
         generated_figures = [
             {
@@ -232,6 +248,7 @@ class FigureGenerationService:
                 "x": item.spec.x,
                 "y": item.spec.y,
                 "group_by": item.spec.group_by,
+                "units": dict(item.spec.units),
             }
             for item in generated
         ]
@@ -244,6 +261,8 @@ class FigureGenerationService:
             "spec_path": to_manifest_path(spec_input_path, self.root) if spec_input_path else None,
             "source_metrics": to_manifest_path(metrics_path, self.root),
             "spec_input_path": to_manifest_path(spec_input_path, self.root) if spec_input_path else None,
+            "units": metrics_metadata["units"],
+            "groups": metrics_metadata["groups"],
             "figure_count": len(generated),
             "figures": [
                 {
@@ -254,6 +273,7 @@ class FigureGenerationService:
                     "x": item.spec.x,
                     "y": item.spec.y,
                     "group_by": item.spec.group_by,
+                    "units": dict(item.spec.units),
                 }
                 for item in generated
             ],
@@ -326,6 +346,23 @@ def _write_yaml(path: Path, data: dict[str, Any]) -> None:
 
 def _write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _read_metrics_summary(task_path: Path) -> dict[str, dict[str, str]]:
+    path = task_path / "metrics" / "collection-summary.json"
+    empty = {"units": {}, "groups": {}}
+    if not path.exists():
+        return empty
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return empty
+    units = data.get("units")
+    groups = data.get("groups")
+    return {
+        "units": {str(key): str(value) for key, value in units.items()} if isinstance(units, dict) else {},
+        "groups": {str(key): str(value) for key, value in groups.items()} if isinstance(groups, dict) else {},
+    }
 
 
 def _now_iso() -> str:

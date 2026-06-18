@@ -66,6 +66,42 @@ def assert_non_empty_file(path: Path) -> None:
     assert path.stat().st_size > 0
 
 
+def write_stage3_messy_results(workspace: Path) -> Path:
+    source = workspace / "messy-results"
+    (source / "baseline" / "seed_1").mkdir(parents=True)
+    (source / "baseline" / "seed_2").mkdir(parents=True)
+    (source / "baseline" / "seed_3").mkdir(parents=True)
+    (source / "candidate" / "seed_1").mkdir(parents=True)
+    (source / "candidate" / "seed_2").mkdir(parents=True)
+    (source / "candidate" / "seed_3").mkdir(parents=True)
+    (source / "debug").mkdir(parents=True)
+    (source / "scratch").mkdir(parents=True)
+
+    for method, start in [("baseline", 70), ("candidate", 78)]:
+        for seed in [1, 2, 3]:
+            (source / method / f"seed_{seed}" / "metrics.csv").write_text(
+                "\n".join(
+                    [
+                        "iter,algo,trial,score_pct,runtime_ms",
+                        f"1,{method},{seed},0.{start + seed},5{seed}",
+                        f"2,{method},{seed},0.{start + seed + 4},4{seed}",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+    (source / "debug" / "debug_metrics.csv").write_text(
+        "iter,algo,trial,score_pct,runtime_ms\n1,debug,0,0.01,999\n",
+        encoding="utf-8",
+    )
+    (source / "scratch" / "scratch.csv").write_text(
+        "iter,algo,trial,score_pct,runtime_ms\n1,scratch,0,0.02,999\n",
+        encoding="utf-8",
+    )
+    return source
+
+
 def assert_readable_deck(path: Path, min_slides: int = 5, max_slides: int = 8) -> Presentation:
     assert_non_empty_file(path)
     deck = Presentation(path)
@@ -1462,6 +1498,215 @@ def test_collect_and_figures_with_explicit_config_are_stable_and_reuse_mapped_fi
     assert artifact_ids.count("metrics_normalized_csv") == 1
     assert artifact_ids.count("figures_summary") == 1
     assert artifact_ids.count("figure_mapped_accuracy_png") == 1
+
+
+def test_collect_stage3_messy_nested_results_with_include_exclude_and_aliases(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    write_stage3_messy_results(tmp_path)
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "messy-results", "--name", "stage3 messy"]).output)
+    refs = json.loads(
+        (
+            tmp_path
+            / ".lab-sidecar"
+            / "tasks"
+            / task_id
+            / "raw"
+            / "source_refs.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert refs["candidate_file_count"] >= 8
+    assert any(item["path"].endswith("baseline/seed_1/metrics.csv") for item in refs["candidate_file_refs"])
+    assert "messy-results/baseline/seed_1/metrics.csv" not in refs["candidate_files"]
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  include:",
+                "    - messy-results/**/*.csv",
+                "  exclude:",
+                "    - messy-results/debug/*.csv",
+                "    - messy-results/scratch/*",
+                "fields:",
+                "  epoch:",
+                "    sources: [epoch, step, iter]",
+                "  method:",
+                "    sources: [model, method, algo, variant]",
+                "  seed:",
+                "    sources: [seed, trial, run_id]",
+                "  accuracy:",
+                "    sources: [val_accuracy, score_pct, acc]",
+                "    unit: ratio",
+                "  latency_ms:",
+                "    sources: [runtime_ms, latency_ms, time_ms]",
+                "    unit: ms",
+                "groups:",
+                "  primary: method",
+                "  secondary: seed",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "figure.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: messy_accuracy",
+                "chart_type: line",
+                "title: Messy Accuracy",
+                "x: epoch",
+                "y: accuracy",
+                "group_by: method",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    rows = read_csv_rows(task_path / "metrics" / "normalized_metrics.csv")
+    assert len(rows) == 12
+    assert {"source_file", "epoch", "method", "seed", "accuracy", "latency_ms"}.issubset(rows[0])
+    assert {row["method"] for row in rows} == {"baseline", "candidate"}
+    assert {row["seed"] for row in rows} == {"1", "2", "3"}
+    assert not any("debug" in row["source_file"] or "scratch" in row["source_file"] for row in rows)
+
+    summary = json.loads((task_path / "metrics" / "collection-summary.json").read_text(encoding="utf-8"))
+    assert summary["candidate_count"] == 6
+    assert summary["units"] == {"accuracy": "ratio", "latency_ms": "ms"}
+    assert summary["groups"] == {"primary": "method", "secondary": "seed"}
+    assert summary["matched_source_fields"] == {
+        "epoch": ["iter"],
+        "method": ["algo"],
+        "seed": ["trial"],
+        "accuracy": ["score_pct"],
+        "latency_ms": ["runtime_ms"],
+    }
+    skipped = {(Path(item["source_file"]).name, item["reason"]) for item in summary["skipped_files"]}
+    assert ("debug_metrics.csv", "configured_source_excluded") in skipped
+    assert ("scratch.csv", "configured_source_excluded") in skipped
+    assert summary["unit_diagnostics"] == []
+
+    figures = invoke(tmp_path, ["figures", task_id, "--spec", "figure.yaml"])
+
+    assert figures.exit_code == 0
+    assert_non_empty_file(task_path / "figures" / "messy_accuracy.png")
+    assert_non_empty_file(task_path / "figures" / "messy_accuracy.svg")
+    figure_summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    assert figure_summary["units"] == {"accuracy": "ratio", "latency_ms": "ms"}
+    assert figure_summary["groups"] == {"primary": "method", "secondary": "seed"}
+    assert figure_summary["generated_figures"][0]["units"] == {"accuracy": "ratio"}
+    assert figure_summary["generated_figures"][0]["group_by"] == "method"
+
+
+def test_collect_stage3_missing_configured_source_and_not_in_refs_are_diagnosed(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "ingested-results"
+    source.mkdir()
+    (source / "metrics.csv").write_text("iter,score\n1,0.8\n", encoding="utf-8")
+    outside_ingest = tmp_path / "outside-ingest.csv"
+    outside_ingest.write_text("iter,score\n1,0.9\n", encoding="utf-8")
+    outside_workspace = tmp_path.parent / f"outside-workspace-{tmp_path.name}.csv"
+    outside_workspace.write_text("iter,score\n1,0.9\n", encoding="utf-8")
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "ingested-results"]).output)
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  include:",
+                "    - ingested-results/missing.csv",
+                f"    - {outside_workspace.as_posix()}",
+                "    - outside-ingest.csv",
+                "fields:",
+                "  epoch: iter",
+                "  accuracy: score",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    try:
+        result = invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"])
+    finally:
+        outside_workspace.unlink(missing_ok=True)
+
+    assert result.exit_code == 5
+    assert "missing.csv" in result.output
+    assert "outside the workspace" in result.output
+    assert "source refs" in result.output
+    summary = json.loads(
+        (
+            tmp_path
+            / ".lab-sidecar"
+            / "tasks"
+            / task_id
+            / "metrics"
+            / "collection-summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    reasons = {item["reason"] for item in summary["skipped_files"]}
+    assert {"configured_source_missing", "outside_workspace", "not_in_source_refs"}.issubset(reasons)
+    diagnostic_reasons = {item["reason"] for item in summary["diagnostics"]}
+    assert {"configured_source_missing", "outside_workspace", "not_in_source_refs"}.issubset(
+        diagnostic_reasons
+    )
+    assert summary["row_count"] == 0
+
+
+def test_collect_stage3_unit_conflicts_are_recorded(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "unit-results"
+    source.mkdir()
+    (source / "run_a.csv").write_text(
+        "iter,algo,trial,runtime_ms\n1,baseline,1,25\n",
+        encoding="utf-8",
+    )
+    (source / "run_b.csv").write_text(
+        "iter,algo,trial,runtime_s\n1,candidate,1,0.02\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "unit-results"]).output)
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - unit-results/*.csv",
+                "fields:",
+                "  epoch: iter",
+                "  method: algo",
+                "  seed: trial",
+                "  latency_ms:",
+                "    sources: [runtime_ms, runtime_s]",
+                "    unit: ms",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"])
+
+    assert result.exit_code == 0
+    summary = json.loads(
+        (
+            tmp_path
+            / ".lab-sidecar"
+            / "tasks"
+            / task_id
+            / "metrics"
+            / "collection-summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert summary["units"] == {"latency_ms": "ms"}
+    assert summary["matched_source_fields"]["latency_ms"] == ["runtime_ms", "runtime_s"]
+    assert summary["unit_diagnostics"]
+    assert summary["unit_diagnostics"][0]["reason"] == "mixed_source_units"
+    assert "runtime_ms=ms" in summary["unit_diagnostics"][0]["message"]
+    assert "runtime_s=s" in summary["unit_diagnostics"][0]["message"]
+    assert any("mixed unit suffixes" in warning for warning in summary["warnings"])
 
 
 def test_figures_csv_comparison_after_collect_generates_png_svg_and_spec(tmp_path: Path) -> None:
