@@ -10,6 +10,9 @@ from typing import Any
 
 from lab_sidecar.core.models import TaskRecord, TaskStatus
 from lab_sidecar.core.paths import resolve_workspace_path, sqlite_path
+from lab_sidecar.core.traceability import TRACEABILITY_RELATIVE_PATH, refresh_traceability
+from lab_sidecar.core.manifest import manifest_path, write_manifest
+from lab_sidecar.storage.sqlite_index import upsert_task
 
 
 PACKAGE_SCHEMA_VERSION = "1"
@@ -57,6 +60,7 @@ PACKAGE_FILE_SPECS = [
     PackageFileSpec(Path("reports/report-summary.json"), "reports", "Report generation summary."),
     PackageFileSpec(Path("slides/presentation-draft.pptx"), "slides", "Generated editable slide deck."),
     PackageFileSpec(Path("slides/slides-summary.json"), "slides", "Slide generation summary."),
+    PackageFileSpec(TRACEABILITY_RELATIVE_PATH, "provenance", "Task-local traceability evidence."),
 ]
 
 
@@ -64,6 +68,10 @@ def export_task_package(root: Path, record: TaskRecord, output_dir: Path) -> Pac
     root = root.resolve()
     task_path = resolve_workspace_path(record.paths.task_dir, root)
     output_path = _prepare_output_dir(root, output_dir)
+
+    record = refresh_traceability(root, record)
+    write_manifest(manifest_path(root, record.task_id), record)
+    upsert_task(root, record)
 
     included: list[dict[str, Any]] = []
     unavailable: list[dict[str, Any]] = []
@@ -111,7 +119,6 @@ def export_task_package(root: Path, record: TaskRecord, output_dir: Path) -> Pac
         }
 
         _write_json(output_path / "package-summary.json", summary)
-        _write_json(output_path / "artifact-index.json", artifact_index)
         (output_path / "redaction-notes.md").write_text(
             _redaction_notes(record, omitted, unavailable),
             encoding="utf-8",
@@ -120,6 +127,8 @@ def export_task_package(root: Path, record: TaskRecord, output_dir: Path) -> Pac
             _readme(record, summary, included, omitted, unavailable),
             encoding="utf-8",
         )
+        artifact_index["package_metadata"] = _package_metadata_entries(output_path)
+        _write_json(output_path / "artifact-index.json", artifact_index)
     except OSError as exc:
         raise PackageExportError(str(exc)) from exc
 
@@ -185,6 +194,37 @@ def _copy_file(source: Path, destination: Path, spec: PackageFileSpec) -> dict[s
         "description": spec.description,
         "size_bytes": destination.stat().st_size,
         "sha256": _sha256(destination),
+    }
+
+
+def _package_metadata_entries(output_path: Path) -> list[dict[str, Any]]:
+    entries = [
+        _package_metadata_entry(output_path / "README.md", "Package README."),
+        _package_metadata_entry(output_path / "package-summary.json", "Package summary metadata."),
+        _package_metadata_entry(output_path / "redaction-notes.md", "Package redaction and omission notes."),
+    ]
+    entries.append(
+        {
+            "path": "artifact-index.json",
+            "package_path": "artifact-index.json",
+            "category": "package_metadata",
+            "description": "Package artifact index.",
+            "size_bytes": None,
+            "sha256": None,
+            "digest_omitted_reason": "artifact-index.json is self-referential; hash the file after package creation if an external digest is required",
+        }
+    )
+    return entries
+
+
+def _package_metadata_entry(path: Path, description: str) -> dict[str, Any]:
+    return {
+        "path": path.name,
+        "package_path": path.name,
+        "category": "package_metadata",
+        "description": description,
+        "size_bytes": path.stat().st_size,
+        "sha256": _sha256(path),
     }
 
 

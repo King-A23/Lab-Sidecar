@@ -91,9 +91,12 @@ Expected files:
   reports/report-fragment.md
   slides/presentation-draft.pptx
   slides/slides-summary.json
+  provenance/traceability.json
 ```
 
-The `package` command creates a shareable, inspectable single-task folder with `README.md`, `manifest.json`, `package-summary.json`, `artifact-index.json`, `redaction-notes.md`, reproduce metadata, and generated metrics/figures/report/slides artifacts when present. By default it does not copy full `stdout.log` or `stderr.log`, raw source files, `.lab-sidecar/index.sqlite`, worker prompt/response bodies, temporary sandbox files, or unrelated workspace files. Failed tasks package as diagnostic folders and are labeled as failed-task diagnostics, not successful experiment summaries.
+The task-local `provenance/traceability.json` file is refreshed as metrics, figures, reports, slides, or packages are generated. It records source references, generated artifact hashes/sizes, metric lineage, figure lineage, report claim traces, slide evidence, reproduce metadata pointers, and omission notes without embedding full logs, full metric rows, report bodies, PPTX contents, worker prompt/response bodies, raw source files, or SQLite.
+
+The `package` command creates a shareable, inspectable single-task folder with `README.md`, `manifest.json`, `package-summary.json`, `artifact-index.json`, `redaction-notes.md`, reproduce metadata, task-local traceability evidence, and generated metrics/figures/report/slides artifacts when present. By default it does not copy full `stdout.log` or `stderr.log`, raw source files, `.lab-sidecar/index.sqlite`, worker prompt/response bodies, temporary sandbox files, or unrelated workspace files. Failed tasks package as diagnostic folders and are labeled as failed-task diagnostics, not successful experiment summaries.
 
 For an existing-results path, try:
 
@@ -196,10 +199,11 @@ Lab-Sidecar keeps generated artifacts under `.lab-sidecar/` and does not move, d
       figures/
       reports/
       slides/
+      provenance/
       reproduce/
 ```
 
-SQLite is only an index. The task-local `manifest.json` and artifact files are the record to inspect or share after redaction.
+SQLite is only an index. The task-local `manifest.json`, generated summaries, and `provenance/traceability.json` are the record to inspect or share after redaction. Traceability explains where recorded values came from; it does not add statistical significance, model ranking, or automatic scientific interpretation.
 
 ## Codex And MCP
 

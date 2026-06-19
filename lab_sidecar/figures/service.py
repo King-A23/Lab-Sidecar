@@ -12,6 +12,7 @@ import yaml
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
+from lab_sidecar.core.traceability import refresh_traceability
 from lab_sidecar.figures.render import render_figure
 from lab_sidecar.figures.specs import (
     FigurePlan,
@@ -97,6 +98,11 @@ class FigureGenerationService:
                 metrics_metadata=metrics_metadata,
             )
             _write_json(summary_path, summary)
+            self._upsert_summary_artifact(record, summary_path, metrics_path)
+            record.updated_at = _now_iso()
+            record = refresh_traceability(self.root, record)
+            write_manifest(manifest_path(self.root, task_id), record)
+            upsert_task(self.root, record)
             raise NoFiguresGeneratedError(
                 "no supported chart could be generated",
                 plan.warnings,
@@ -139,6 +145,11 @@ class FigureGenerationService:
                 metrics_metadata=metrics_metadata,
             )
             _write_json(summary_path, summary)
+            self._upsert_summary_artifact(record, summary_path, metrics_path)
+            record.updated_at = _now_iso()
+            record = refresh_traceability(self.root, record)
+            write_manifest(manifest_path(self.root, task_id), record)
+            upsert_task(self.root, record)
             raise NoFiguresGeneratedError(
                 "all planned figures failed to render",
                 warnings,
@@ -176,6 +187,7 @@ class FigureGenerationService:
 
         self._upsert_artifacts(record, generated, output_spec_path, summary_path, metrics_path)
         record.updated_at = _now_iso()
+        record = refresh_traceability(self.root, record)
         write_manifest(manifest_path(self.root, task_id), record)
         upsert_task(self.root, record)
         return FigureGenerationResult(
@@ -323,6 +335,14 @@ class FigureGenerationService:
                 source_paths=source_paths,
             ),
         )
+        self._upsert_summary_artifact(record, summary_path, metrics_path)
+
+    def _upsert_summary_artifact(
+        self,
+        record: TaskRecord,
+        summary_path: Path,
+        metrics_path: Path,
+    ) -> None:
         _upsert_artifact(
             record,
             ArtifactRecord(
@@ -330,7 +350,7 @@ class FigureGenerationService:
                 type="config",
                 path=to_manifest_path(summary_path, self.root),
                 description="Figure generation summary and warnings",
-                source_paths=source_paths,
+                source_paths=[to_manifest_path(metrics_path, self.root)],
             ),
         )
 

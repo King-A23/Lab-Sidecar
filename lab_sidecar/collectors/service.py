@@ -21,6 +21,7 @@ from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
 from lab_sidecar.core.provenance import file_provenance
+from lab_sidecar.core.traceability import refresh_traceability
 from lab_sidecar.storage.sqlite_index import upsert_task
 
 
@@ -161,6 +162,7 @@ class MetricsCollectionService:
 
         if not rows:
             record.updated_at = _now_iso()
+            record = refresh_traceability(self.root, record)
             write_manifest(manifest_path(self.root, task_id), record)
             upsert_task(self.root, record)
             message = (
@@ -175,6 +177,7 @@ class MetricsCollectionService:
 
         self._upsert_metrics_artifacts(record, csv_path, json_path, summary_path, collected_files)
         record.updated_at = _now_iso()
+        record = refresh_traceability(self.root, record)
         write_manifest(manifest_path(self.root, task_id), record)
         upsert_task(self.root, record)
 

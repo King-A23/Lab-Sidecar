@@ -17,6 +17,7 @@ from pptx.util import Inches, Pt
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord, TaskStatus
 from lab_sidecar.core.paths import resolve_workspace_path
+from lab_sidecar.core.traceability import refresh_traceability
 from lab_sidecar.storage.sqlite_index import upsert_task
 
 
@@ -117,6 +118,8 @@ class SlideRecord:
     title: str
     purpose: str
     source_artifacts: list[str] = field(default_factory=list)
+    evidence: list[dict[str, Any]] = field(default_factory=list)
+    empty_source_reason: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -124,6 +127,8 @@ class SlideRecord:
             "title": self.title,
             "purpose": self.purpose,
             "source_artifacts": self.source_artifacts,
+            "evidence": self.evidence,
+            "empty_source_reason": self.empty_source_reason,
         }
 
 
@@ -186,6 +191,7 @@ class SlidesGenerationService:
 
         self._upsert_artifacts(record, context["source_artifacts"])
         record.updated_at = _now_iso()
+        record = refresh_traceability(self.root, record)
         write_manifest(manifest_path(self.root, task_id), record)
         upsert_task(self.root, record)
 
@@ -640,6 +646,8 @@ class SlidesGenerationService:
             "table_truncations": context["table_truncations"],
             "key_comparisons": context["key_comparisons"],
             "caption_truncations": context["caption_truncations"],
+            "slide_evidence": _slide_claim_traces(context.get("slides", [])),
+            "claim_traces": _build_slide_claim_traces(context),
             "qa_checks": self._build_qa_checks(record, context, presentation),
             "slides": [slide.to_dict() for slide in context.get("slides", [])],
             "report_excerpt": context["report_excerpt"],
@@ -1231,7 +1239,20 @@ class _PresentationBuilder:
         danger: bool = False,
     ):
         slide = self.prs.slides.add_slide(self.prs.slide_layouts[6])
-        self.slide_records.append(SlideRecord(len(self.slide_records) + 1, title, purpose, sources))
+        self.slide_records.append(
+            SlideRecord(
+                len(self.slide_records) + 1,
+                title,
+                purpose,
+                [source for source in sources if source],
+                evidence=_evidence_for_slide(
+                    purpose=purpose,
+                    sources=sources,
+                    context=self.context,
+                ),
+                empty_source_reason=_empty_source_reason(sources, purpose),
+            )
+        )
         fill = slide.background.fill
         fill.solid()
         fill.fore_color.rgb = RGBColor(30, 41, 59) if dark else self.bg
@@ -1428,6 +1449,280 @@ def _read_json(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _evidence_for_slide(purpose: str, sources: list[str], context: dict[str, Any]) -> list[dict[str, Any]]:
+    clean_sources = [source for source in sources if source]
+    evidence: list[dict[str, Any]] = []
+    lower_purpose = purpose.lower()
+    for source in clean_sources:
+        item: dict[str, Any] = {
+            "path": source,
+            "artifact_id": _artifact_id_for_source(source),
+            "role": _evidence_role(source, lower_purpose),
+        }
+        if source == "metrics/normalized_metrics.csv":
+            metrics = context.get("metrics_summary") or {}
+            item.update(
+                {
+                    "row_count": metrics.get("row_count"),
+                    "columns": metrics.get("columns") or [],
+                }
+            )
+        if source == "figures/figure-summary.json":
+            item["figure_ids"] = [figure.figure_id for figure in context.get("figure_items", [])]
+        if source.endswith(".png"):
+            figure = _find_figure_for_source(source, context.get("figure_items", []), context["task_path"])
+            if figure:
+                item.update(
+                    {
+                        "figure_id": figure.figure_id,
+                        "source_metrics": figure.source_metrics,
+                        "columns": [value for value in [figure.x, figure.y, figure.group_by] if value],
+                    }
+                )
+        if source == "reports/report-fragment.md":
+            item["excerpt_count"] = len(context.get("report_excerpt") or [])
+        if source in {"stdout.log", "stderr.log"}:
+            item["body"] = "omitted"
+            item["tail_line_count"] = len(context.get("stdout_tail" if source == "stdout.log" else "stderr_tail") or [])
+        evidence.append(item)
+
+    if "metrics table" in lower_purpose or "指标表格" in lower_purpose or "preview selected rows" in lower_purpose:
+        table_data = context.get("metrics_table") or {}
+        evidence.append(
+            {
+                "artifact_id": "metrics_normalized_csv",
+                "path": table_data.get("source_metrics") or "metrics/normalized_metrics.csv",
+                "role": "metrics_table_preview",
+                "shown_columns": table_data.get("shown_columns") or [],
+                "hidden_columns": table_data.get("hidden_columns") or [],
+                "displayed_row_count": table_data.get("displayed_row_count", 0),
+                "total_row_count": table_data.get("total_row_count", 0),
+                "omitted_row_count": table_data.get("omitted_row_count", 0),
+                "omitted_column_count": table_data.get("omitted_column_count", 0),
+            }
+        )
+    if "comparison" in lower_purpose or "对比" in lower_purpose:
+        comparison = context.get("key_comparison") or {}
+        evidence.append(
+            {
+                "artifact_id": "metrics_normalized_csv",
+                "path": comparison.get("source_metrics") or "metrics/normalized_metrics.csv",
+                "role": "key_comparison",
+                "metric": comparison.get("metric"),
+                "group_column": comparison.get("group_column"),
+                "baseline_present": comparison.get("baseline_item") is not None,
+                "delta_present": comparison.get("delta") is not None,
+                "reason": comparison.get("reason"),
+            }
+        )
+    return [item for item in evidence if item.get("path")]
+
+
+def _build_slide_claim_traces(context: dict[str, Any]) -> list[dict[str, Any]]:
+    traces: list[dict[str, Any]] = []
+    metrics = context.get("metrics_summary") or {}
+    if metrics.get("present"):
+        traces.append(
+            {
+                "claim_id": "slides.metrics.row_count",
+                "surface": "slides",
+                "claim_type": "metrics_row_count",
+                "value": metrics.get("row_count"),
+                "evidence": [
+                    {
+                        "artifact_id": "metrics_normalized_csv",
+                        "path": metrics.get("path") or "metrics/normalized_metrics.csv",
+                        "row_count": metrics.get("row_count"),
+                    }
+                ],
+            }
+        )
+        for item in metrics.get("numeric") or []:
+            if not isinstance(item, dict) or not item.get("column"):
+                continue
+            column = str(item["column"])
+            for operation in ["mean", "min", "max", "final"]:
+                traces.append(
+                    {
+                        "claim_id": f"slides.metric.{column}.{operation}",
+                        "surface": "slides",
+                        "claim_type": "numeric_summary",
+                        "operation": operation,
+                        "field": column,
+                        "value": item.get(operation),
+                        "evidence": [
+                            {
+                                "artifact_id": "metrics_normalized_csv",
+                                "path": metrics.get("path") or "metrics/normalized_metrics.csv",
+                                "columns": [column],
+                                "summary_operation": operation,
+                                "numeric_count": item.get("count"),
+                                "row_count": metrics.get("row_count"),
+                            }
+                        ],
+                    }
+                )
+    else:
+        traces.append(
+            {
+                "claim_id": "slides.metrics.unavailable",
+                "surface": "slides",
+                "claim_type": "unknown_or_unavailable",
+                "value": None,
+                "evidence": [
+                    {
+                        "artifact_id": "metrics_normalized_csv",
+                        "path": "metrics/normalized_metrics.csv",
+                        "reason": "metrics artifact not present",
+                    }
+                ],
+            }
+        )
+
+    table_data = context.get("metrics_table") or {}
+    if table_data.get("present"):
+        traces.append(
+            {
+                "claim_id": "slides.metrics.table_preview",
+                "surface": "slides",
+                "claim_type": "metrics_table_preview",
+                "value": {
+                    "displayed_row_count": table_data.get("displayed_row_count", 0),
+                    "total_row_count": table_data.get("total_row_count", 0),
+                    "shown_columns": table_data.get("shown_columns") or [],
+                    "hidden_column_count": len(table_data.get("hidden_columns") or []),
+                },
+                "evidence": [
+                    {
+                        "artifact_id": "metrics_normalized_csv",
+                        "path": table_data.get("source_metrics") or "metrics/normalized_metrics.csv",
+                        "shown_columns": table_data.get("shown_columns") or [],
+                        "hidden_columns": table_data.get("hidden_columns") or [],
+                        "displayed_row_count": table_data.get("displayed_row_count", 0),
+                        "total_row_count": table_data.get("total_row_count", 0),
+                    }
+                ],
+            }
+        )
+
+    comparison = context.get("key_comparison") or {}
+    traces.append(
+        {
+            "claim_id": "slides.key_comparison.status",
+            "surface": "slides",
+            "claim_type": "comparison_status",
+            "value": "available" if comparison.get("present") else "unsupported",
+            "evidence": [
+                {
+                    "artifact_id": "metrics_normalized_csv",
+                    "path": comparison.get("source_metrics") or "metrics/normalized_metrics.csv",
+                    "metric": comparison.get("metric"),
+                    "group_column": comparison.get("group_column"),
+                    "baseline_present": comparison.get("baseline_item") is not None,
+                    "delta_present": comparison.get("delta") is not None,
+                    "reason": comparison.get("reason"),
+                }
+            ],
+        }
+    )
+
+    if context.get("is_diagnostic"):
+        record: TaskRecord = context["record"]
+        traces.append(
+            {
+                "claim_id": f"slides.diagnostic.{record.status.value}_status",
+                "surface": "slides",
+                "claim_type": "diagnostic_status",
+                "value": record.status.value,
+                "evidence": [
+                    {
+                        "artifact_id": "log_stderr",
+                        "path": "stderr.log",
+                        "tail_line_count": len(context.get("stderr_tail") or []),
+                        "body": "omitted",
+                    },
+                    {
+                        "artifact_id": "log_stdout",
+                        "path": "stdout.log",
+                        "tail_line_count": len(context.get("stdout_tail") or []),
+                        "body": "omitted",
+                    },
+                ],
+            }
+        )
+    return traces
+
+
+def _slide_claim_traces(slides: list[SlideRecord]) -> list[dict[str, Any]]:
+    return [
+        {
+            "slide_index": slide.slide_index,
+            "title": slide.title,
+            "purpose": slide.purpose,
+            "evidence_count": len(slide.evidence),
+            "empty_source_reason": slide.empty_source_reason,
+        }
+        for slide in slides
+    ]
+
+
+def _find_figure_for_source(source: str, figures: list[FigureItem], task_path: Path) -> FigureItem | None:
+    for item in figures:
+        if _task_relative(item.path, task_path) == source:
+            return item
+    return None
+
+
+def _artifact_id_for_source(source: str) -> str:
+    if source == "manifest.json":
+        return "manifest_json"
+    if source == "metrics/normalized_metrics.csv":
+        return "metrics_normalized_csv"
+    if source == "metrics/collection-summary.json":
+        return "metrics_collection_summary"
+    if source == "figures/figure-summary.json":
+        return "figures_summary"
+    if source == "reports/report-fragment.md":
+        return "report_fragment_md"
+    if source == "reports/report-summary.json":
+        return "report_summary_json"
+    if source == "raw/source_refs.json":
+        return "raw_source_refs"
+    if source == "stdout.log":
+        return "log_stdout"
+    if source == "stderr.log":
+        return "log_stderr"
+    if source.startswith("reproduce/"):
+        return "reproduce_" + Path(source).stem
+    if source.endswith(".png"):
+        return f"figure_{Path(source).stem}_png"
+    if source.endswith(".svg"):
+        return f"figure_{Path(source).stem}_svg"
+    return Path(source).as_posix().replace("/", "_").replace(".", "_")
+
+
+def _evidence_role(source: str, purpose: str) -> str:
+    if source.endswith(".png"):
+        return "displayed_figure"
+    if source == "metrics/normalized_metrics.csv":
+        return "normalized_metrics"
+    if source == "reports/report-fragment.md":
+        return "report_excerpt"
+    if source in {"stdout.log", "stderr.log"}:
+        return "bounded_log_tail"
+    if "reproduce" in source:
+        return "reproduce_metadata"
+    if "diagnose" in purpose or "诊断" in purpose:
+        return "diagnostic_source"
+    return "source_artifact"
+
+
+def _empty_source_reason(sources: list[str], purpose: str) -> str | None:
+    if any(sources):
+        return None
+    return f"no source artifact was available for slide purpose: {purpose}"
 
 
 def _bounded_log_tail(path: Path, key: str, text_tracker: TextTracker) -> list[str]:

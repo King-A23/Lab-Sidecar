@@ -12,6 +12,7 @@ import pandas as pd
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord, TaskStatus
 from lab_sidecar.core.paths import resolve_workspace_path
+from lab_sidecar.core.traceability import refresh_traceability
 from lab_sidecar.reports.templates import SUPPORTED_TEMPLATES, UNKNOWN, render_report
 from lab_sidecar.storage.sqlite_index import upsert_task
 
@@ -81,6 +82,7 @@ class ReportGenerationService:
 
         self._upsert_artifacts(record, task_path)
         record.updated_at = _now_iso()
+        record = refresh_traceability(self.root, record)
         write_manifest(manifest_path(self.root, task_id), record)
         upsert_task(self.root, record)
 
@@ -106,6 +108,24 @@ class ReportGenerationService:
         reproduce_command_path = task_path / "reproduce" / "command.txt"
         generated_at = _now_iso()
         stderr_tail = _tail_lines(stderr_path, STDERR_TAIL_LINES)
+        source_artifacts = self._source_artifacts(task_path)
+        provenance = self._build_provenance(record)
+        metrics = self._build_metrics_summary(metrics_path, collection_summary_path)
+        figures = self._build_figure_summary(record.task_id, figure_summary_path, task_path, reports_dir)
+        failure = {
+            "failure_summary": record.failure_summary or UNKNOWN,
+            "stderr_tail": stderr_tail,
+            "stderr_tail_line_count": len(stderr_tail),
+            "reproduce_command_path": "reproduce/command.txt" if reproduce_command_path.exists() else UNKNOWN,
+        }
+        cancellation = {
+            "note": _first_matching_line(stderr_tail, "cancellation") or (stderr_tail[-1] if stderr_tail else UNKNOWN),
+            "stderr_tail": stderr_tail,
+            "stderr_tail_line_count": len(stderr_tail),
+        }
+        reproduce = {
+            "command_path": "reproduce/command.txt" if reproduce_command_path.exists() else UNKNOWN,
+        }
 
         return {
             "schema_version": "1",
@@ -114,25 +134,21 @@ class ReportGenerationService:
             "generated_at": generated_at,
             "report_path": "reports/report-fragment.md",
             "summary_path": "reports/report-summary.json",
-            "generated_from": self._source_artifacts(task_path),
-            "provenance": self._build_provenance(record),
-            "metrics": self._build_metrics_summary(metrics_path, collection_summary_path),
-            "figures": self._build_figure_summary(record.task_id, figure_summary_path, task_path, reports_dir),
-            "failure": {
-                "failure_summary": record.failure_summary or UNKNOWN,
-                "stderr_tail": stderr_tail,
-                "stderr_tail_line_count": len(stderr_tail),
-                "reproduce_command_path": "reproduce/command.txt" if reproduce_command_path.exists() else UNKNOWN,
-            },
-            "cancellation": {
-                "note": _first_matching_line(stderr_tail, "cancellation") or (stderr_tail[-1] if stderr_tail else UNKNOWN),
-                "stderr_tail": stderr_tail,
-                "stderr_tail_line_count": len(stderr_tail),
-            },
-            "reproduce": {
-                "command_path": "reproduce/command.txt" if reproduce_command_path.exists() else UNKNOWN,
-            },
-            "source_artifacts": self._source_artifacts(task_path),
+            "generated_from": source_artifacts,
+            "provenance": provenance,
+            "metrics": metrics,
+            "figures": figures,
+            "failure": failure,
+            "cancellation": cancellation,
+            "reproduce": reproduce,
+            "claim_traces": _build_report_claim_traces(
+                status=record.status,
+                metrics=metrics,
+                figures=figures,
+                failure=failure,
+                cancellation=cancellation,
+            ),
+            "source_artifacts": source_artifacts,
         }
 
     def _build_provenance(self, record: TaskRecord) -> dict[str, Any]:
@@ -290,6 +306,163 @@ def _numeric_summaries(df: pd.DataFrame) -> list[dict[str, Any]]:
             }
         )
     return summaries
+
+
+def _build_report_claim_traces(
+    status: TaskStatus,
+    metrics: dict[str, Any],
+    figures: dict[str, Any],
+    failure: dict[str, Any],
+    cancellation: dict[str, Any],
+) -> list[dict[str, Any]]:
+    traces: list[dict[str, Any]] = []
+    metrics_path = str(metrics.get("path") or "metrics/normalized_metrics.csv")
+    collection_path = metrics.get("collection_summary_path")
+    if metrics.get("present"):
+        row_count = int(metrics.get("row_count") or 0)
+        traces.append(
+            {
+                "claim_id": "report.metrics.row_count",
+                "surface": "report",
+                "claim_type": "metrics_row_count",
+                "value": row_count,
+                "evidence": [
+                    {
+                        "artifact_id": "metrics_normalized_csv",
+                        "path": metrics_path,
+                        "row_count": row_count,
+                    }
+                ],
+            }
+        )
+        traces.append(
+            {
+                "claim_id": "report.metrics.detected_fields",
+                "surface": "report",
+                "claim_type": "detected_fields",
+                "value": metrics.get("detected_fields") or [],
+                "evidence": [
+                    {
+                        "artifact_id": "metrics_collection_summary",
+                        "path": collection_path or "metrics/collection-summary.json",
+                        "field": "detected_fields",
+                    }
+                ],
+            }
+        )
+        if metrics.get("numeric_omitted_count", 0):
+            traces.append(
+                {
+                    "claim_id": "report.metrics.numeric_fields_omitted",
+                    "surface": "report",
+                    "claim_type": "omission",
+                    "value": int(metrics.get("numeric_omitted_count") or 0),
+                    "evidence": [
+                        {
+                            "artifact_id": "metrics_normalized_csv",
+                            "path": metrics_path,
+                            "reason": "numeric summary display limit",
+                        }
+                    ],
+                }
+            )
+        for item in metrics.get("numeric_summaries") or []:
+            if not isinstance(item, dict) or not item.get("column"):
+                continue
+            column = str(item["column"])
+            for operation in ["mean", "min", "max"]:
+                traces.append(
+                    {
+                        "claim_id": f"report.metric.{column}.{operation}",
+                        "surface": "report",
+                        "claim_type": "numeric_summary",
+                        "operation": operation,
+                        "field": column,
+                        "value": item.get(operation),
+                        "evidence": [
+                            {
+                                "artifact_id": "metrics_normalized_csv",
+                                "path": metrics_path,
+                                "columns": [column],
+                                "summary_operation": operation,
+                                "numeric_count": item.get("count"),
+                                "row_count": row_count,
+                            }
+                        ],
+                    }
+                )
+    else:
+        traces.append(
+            {
+                "claim_id": "report.metrics.unavailable",
+                "surface": "report",
+                "claim_type": "unknown_or_unavailable",
+                "value": None,
+                "evidence": [
+                    {
+                        "artifact_id": "metrics_normalized_csv",
+                        "path": metrics_path,
+                        "reason": "metrics artifact not present",
+                    }
+                ],
+            }
+        )
+
+    traces.append(
+        {
+            "claim_id": "report.figures.count",
+            "surface": "report",
+            "claim_type": "figure_count",
+            "value": int(figures.get("figure_count") or 0),
+            "evidence": [
+                {
+                    "artifact_id": "figures_summary",
+                    "path": figures.get("summary_path") or "figures/figure-summary.json",
+                    "figure_ids": [item.get("figure_id") for item in figures.get("items") or []],
+                }
+            ],
+        }
+    )
+
+    if status == TaskStatus.FAILED:
+        traces.append(
+            {
+                "claim_id": "report.diagnostic.failed_status",
+                "surface": "report",
+                "claim_type": "diagnostic_status",
+                "value": "failed",
+                "evidence": [
+                    {
+                        "artifact_id": "log_stderr",
+                        "path": "stderr.log",
+                        "tail_line_count": failure.get("stderr_tail_line_count", 0),
+                        "body": "omitted",
+                    },
+                    {
+                        "artifact_id": "reproduce_command",
+                        "path": failure.get("reproduce_command_path") or "reproduce/command.txt",
+                    },
+                ],
+            }
+        )
+    elif status == TaskStatus.CANCELLED:
+        traces.append(
+            {
+                "claim_id": "report.diagnostic.cancelled_status",
+                "surface": "report",
+                "claim_type": "diagnostic_status",
+                "value": "cancelled",
+                "evidence": [
+                    {
+                        "artifact_id": "log_stderr",
+                        "path": "stderr.log",
+                        "tail_line_count": cancellation.get("stderr_tail_line_count", 0),
+                        "body": "omitted",
+                    }
+                ],
+            }
+        )
+    return traces
 
 
 def _json_float(value: Any) -> float | None:

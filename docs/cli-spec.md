@@ -339,6 +339,7 @@ lab-sidecar-package-<task_id>/
   package-summary.json
   artifact-index.json
   redaction-notes.md
+  provenance/
   reproduce/
   metrics/
   figures/
@@ -354,9 +355,12 @@ lab-sidecar-package-<task_id>/
 - `figures/*.png`、`figures/*.svg`、`figures/figure-spec.yaml`、`figures/figure-summary.json`（若存在）
 - `reports/report-fragment.md`、`reports/report-summary.json`（若存在）
 - `slides/presentation-draft.pptx`、`slides/slides-summary.json`（若存在）
+- `provenance/traceability.json`（若可生成）
 - package 自身的 `README.md`、`package-summary.json`、`artifact-index.json`、`redaction-notes.md`
 
 缺失的可选 artifact 会记录到 `artifact-index.json` 的 `unavailable` 列表，不应导致 package 失败。
+
+`provenance/traceability.json` 是 task-local 审计索引。它记录 source refs、生成 artifact 的 hash/size、指标 lineage、图表 lineage、报告 claim traces、slides evidence、reproduce metadata 指针与 omission notes。它不应内嵌完整 stdout/stderr、完整 metrics row body、report body、PPTX 内容、worker prompt/response body、raw source files、SQLite 或无关 workspace 文件。
 
 **默认不会包含哪些文件**
 
@@ -754,6 +758,7 @@ Reason: required field 'epoch' is missing from normalized_metrics.csv.
 - `figures/*.svg`
 - `figures/figure-spec.yaml`
 - `figures/figure-summary.json`
+- `provenance/traceability.json`
 - 更新后的 `manifest.json`
 - `.lab-sidecar/index.sqlite`
 
@@ -769,7 +774,7 @@ Reason: required field 'epoch' is missing from normalized_metrics.csv.
 
 **用途**
 
-基于任务信息、指标和图表生成 Markdown 报告片段。
+基于任务信息、指标和图表生成 Markdown 报告片段。`reports/report-summary.json` 会记录报告中展示的指标行数、数值摘要、图表计数和失败/取消诊断的 claim traces；这些 traces 指向任务内 artifact、字段、摘要操作和 bounded evidence，而不是解析 Markdown 正文后猜测来源。
 
 **参数**
 
@@ -800,7 +805,8 @@ Hint: run 'labsidecar collect task_20260531_160210_3b20ef' first.
 **会写入哪些文件**
 
 - `reports/report-fragment.md`
-- 可选 `reports/presentation-bullets.md`
+- `reports/report-summary.json`
+- `provenance/traceability.json`
 - 更新后的 `manifest.json`
 - `.lab-sidecar/index.sqlite`
 

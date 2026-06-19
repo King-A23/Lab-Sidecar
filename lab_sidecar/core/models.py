@@ -22,6 +22,8 @@ class ArtifactRecord(BaseModel):
     path: str
     description: str
     source_paths: list[str] = Field(default_factory=list)
+    size_bytes: int | None = None
+    sha256: str | None = None
 
 
 class TaskPaths(BaseModel):

@@ -113,6 +113,31 @@ def assert_readable_deck(path: Path, min_slides: int = 5, max_slides: int = 8) -
     return deck
 
 
+def read_traceability(workspace: Path, task_id: str) -> dict:
+    path = workspace / ".lab-sidecar" / "tasks" / task_id / "provenance" / "traceability.json"
+    assert_non_empty_file(path)
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def assert_traceability_is_bounded(traceability: dict) -> None:
+    serialized = json.dumps(traceability, ensure_ascii=False)
+    forbidden_fragments = [
+        "worker transcript body\n",
+        '"prompt":"secret"',
+        '"response":"secret"',
+        "FileNotFoundError: simulated missing dataset file",
+        "epoch,train_loss,val_loss",
+        "ppt/presentation.xml",
+        "<p:sld",
+    ]
+    for fragment in forbidden_fragments:
+        assert fragment not in serialized
+    for trace in traceability.get("claim_traces", []):
+        for evidence in trace.get("evidence", []):
+            assert "rows" not in evidence
+            assert evidence.get("body") in {None, "omitted"}
+
+
 def test_git_snapshot_records_repository_commit_and_status() -> None:
     snapshot = git_snapshot(PROJECT_ROOT)
 
@@ -701,6 +726,7 @@ def test_package_completed_task_exports_allowlisted_artifacts_only(tmp_path: Pat
         "reports/report-summary.json",
         "slides/presentation-draft.pptx",
         "slides/slides-summary.json",
+        "provenance/traceability.json",
     ]:
         assert (package_path / relative).is_file(), relative
     assert list((package_path / "figures").glob("*.png"))
@@ -712,12 +738,25 @@ def test_package_completed_task_exports_allowlisted_artifacts_only(tmp_path: Pat
     redaction_notes = (package_path / "redaction-notes.md").read_text(encoding="utf-8")
     included_paths = {item["package_path"] for item in index["included"]}
     omitted_paths = {item["path"] for item in index["omitted"]}
+    package_metadata = {item["package_path"]: item for item in index["package_metadata"]}
 
     assert summary["package_type"] == "result"
     assert summary["task"]["task_id"] == task_id
     assert summary["task"]["name"] == "package-success"
     assert "metrics/normalized_metrics.csv" in included_paths
     assert "slides/presentation-draft.pptx" in included_paths
+    assert "provenance/traceability.json" in included_paths
+    trace_entry = next(item for item in index["included"] if item["package_path"] == "provenance/traceability.json")
+    assert trace_entry["category"] == "provenance"
+    assert trace_entry["sha256"]
+    assert trace_entry["size_bytes"] > 0
+    assert package_metadata["README.md"]["sha256"]
+    assert package_metadata["README.md"]["size_bytes"] > 0
+    assert package_metadata["package-summary.json"]["sha256"]
+    assert package_metadata["package-summary.json"]["size_bytes"] > 0
+    assert package_metadata["redaction-notes.md"]["sha256"]
+    assert package_metadata["artifact-index.json"]["sha256"] is None
+    assert "self-referential" in package_metadata["artifact-index.json"]["digest_omitted_reason"]
     assert "stdout.log" in omitted_paths
     assert "stderr.log" in omitted_paths
     assert "worker.log" in omitted_paths
@@ -735,6 +774,14 @@ def test_package_completed_task_exports_allowlisted_artifacts_only(tmp_path: Pat
     assert not (package_path / ".lab-sidecar" / "index.sqlite").exists()
     assert not (package_path / "examples").exists()
     assert not (package_path / "metrics.csv").exists()
+    package_traceability = json.loads((package_path / "provenance" / "traceability.json").read_text(encoding="utf-8"))
+    assert package_traceability["task_id"] == task_id
+    assert any(artifact["path"] == "metrics/normalized_metrics.csv" and artifact["sha256"] for artifact in package_traceability["artifacts"])
+    assert any(source["sha256"] for source in package_traceability["sources"])
+    package_omitted = {item["path"] for item in package_traceability["omitted"]}
+    assert "stdout.log" in package_omitted
+    assert "stderr.log" in package_omitted
+    assert_traceability_is_bounded(package_traceability)
 
 
 def test_package_failed_task_is_diagnostic_and_omits_full_logs(tmp_path: Path) -> None:
@@ -752,6 +799,7 @@ def test_package_failed_task_is_diagnostic_and_omits_full_logs(tmp_path: Path) -
     assert (package_path / "README.md").is_file()
     assert (package_path / "redaction-notes.md").is_file()
     assert (package_path / "reproduce" / "command.txt").is_file()
+    assert (package_path / "provenance" / "traceability.json").is_file()
     assert not (package_path / "stderr.log").exists()
     assert not (package_path / "stdout.log").exists()
 
@@ -769,8 +817,15 @@ def test_package_failed_task_is_diagnostic_and_omits_full_logs(tmp_path: Path) -
     omitted_paths = {item["path"] for item in index["omitted"]}
     assert "metrics/normalized_metrics.csv" in unavailable_paths
     assert "figures/figure-summary.json" in unavailable_paths
+    assert "provenance/traceability.json" not in unavailable_paths
     assert "stdout.log" in omitted_paths
     assert "stderr.log" in omitted_paths
+    traceability = json.loads((package_path / "provenance" / "traceability.json").read_text(encoding="utf-8"))
+    claim_ids = {item["claim_id"] for item in traceability["claim_traces"]}
+    assert "slides.diagnostic.failed_status" not in claim_ids
+    assert traceability["task"]["status"] == "failed"
+    assert any(artifact["artifact_id"] == "log_stderr" for artifact in traceability["artifacts"])
+    assert_traceability_is_bounded(traceability)
 
 
 def test_package_ingested_task_omits_raw_source_refs_and_source_files(tmp_path: Path) -> None:
@@ -787,6 +842,7 @@ def test_package_ingested_task_omits_raw_source_refs_and_source_files(tmp_path: 
     assert result.exit_code == 0
     assert "Type: result" in result.output
     assert (package_path / "metrics" / "normalized_metrics.csv").is_file()
+    assert (package_path / "provenance" / "traceability.json").is_file()
     assert not (package_path / "raw" / "source_refs.json").exists()
     assert not (package_path / "examples").exists()
 
@@ -797,6 +853,10 @@ def test_package_ingested_task_omits_raw_source_refs_and_source_files(tmp_path: 
     assert "raw/source_refs.json" in omitted_paths
     assert "examples/csv-comparison" in omitted_paths
     assert "reproduce/command.txt" in unavailable_paths
+    traceability = json.loads((package_path / "provenance" / "traceability.json").read_text(encoding="utf-8"))
+    assert "examples/csv-comparison" in {item["path"] for item in traceability["omitted"]}
+    assert any(source["path"].endswith("baseline.csv") and source["sha256"] for source in traceability["sources"])
+    assert_traceability_is_bounded(traceability)
 
 
 def test_package_missing_task_and_invalid_output_path(tmp_path: Path) -> None:
@@ -1989,6 +2049,11 @@ def test_figures_auto_rejects_bar_chart_with_too_many_categories(tmp_path: Path)
     assert summary["generated_figures"] == []
     assert summary["skipped_candidates"]
     assert "limit is 12" in summary["skipped_candidates"][0]["reason"]
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["figure_lineage"]["present"] is True
+    assert traceability["figure_lineage"]["summary_path"] == "figures/figure-summary.json"
+    assert traceability["figure_lineage"]["spec_path"] is None
+    assert traceability["figure_lineage"]["figure_count"] == 0
 
 
 def test_figures_repeated_run_does_not_duplicate_manifest_artifacts(tmp_path: Path) -> None:
@@ -2071,6 +2136,11 @@ def test_report_completed_ingest_after_collect_and_figures_generates_markdown(tm
     assert summary["provenance"]["task_id"] == task_id
     assert summary["metrics"]["row_count"] > 0
     assert summary["figures"]["figure_count"] > 0
+    assert summary["claim_traces"]
+    assert any(item["claim_id"] == "report.metrics.row_count" for item in summary["claim_traces"])
+    assert any(item["claim_id"].startswith("report.metric.val_accuracy.") for item in summary["claim_traces"])
+    assert any(item["claim_id"].startswith("report.metric.val_loss.") for item in summary["claim_traces"])
+    assert all(item.get("evidence") for item in summary["claim_traces"] if item["claim_type"] == "numeric_summary")
     assert "manifest.json" in summary["source_artifacts"]
     assert "metrics/normalized_metrics.csv" in summary["generated_from"]
     assert "metrics/collection-summary.json" in summary["generated_from"]
@@ -2083,6 +2153,17 @@ def test_report_completed_ingest_after_collect_and_figures_generates_markdown(tm
     assert artifacts["report_fragment_md"]["type"] == "report"
     assert artifacts["report_fragment_md"]["path"] == "reports/report-fragment.md"
     assert artifacts["report_summary_json"]["type"] == "config"
+    assert artifacts["report_summary_json"]["sha256"]
+    assert artifacts["report_summary_json"]["size_bytes"] > 0
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["task_id"] == task_id
+    assert traceability["metric_lineage"]["row_count"] == summary["metrics"]["row_count"]
+    assert traceability["metric_lineage"]["columns"] == summary["metrics"]["columns"]
+    assert traceability["report_lineage"]["present"] is True
+    assert traceability["report_lineage"]["claim_trace_count"] == len(summary["claim_traces"])
+    assert any(source["sha256"] for source in traceability["sources"])
+    assert any(artifact["artifact_id"] == "report_summary_json" and artifact["sha256"] for artifact in traceability["artifacts"])
+    assert_traceability_is_bounded(traceability)
 
 
 def test_report_with_metrics_but_no_figures_generates_with_hint(tmp_path: Path) -> None:
@@ -2129,6 +2210,14 @@ def test_report_failed_run_generates_failure_report_without_metrics(tmp_path: Pa
     assert "stderr.log 尾部" in text
     assert "reproduce/command.txt" in text
     assert "不写成成功实验结果分析" in text
+    summary = json.loads((tmp_path / ".lab-sidecar" / "tasks" / task_id / "reports" / "report-summary.json").read_text(encoding="utf-8"))
+    claim_ids = {item["claim_id"] for item in summary["claim_traces"]}
+    assert "report.diagnostic.failed_status" in claim_ids
+    assert "report.metrics.unavailable" in claim_ids
+    assert not any(item["claim_type"] == "numeric_summary" for item in summary["claim_traces"])
+    traceability = read_traceability(tmp_path, task_id)
+    assert "report.diagnostic.failed_status" in {item["claim_id"] for item in traceability["claim_traces"]}
+    assert_traceability_is_bounded(traceability)
 
 
 def test_report_cancelled_task_generates_cancelled_report(tmp_path: Path) -> None:
@@ -2161,6 +2250,11 @@ def test_report_cancelled_task_generates_cancelled_report(tmp_path: Path) -> Non
     assert "started_at" in text
     assert "finished_at" in text
     assert "不写成成功实验结果分析" in text
+    summary = json.loads((tmp_path / ".lab-sidecar" / "tasks" / task_id / "reports" / "report-summary.json").read_text(encoding="utf-8"))
+    claim_ids = {item["claim_id"] for item in summary["claim_traces"]}
+    assert "report.diagnostic.cancelled_status" in claim_ids
+    assert "report.metrics.unavailable" in claim_ids
+    assert not any(item["claim_type"] == "numeric_summary" for item in summary["claim_traces"])
 
 
 def test_report_invalid_template_returns_exit_code_2(tmp_path: Path) -> None:
@@ -2244,7 +2338,8 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     assert summary["template"] == "zh-summary"
     assert summary["slide_count"] == len(deck.slides)
     assert len(summary["slides"]) == len(deck.slides)
-    assert all({"slide_index", "title", "purpose", "source_artifacts"}.issubset(slide) for slide in summary["slides"])
+    assert all({"slide_index", "title", "purpose", "source_artifacts", "evidence"}.issubset(slide) for slide in summary["slides"])
+    assert all(slide["evidence"] or slide["empty_source_reason"] for slide in summary["slides"])
     assert summary["included_metrics"]["row_count"] > 0
     assert summary["included_metrics"]["numeric"]
     numeric_columns = [item["column"] for item in summary["included_metrics"]["numeric"]]
@@ -2255,6 +2350,20 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     comparison = summary["key_comparisons"][0]
     assert comparison["best_item"]["label"] == "model_a"
     assert comparison["baseline_item"]["label"] == "baseline"
+    assert summary["claim_traces"]
+    assert any(item["claim_id"] == "slides.metrics.row_count" for item in summary["claim_traces"])
+    assert any(item["claim_id"] == "slides.metrics.table_preview" for item in summary["claim_traces"])
+    assert any(item["claim_id"] == "slides.key_comparison.status" for item in summary["claim_traces"])
+    figure_slides = [slide for slide in summary["slides"] if "figure" in slide["purpose"]]
+    assert figure_slides
+    assert all(any(evidence["path"].endswith(".png") for evidence in slide["evidence"]) for slide in figure_slides)
+    table_slides = [
+        slide
+        for slide in summary["slides"]
+        if any(evidence["role"] == "metrics_table_preview" for evidence in slide["evidence"])
+    ]
+    assert table_slides
+    assert any(evidence["role"] == "metrics_table_preview" for slide in table_slides for evidence in slide["evidence"])
     assert "warnings" in summary
     assert summary["qa_checks"]["slide_count"]["passed"] is True
     assert summary["qa_checks"]["empty_slide_check"]["passed"] is True
@@ -2273,6 +2382,11 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     assert "stdout.log" in summary["generated_from"]
     assert "stderr.log" in summary["generated_from"]
     assert not any(line.lower().startswith(("task_id:", "status:", "mode:")) for line in summary["report_excerpt"])
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["slide_lineage"]["present"] is True
+    assert traceability["slide_lineage"]["slide_count"] == summary["slide_count"]
+    assert any(item["surface"] == "slides" for item in traceability["claim_traces"])
+    assert_traceability_is_bounded(traceability)
 
     deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
     assert "model_a" in deck_text
@@ -2284,8 +2398,11 @@ def test_slides_after_collect_figures_report_generates_pptx_and_summary(tmp_path
     artifacts = {artifact["artifact_id"]: artifact for artifact in manifest["artifacts"]}
     assert artifacts["slides_presentation_draft_pptx"]["type"] == "presentation"
     assert artifacts["slides_presentation_draft_pptx"]["path"] == "slides/presentation-draft.pptx"
+    assert artifacts["slides_presentation_draft_pptx"]["sha256"]
+    assert artifacts["slides_presentation_draft_pptx"]["size_bytes"] > 0
     assert artifacts["slides_summary_json"]["type"] == "config"
     assert artifacts["slides_summary_json"]["path"] == "slides/slides-summary.json"
+    assert artifacts["slides_summary_json"]["sha256"]
 
 
 def test_slides_completed_without_artifacts_returns_exit_code_5(tmp_path: Path) -> None:
@@ -2320,9 +2437,17 @@ def test_slides_failed_task_generates_diagnostic_ppt(tmp_path: Path) -> None:
     assert summary["template"] == "en-summary"
     assert "stderr.log" in summary["source_artifacts"]
     assert any("Failure" in slide["title"] or "Failed" in slide["title"] for slide in summary["slides"])
+    assert all(slide["evidence"] or slide["empty_source_reason"] for slide in summary["slides"])
+    claim_ids = {item["claim_id"] for item in summary["claim_traces"]}
+    assert "slides.diagnostic.failed_status" in claim_ids
+    assert "slides.metrics.unavailable" in claim_ids
+    assert not any(item["claim_type"] == "numeric_summary" for item in summary["claim_traces"])
     deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
     assert "FileNotFoundError" in deck_text
     assert "failed" in deck_text
+    traceability = read_traceability(tmp_path, task_id)
+    assert "slides.diagnostic.failed_status" in {item["claim_id"] for item in traceability["claim_traces"]}
+    assert_traceability_is_bounded(traceability)
 
 
 def test_slides_cancelled_task_generates_cancelled_diagnostic_ppt(tmp_path: Path) -> None:
@@ -2353,6 +2478,11 @@ def test_slides_cancelled_task_generates_cancelled_diagnostic_ppt(tmp_path: Path
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["task_status"] == "cancelled"
     assert any("取消" in slide["title"] or "Cancellation" in slide["title"] for slide in summary["slides"])
+    assert all(slide["evidence"] or slide["empty_source_reason"] for slide in summary["slides"])
+    claim_ids = {item["claim_id"] for item in summary["claim_traces"]}
+    assert "slides.diagnostic.cancelled_status" in claim_ids
+    assert "slides.metrics.unavailable" in claim_ids
+    assert not any(item["claim_type"] == "numeric_summary" for item in summary["claim_traces"])
     deck_text = "\n".join(shape.text for slide in deck.slides for shape in slide.shapes if hasattr(shape, "text"))
     assert "cancelled" in deck_text
     assert "cancellation" in deck_text.lower()
@@ -2440,6 +2570,14 @@ def test_slides_after_deleting_sqlite_uses_manifest_artifacts(tmp_path: Path) ->
     assert index_path.is_file()
     pptx_path = tmp_path / ".lab-sidecar" / "tasks" / task_id / "slides" / "presentation-draft.pptx"
     assert_readable_deck(pptx_path)
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["task_id"] == task_id
+    assert traceability["metric_lineage"]["present"] is True
+    assert traceability["figure_lineage"]["present"] is True
+    assert traceability["report_lineage"]["present"] is True
+    assert traceability["slide_lineage"]["present"] is True
+    assert any(source["sha256"] for source in traceability["sources"])
+    assert any(artifact["path"] == "slides/presentation-draft.pptx" and artifact["sha256"] for artifact in traceability["artifacts"])
 
 
 def test_slides_long_command_and_paths_are_truncated_in_summary(tmp_path: Path) -> None:
