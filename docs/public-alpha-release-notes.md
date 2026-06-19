@@ -91,3 +91,61 @@ Markdown, worker prompt/response bodies, artifact bodies, or PPT contents.
 Recommended for a cautious public alpha after final commit organization.
 Blocking issues are currently none; follow-up work should stay focused on host
 setup validation, policy configuration, and broader malformed fixture coverage.
+
+## Post-Stage 5 Release Audit
+
+Date: 2026-06-19
+
+Current package version remains `0.1.0` in `pyproject.toml`. No release tag or
+PyPI publish step has been performed in this repository state.
+
+Stage 1 through Stage 5 are now committed on `main`:
+
+- Stage 1: task navigation and bounded comparison
+- Stage 2: deliverable task packages
+- Stage 3: messy result adaptation through explicit collection config
+- Stage 4: Agent-native bounded delegation hardening
+- Stage 5: task-local provenance and traceability
+
+Stage 5 adds `provenance/traceability.json` as a task-local audit index. It
+records source references, generated artifact hashes and sizes, metric lineage,
+figure lineage, report claim traces, slide evidence, reproduce metadata
+pointers, package traceability evidence, and omission notes. It does not embed
+full logs, full metric row bodies, report bodies, PPTX contents, worker
+prompt/response bodies, raw source files, SQLite, or unrelated workspace files.
+
+Install from a clone with:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Install optional MCP support with:
+
+```bash
+python -m pip install -e ".[dev,mcp]"
+```
+
+Stage 5 validation evidence:
+
+- `git diff --check`: passed
+- `PATH=.venv/bin:$PATH python -m pytest tests/test_cli_smoke.py -q`: 85 passed
+- `PATH=.venv/bin:$PATH python -m pytest -q`: 137 passed
+- Manual full workflow smoke passed in `/private/tmp/lab-sidecar-stage-5-zgNNeC`
+  with task `task_20260618_222513_2fc3fd`
+- SQLite-independent inspection passed after deleting `.lab-sidecar/index.sqlite`
+
+Additional release limits after Stage 5:
+
+- No V2/MCP schema changes were made for traceability preview.
+- Traceability is evidence metadata, not statistical significance, model
+  ranking, or autonomous scientific interpretation.
+- Package export remains allowlist-based and still omits raw sources, full
+  logs, worker audit bodies, sandbox files, SQLite, and unrelated workspace
+  files by default.
+- `artifact-index.json` records a self-referential digest omission note for
+  itself; hash that file externally after package creation if a package-level
+  external digest is required.
+
+Post-Stage 5 judgment: ready for a cautious local-first alpha release cut once
+the maintainer chooses a tag and publish path.
