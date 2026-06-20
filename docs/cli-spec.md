@@ -690,6 +690,9 @@ groups:
 - 对 ingest 任务，显式来源必须属于 `raw/source_refs.json` 记录的导入来源；工作区外路径会被拒绝。
 - `fields` 的每个目标字段可以是单个来源字段，也可以是 `sources` 别名列表；匹配到的来源字段会记录到 `matched_source_fields`。
 - `units` 和字段内联 `unit` 会记录到 summary；同一目标字段的显式单位冲突、或 `runtime_ms` / `runtime_s` 这类来源字段混用，会写入 `unit_diagnostics`。
+- `collection-summary.json` 会写入 `bounded_analysis`：受限的 best-row、checkpoint
+  和 anomaly 摘要。这些摘要只包含少量选定字段、行号和 evidence 指针，不内嵌完整
+  `normalized_metrics.csv`。
 - 当前不会自动换算单位，也不会解析 TensorBoard、二进制格式、notebook 或未配置的 log。
 
 **失败与诊断**
@@ -729,6 +732,8 @@ groups:
 
 - 必需：`<task_id>`
 - 可选：`--spec <yaml_path>` 指定图表类型和字段映射
+- 可选：`--fallback off|bounded`。默认 `off`。`bounded` 只在显式图表 spec
+  超出确定性 `line` / `bar` / `box` 能力时尝试 fallback。
 
 **成功输出示例**
 
@@ -736,6 +741,9 @@ groups:
 Generated 2 figures for task_20260531_160210_3b20ef
 - figures/accuracy_curve.png
 - figures/accuracy_curve.svg
+Spec: .lab-sidecar/tasks/task_20260531_160210_3b20ef/figures/figure-spec.yaml
+Summary: .lab-sidecar/tasks/task_20260531_160210_3b20ef/figures/figure-summary.json
+Fallback: mode=off status=not_needed
 ```
 
 **失败输出示例**
@@ -744,6 +752,47 @@ Generated 2 figures for task_20260531_160210_3b20ef
 Error: figure generation was refused.
 Reason: required field 'epoch' is missing from normalized_metrics.csv.
 ```
+
+显式请求不支持的图表类型时，默认不会 fallback，只写 bounded diagnostic：
+
+```text
+Error: no supported figures could be generated for task 'task_...'.
+Unsupported chart diagnostics:
+- chart_type=scatter x=epoch y=val_accuracy: Requested chart_type 'scatter' is unsupported by deterministic figures; supported types are bar, box, line.
+Fallback:
+- mode: off
+- status: not_needed
+```
+
+需要显式启用 bounded fallback：
+
+```bash
+labsidecar figures <task_id> --spec scatter.yaml --fallback bounded
+```
+
+fallback 状态写入 `figures/figure-summary.json` 的 `fallback` 字段：
+
+| status | attempted | 含义 |
+| --- | --- | --- |
+| `not_needed` | `false` | 确定性图表已生成，或 fallback 关闭且只记录 unsupported diagnostic。 |
+| `unavailable` | `true` | 已写入 bounded `figure-request.json`，但没有配置 chart worker；不会产生 official fallback 图。 |
+| `rejected` | `true` | worker 有输出，但字段、路径、PNG/SVG、traceability 或 boundedness 校验失败；不会写入 official fallback 图。 |
+| `adopted` | `true` | validator 接受 sandbox 输出后，才复制 PNG/SVG 到 official `figures/` 并更新 manifest/provenance。 |
+
+fallback 的受控审计文件位于：
+
+```text
+.lab-sidecar/tasks/<task_id>/intelligence/<worker_run_id>/
+  figure-request.json
+  worker-request.json        # 只有 worker 被调用时存在
+  worker-result.json         # 只有 worker 被调用时存在
+  validator-result.json
+  adoption-record.json       # 只有 adopted 时存在
+  diagnostics.md
+  sandbox/
+```
+
+`figure-request.json` 只包含 bounded context：任务状态、请求图表 intent、指标列名、行数、单位/分组/字段来源映射、collection diagnostics、artifact 路径和 hash。它不包含完整 raw source、完整 `normalized_metrics.csv` 行、完整 stdout/stderr、report body、PPTX 内容、worker prompt/response body 或 artifact body。
 
 **会读取哪些文件**
 
@@ -758,9 +807,20 @@ Reason: required field 'epoch' is missing from normalized_metrics.csv.
 - `figures/*.svg`
 - `figures/figure-spec.yaml`
 - `figures/figure-summary.json`
+- `intelligence/<worker_run_id>/figure-request.json`（仅在 unsupported + `--fallback bounded` 时）
+- `intelligence/<worker_run_id>/validator-result.json`（仅在 unsupported + `--fallback bounded` 时）
+- `intelligence/<worker_run_id>/adoption-record.json`（仅在 fallback adopted 时）
 - `provenance/traceability.json`
 - 更新后的 `manifest.json`
 - `.lab-sidecar/index.sqlite`
+
+**fallback 故障排查**
+
+- `status=unavailable`：没有配置 chart worker。当前 CLI 默认如此；确定性图表不受影响。
+- `status=rejected` 且 diagnostic 提到 field：proposal 引用了 bounded metrics 字段之外的列，或缺少 `source_metrics_fields`。
+- `status=rejected` 且 diagnostic 提到 sandbox/path：worker 输出路径试图越过 `sandbox/`，不会被采用。
+- `status=rejected` 且 diagnostic 提到 PNG/SVG：图像缺失、无法解析、过小或空白。
+- `status=adopted` 但报告/PPT 没更新：重新运行 `report` 或 `slides`，它们会读取 official `figures/` 和 summary。
 
 **是否会修改用户原始文件**
 

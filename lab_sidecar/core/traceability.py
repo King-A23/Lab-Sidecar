@@ -292,11 +292,16 @@ def _figure_lineage(task_path: Path, figure_summary: dict[str, Any]) -> dict[str
             {
                 "figure_id": figure_id,
                 "chart_type": item.get("chart_type"),
+                "source": item.get("source") or "deterministic",
+                "worker_run_id": item.get("worker_run_id"),
+                "validation_status": item.get("validation_status"),
                 "artifact_ids": [artifact_id for artifact_id in _figure_artifact_ids(figure_id, paths) if artifact_id],
                 "paths": paths,
                 "source_metrics": item.get("source_metrics") or figure_summary.get("source_metrics"),
                 "columns": columns,
                 "units": item.get("units") or {},
+                "field_sources": item.get("field_sources") or {},
+                "fallback_lineage": _bounded_fallback_lineage(item.get("fallback_lineage")),
             }
         )
     return {
@@ -305,6 +310,8 @@ def _figure_lineage(task_path: Path, figure_summary: dict[str, Any]) -> dict[str
         "spec_path": "figures/figure-spec.yaml" if (task_path / "figures" / "figure-spec.yaml").exists() else None,
         "figure_count": int(figure_summary.get("figure_count") or len(figures)) if figure_summary else 0,
         "figures": figures,
+        "unsupported_chart_diagnostics": figure_summary.get("unsupported_chart_diagnostics") or [],
+        "fallback": _bounded_figure_fallback(figure_summary.get("fallback")),
         "warnings": figure_summary.get("warnings") or [],
         "errors": figure_summary.get("errors") or [],
     }
@@ -364,6 +371,97 @@ def _bounded_slide_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
             if isinstance(item, dict) and item.get("column")
         ],
     }
+
+
+def _bounded_figure_fallback(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    return {
+        "mode": value.get("mode"),
+        "attempted": value.get("attempted"),
+        "worker_run_id": value.get("worker_run_id"),
+        "status": value.get("status"),
+        "request_path": value.get("request_path"),
+        "validator_result_path": value.get("validator_result_path"),
+        "adoption_record_path": value.get("adoption_record_path"),
+        "validation_status": value.get("validation_status"),
+        "validation_checks": _bounded_validation_checks(value.get("validation_checks")),
+        "adopted_figures": _bounded_adopted_figures(value.get("adopted_figures")),
+        "adopted_artifact_paths": [
+            item for item in value.get("adopted_artifact_paths") or [] if isinstance(item, str)
+        ],
+        "diagnostics": value.get("diagnostics") or [],
+    }
+
+
+def _bounded_fallback_lineage(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "source_metrics": value.get("source_metrics"),
+        "fields_used": [item for item in value.get("fields_used") or [] if isinstance(item, str)],
+        "field_sources": _bounded_string_list_mapping(value.get("field_sources")),
+        "worker_run_id": value.get("worker_run_id"),
+        "request_path": value.get("request_path"),
+        "worker_request_path": value.get("worker_request_path"),
+        "worker_result_path": value.get("worker_result_path"),
+        "validator_result_path": value.get("validator_result_path"),
+        "sandbox_png_path": value.get("sandbox_png_path"),
+        "sandbox_svg_path": value.get("sandbox_svg_path"),
+        "adopted_png_path": value.get("adopted_png_path"),
+        "adopted_svg_path": value.get("adopted_svg_path"),
+    }
+
+
+def _bounded_adopted_figures(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    figures: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        figures.append(
+            {
+                "figure_id": item.get("figure_id"),
+                "chart_type": item.get("chart_type"),
+                "png": item.get("png"),
+                "svg": item.get("svg"),
+                "source_metrics": item.get("source_metrics"),
+                "fields_used": [field for field in item.get("fields_used") or [] if isinstance(field, str)],
+                "field_sources": _bounded_string_list_mapping(item.get("field_sources")),
+            }
+        )
+    return figures
+
+
+def _bounded_validation_checks(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    checks: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        checks.append(
+            {
+                "name": item.get("name"),
+                "status": item.get("status"),
+                "message": item.get("message"),
+            }
+        )
+    return checks
+
+
+def _bounded_string_list_mapping(value: Any) -> dict[str, list[str]]:
+    if not isinstance(value, dict):
+        return {}
+    result: dict[str, list[str]] = {}
+    for key, raw_items in value.items():
+        if not isinstance(key, str) or not isinstance(raw_items, list):
+            continue
+        items = [item for item in raw_items if isinstance(item, str)]
+        if items:
+            result[key] = items
+    return result
 
 
 def _claim_traces_from_summary(summary: dict[str, Any]) -> list[dict[str, Any]]:

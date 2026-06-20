@@ -1,0 +1,1346 @@
+{
+  "schema_version": "1",
+  "date": "2026-06-20",
+  "package_version": "0.1.0",
+  "benchmark_root": "<benchmark-root>",
+  "scale": "full",
+  "token_estimate": {
+    "method": "ceil(chars / 4)",
+    "exact_provider_tokens_available": false
+  },
+  "sidecar_allowed_reads": [
+    "figures/figure-summary.json",
+    "metrics/collection-summary.json",
+    "provenance/traceability.json"
+  ],
+  "fallback_allowed_reads": {
+    "figure_request": "request_path",
+    "validator_result": "validator_result_path",
+    "adoption_record": "adoption_record_path"
+  },
+  "scenarios": [
+    {
+      "scenario_id": "scatter_correlation",
+      "expected": {
+        "chart_type": "scatter",
+        "x": "epoch",
+        "y": "val_accuracy",
+        "group_by": "model"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/scatter_correlation/inputs/scatter_correlation.csv",
+            "bytes": 1307107,
+            "chars": 1306786,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 1307107,
+        "context_chars": 1306786,
+        "estimated_context_tokens": 326697,
+        "raw_metric_row_bytes_exposed": 1307107
+      },
+      "deterministic_only": {
+        "workspace": "<benchmark-root>/scatter_correlation/deterministic_off/workspace",
+        "task_ids": [
+          "task_20260620_144949_9303bb"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/scatter_correlation/deterministic_off/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback scatter_correlation"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144949_9303bb\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144949_9303bb\nNext:\n- labsidecar collect task_20260620_144949_9303bb\n- labsidecar artifacts task_20260620_144949_9303bb\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144949_9303bb",
+              "--config",
+              "<benchmark-root>/scatter_correlation/deterministic_off/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144949_9303bb\nDetected fields: epoch, model, val_accuracy\nRows: 320\nWrote: .lab-sidecar/tasks/task_20260620_144949_9303bb/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144949_9303bb/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144949_9303bb/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144949_9303bb\n- labsidecar report task_20260620_144949_9303bb\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144949_9303bb",
+              "--spec",
+              "<benchmark-root>/scatter_correlation/deterministic_off/workspace/figure.yaml"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/deterministic_off/workspace",
+            "exit_code": 5,
+            "stdout": "",
+            "stderr": "Error: no supported figures could be generated for task 'task_20260620_144949_9303bb'.\nReason: no supported chart could be generated\nWarnings:\n- Requested chart_type 'scatter' is unsupported by deterministic figures; supported types are bar, box, line.\nUnsupported chart diagnostics:\n- chart_type=scatter x=epoch y=val_accuracy: Requested chart_type 'scatter' is unsupported by deterministic figures; supported types are bar, box, line.\nFallback:\n- mode: off\n- status: not_needed\nSummary: .lab-sidecar/tasks/task_20260620_144949_9303bb/figures/figure-summary.json\n"
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2461,
+            "chars": 2461,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3454,
+            "chars": 3454,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 7510,
+            "chars": 7510,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 15022,
+        "context_chars": 15022,
+        "estimated_context_tokens": 3756,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "not_needed",
+        "worker_run_id": null,
+        "generated_figure": {
+          "figure_id": null,
+          "chart_type": null,
+          "png_path": null,
+          "svg_path": null,
+          "x": null,
+          "y": null,
+          "group_by": null,
+          "source": null,
+          "worker_run_id": null,
+          "validation_status": null,
+          "field_sources": null,
+          "fallback_lineage": null
+        }
+      },
+      "fallback_enabled": {
+        "workspace": "<benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace",
+        "task_ids": [
+          "task_20260620_144951_8a631d"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback scatter_correlation"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144951_8a631d\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144951_8a631d\nNext:\n- labsidecar collect task_20260620_144951_8a631d\n- labsidecar artifacts task_20260620_144951_8a631d\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144951_8a631d",
+              "--config",
+              "<benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144951_8a631d\nDetected fields: epoch, model, val_accuracy\nRows: 320\nWrote: .lab-sidecar/tasks/task_20260620_144951_8a631d/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144951_8a631d/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144951_8a631d/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144951_8a631d\n- labsidecar report task_20260620_144951_8a631d\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144951_8a631d",
+              "--spec",
+              "<benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace/figure.yaml",
+              "--fallback",
+              "bounded",
+              "--fallback-worker",
+              "mock"
+            ],
+            "cwd": "<benchmark-root>/scatter_correlation/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144951_8a631d\n- .lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.png\n- .lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.svg\nSpec: .lab-sidecar/tasks/task_20260620_144951_8a631d/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144951_8a631d/figures/figure-summary.json\nFallback: mode=bounded status=adopted\nNext:\n- labsidecar report task_20260620_144951_8a631d\n- labsidecar slides task_20260620_144951_8a631d\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 12816,
+            "chars": 12816,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3454,
+            "chars": 3454,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 14183,
+            "chars": 14183,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_144952_1d83b4/figure-request.json",
+            "bytes": 3927,
+            "chars": 3927,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_144952_1d83b4/validator-result.json",
+            "bytes": 1343,
+            "chars": 1343,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_144952_1d83b4/adoption-record.json",
+            "bytes": 3473,
+            "chars": 3473,
+            "purpose": "allowed_fallback_audit"
+          }
+        ],
+        "context_bytes": 40787,
+        "context_chars": 40787,
+        "estimated_context_tokens": 10197,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "adopted",
+        "worker_run_id": "worker_run_20260620_144952_1d83b4",
+        "generated_figure": {
+          "figure_id": "fallback_scatter_correlation",
+          "chart_type": "scatter",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.svg",
+          "x": "epoch",
+          "y": "val_accuracy",
+          "group_by": "model",
+          "source": "fallback",
+          "worker_run_id": "worker_run_20260620_144952_1d83b4",
+          "validation_status": "accepted",
+          "field_sources": {
+            "epoch": [
+              "raw_epoch"
+            ],
+            "val_accuracy": [
+              "raw_val_accuracy"
+            ],
+            "model": [
+              "raw_model"
+            ]
+          },
+          "fallback_lineage": {
+            "source_metrics": ".lab-sidecar/tasks/task_20260620_144951_8a631d/metrics/normalized_metrics.csv",
+            "fields_used": [
+              "epoch",
+              "val_accuracy",
+              "model"
+            ],
+            "field_sources": {
+              "epoch": [
+                "raw_epoch"
+              ],
+              "val_accuracy": [
+                "raw_val_accuracy"
+              ],
+              "model": [
+                "raw_model"
+              ]
+            },
+            "worker_run_id": "worker_run_20260620_144952_1d83b4",
+            "request_path": "intelligence/worker_run_20260620_144952_1d83b4/figure-request.json",
+            "worker_request_path": "intelligence/worker_run_20260620_144952_1d83b4/worker-request.json",
+            "worker_result_path": "intelligence/worker_run_20260620_144952_1d83b4/worker-result.json",
+            "validator_result_path": "intelligence/worker_run_20260620_144952_1d83b4/validator-result.json",
+            "sandbox_png_path": "intelligence/worker_run_20260620_144952_1d83b4/sandbox/fallback_scatter_correlation-fallback.png",
+            "sandbox_svg_path": "intelligence/worker_run_20260620_144952_1d83b4/sandbox/fallback_scatter_correlation-fallback.svg",
+            "adopted_png_path": ".lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.png",
+            "adopted_svg_path": ".lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.svg"
+          }
+        }
+      },
+      "coverage": {
+        "deterministic_covered": false,
+        "fallback_covered": true,
+        "coverage_improved": true
+      },
+      "scores": {
+        "deterministic_refused_unsupported": true,
+        "deterministic_no_official_artifact": true,
+        "fallback_adopted": true,
+        "coverage_improved": true,
+        "chart_intent_preserved": true,
+        "official_artifacts_valid": true,
+        "validator_accepted": true,
+        "adoption_record_present": true,
+        "traceability_lineage_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 11,
+      "score_max": 11,
+      "passed": true,
+      "context_reduction_pct": 96.88,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144951_8a631d/figures/fallback_scatter_correlation-fallback.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          640,
+          360
+        ],
+        "color_count": 150,
+        "nonblank": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "heatmap_confusion_matrix",
+      "expected": {
+        "chart_type": "heatmap",
+        "x": "predicted_class",
+        "y": "true_class",
+        "group_by": null
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/heatmap_confusion_matrix/inputs/heatmap_confusion_matrix.csv",
+            "bytes": 65268,
+            "chars": 65251,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 65268,
+        "context_chars": 65251,
+        "estimated_context_tokens": 16313,
+        "raw_metric_row_bytes_exposed": 65268
+      },
+      "deterministic_only": {
+        "workspace": "<benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace",
+        "task_ids": [
+          "task_20260620_144953_0290a7"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback heatmap_confusion_matrix"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144953_0290a7\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144953_0290a7\nNext:\n- labsidecar collect task_20260620_144953_0290a7\n- labsidecar artifacts task_20260620_144953_0290a7\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144953_0290a7",
+              "--config",
+              "<benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144953_0290a7\nDetected fields: predicted_class, true_class, count\nRows: 16\nWrote: .lab-sidecar/tasks/task_20260620_144953_0290a7/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144953_0290a7/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144953_0290a7/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144953_0290a7\n- labsidecar report task_20260620_144953_0290a7\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144953_0290a7",
+              "--spec",
+              "<benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace/figure.yaml"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/deterministic_off/workspace",
+            "exit_code": 5,
+            "stdout": "",
+            "stderr": "Error: no supported figures could be generated for task 'task_20260620_144953_0290a7'.\nReason: no supported chart could be generated\nWarnings:\n- Requested chart_type 'heatmap' is unsupported by deterministic figures; supported types are bar, box, line.\nUnsupported chart diagnostics:\n- chart_type=heatmap x=predicted_class y=true_class: Requested chart_type 'heatmap' is unsupported by deterministic figures; supported types are bar, box, line.\nFallback:\n- mode: off\n- status: not_needed\nSummary: .lab-sidecar/tasks/task_20260620_144953_0290a7/figures/figure-summary.json\n"
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2482,
+            "chars": 2482,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3023,
+            "chars": 3023,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 7557,
+            "chars": 7557,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 14679,
+        "context_chars": 14679,
+        "estimated_context_tokens": 3670,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "not_needed",
+        "worker_run_id": null,
+        "generated_figure": {
+          "figure_id": null,
+          "chart_type": null,
+          "png_path": null,
+          "svg_path": null,
+          "x": null,
+          "y": null,
+          "group_by": null,
+          "source": null,
+          "worker_run_id": null,
+          "validation_status": null,
+          "field_sources": null,
+          "fallback_lineage": null
+        }
+      },
+      "fallback_enabled": {
+        "workspace": "<benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace",
+        "task_ids": [
+          "task_20260620_144955_67bbec"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback heatmap_confusion_matrix"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144955_67bbec\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144955_67bbec\nNext:\n- labsidecar collect task_20260620_144955_67bbec\n- labsidecar artifacts task_20260620_144955_67bbec\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144955_67bbec",
+              "--config",
+              "<benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144955_67bbec\nDetected fields: predicted_class, true_class, count\nRows: 16\nWrote: .lab-sidecar/tasks/task_20260620_144955_67bbec/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144955_67bbec/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144955_67bbec/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144955_67bbec\n- labsidecar report task_20260620_144955_67bbec\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144955_67bbec",
+              "--spec",
+              "<benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace/figure.yaml",
+              "--fallback",
+              "bounded",
+              "--fallback-worker",
+              "mock"
+            ],
+            "cwd": "<benchmark-root>/heatmap_confusion_matrix/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144955_67bbec\n- .lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.png\n- .lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.svg\nSpec: .lab-sidecar/tasks/task_20260620_144955_67bbec/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144955_67bbec/figures/figure-summary.json\nFallback: mode=bounded status=adopted\nNext:\n- labsidecar report task_20260620_144955_67bbec\n- labsidecar slides task_20260620_144955_67bbec\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 12446,
+            "chars": 12446,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3023,
+            "chars": 3023,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 13932,
+            "chars": 13932,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_144956_beb367/figure-request.json",
+            "bytes": 3981,
+            "chars": 3981,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_144956_beb367/validator-result.json",
+            "bytes": 1343,
+            "chars": 1343,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_144956_beb367/adoption-record.json",
+            "bytes": 3418,
+            "chars": 3418,
+            "purpose": "allowed_fallback_audit"
+          }
+        ],
+        "context_bytes": 39742,
+        "context_chars": 39742,
+        "estimated_context_tokens": 9936,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "adopted",
+        "worker_run_id": "worker_run_20260620_144956_beb367",
+        "generated_figure": {
+          "figure_id": "fallback_confusion_heatmap",
+          "chart_type": "heatmap",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.svg",
+          "x": "predicted_class",
+          "y": "true_class",
+          "group_by": null,
+          "source": "fallback",
+          "worker_run_id": "worker_run_20260620_144956_beb367",
+          "validation_status": "accepted",
+          "field_sources": {
+            "predicted_class": [
+              "raw_predicted"
+            ],
+            "true_class": [
+              "raw_actual"
+            ]
+          },
+          "fallback_lineage": {
+            "source_metrics": ".lab-sidecar/tasks/task_20260620_144955_67bbec/metrics/normalized_metrics.csv",
+            "fields_used": [
+              "predicted_class",
+              "true_class"
+            ],
+            "field_sources": {
+              "predicted_class": [
+                "raw_predicted"
+              ],
+              "true_class": [
+                "raw_actual"
+              ]
+            },
+            "worker_run_id": "worker_run_20260620_144956_beb367",
+            "request_path": "intelligence/worker_run_20260620_144956_beb367/figure-request.json",
+            "worker_request_path": "intelligence/worker_run_20260620_144956_beb367/worker-request.json",
+            "worker_result_path": "intelligence/worker_run_20260620_144956_beb367/worker-result.json",
+            "validator_result_path": "intelligence/worker_run_20260620_144956_beb367/validator-result.json",
+            "sandbox_png_path": "intelligence/worker_run_20260620_144956_beb367/sandbox/fallback_confusion_heatmap-fallback.png",
+            "sandbox_svg_path": "intelligence/worker_run_20260620_144956_beb367/sandbox/fallback_confusion_heatmap-fallback.svg",
+            "adopted_png_path": ".lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.png",
+            "adopted_svg_path": ".lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.svg"
+          }
+        }
+      },
+      "coverage": {
+        "deterministic_covered": false,
+        "fallback_covered": true,
+        "coverage_improved": true
+      },
+      "scores": {
+        "deterministic_refused_unsupported": true,
+        "deterministic_no_official_artifact": true,
+        "fallback_adopted": true,
+        "coverage_improved": true,
+        "chart_intent_preserved": true,
+        "official_artifacts_valid": true,
+        "validator_accepted": true,
+        "adoption_record_present": true,
+        "traceability_lineage_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 11,
+      "score_max": 11,
+      "passed": true,
+      "context_reduction_pct": 39.09,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144955_67bbec/figures/fallback_confusion_heatmap-fallback.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          640,
+          360
+        ],
+        "color_count": 145,
+        "nonblank": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "histogram_distribution",
+      "expected": {
+        "chart_type": "histogram",
+        "x": "latency_ms",
+        "y": "latency_ms",
+        "group_by": "service"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/histogram_distribution/inputs/histogram_distribution.csv",
+            "bytes": 3913247,
+            "chars": 3912286,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 3913247,
+        "context_chars": 3912286,
+        "estimated_context_tokens": 978072,
+        "raw_metric_row_bytes_exposed": 3913247
+      },
+      "deterministic_only": {
+        "workspace": "<benchmark-root>/histogram_distribution/deterministic_off/workspace",
+        "task_ids": [
+          "task_20260620_144957_524283"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/histogram_distribution/deterministic_off/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback histogram_distribution"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144957_524283\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144957_524283\nNext:\n- labsidecar collect task_20260620_144957_524283\n- labsidecar artifacts task_20260620_144957_524283\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144957_524283",
+              "--config",
+              "<benchmark-root>/histogram_distribution/deterministic_off/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144957_524283\nDetected fields: latency_ms, service\nRows: 960\nWrote: .lab-sidecar/tasks/task_20260620_144957_524283/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144957_524283/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144957_524283/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144957_524283\n- labsidecar report task_20260620_144957_524283\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144957_524283",
+              "--spec",
+              "<benchmark-root>/histogram_distribution/deterministic_off/workspace/figure.yaml"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/deterministic_off/workspace",
+            "exit_code": 5,
+            "stdout": "",
+            "stderr": "Error: no supported figures could be generated for task 'task_20260620_144957_524283'.\nReason: no supported chart could be generated\nWarnings:\n- Requested chart_type 'histogram' is unsupported by deterministic figures; supported types are bar, box, line.\nUnsupported chart diagnostics:\n- chart_type=histogram x=latency_ms y=latency_ms: Requested chart_type 'histogram' is unsupported by deterministic figures; supported types are bar, box, line.\nFallback:\n- mode: off\n- status: not_needed\nSummary: .lab-sidecar/tasks/task_20260620_144957_524283/figures/figure-summary.json\n"
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2404,
+            "chars": 2404,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3183,
+            "chars": 3183,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 7438,
+            "chars": 7438,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 14627,
+        "context_chars": 14627,
+        "estimated_context_tokens": 3657,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "not_needed",
+        "worker_run_id": null,
+        "generated_figure": {
+          "figure_id": null,
+          "chart_type": null,
+          "png_path": null,
+          "svg_path": null,
+          "x": null,
+          "y": null,
+          "group_by": null,
+          "source": null,
+          "worker_run_id": null,
+          "validation_status": null,
+          "field_sources": null,
+          "fallback_lineage": null
+        }
+      },
+      "fallback_enabled": {
+        "workspace": "<benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace",
+        "task_ids": [
+          "task_20260620_144959_ff2827"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback histogram_distribution"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144959_ff2827\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144959_ff2827\nNext:\n- labsidecar collect task_20260620_144959_ff2827\n- labsidecar artifacts task_20260620_144959_ff2827\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144959_ff2827",
+              "--config",
+              "<benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144959_ff2827\nDetected fields: latency_ms, service\nRows: 960\nWrote: .lab-sidecar/tasks/task_20260620_144959_ff2827/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144959_ff2827/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144959_ff2827/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144959_ff2827\n- labsidecar report task_20260620_144959_ff2827\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144959_ff2827",
+              "--spec",
+              "<benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace/figure.yaml",
+              "--fallback",
+              "bounded",
+              "--fallback-worker",
+              "mock"
+            ],
+            "cwd": "<benchmark-root>/histogram_distribution/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144959_ff2827\n- .lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.png\n- .lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.svg\nSpec: .lab-sidecar/tasks/task_20260620_144959_ff2827/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144959_ff2827/figures/figure-summary.json\nFallback: mode=bounded status=adopted\nNext:\n- labsidecar report task_20260620_144959_ff2827\n- labsidecar slides task_20260620_144959_ff2827\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 12460,
+            "chars": 12460,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3183,
+            "chars": 3183,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 13881,
+            "chars": 13881,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_145000_e2e690/figure-request.json",
+            "bytes": 3745,
+            "chars": 3745,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_145000_e2e690/validator-result.json",
+            "bytes": 1343,
+            "chars": 1343,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_145000_e2e690/adoption-record.json",
+            "bytes": 3420,
+            "chars": 3420,
+            "purpose": "allowed_fallback_audit"
+          }
+        ],
+        "context_bytes": 39615,
+        "context_chars": 39615,
+        "estimated_context_tokens": 9904,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "adopted",
+        "worker_run_id": "worker_run_20260620_145000_e2e690",
+        "generated_figure": {
+          "figure_id": "fallback_latency_histogram",
+          "chart_type": "histogram",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.svg",
+          "x": "latency_ms",
+          "y": "latency_ms",
+          "group_by": "service",
+          "source": "fallback",
+          "worker_run_id": "worker_run_20260620_145000_e2e690",
+          "validation_status": "accepted",
+          "field_sources": {
+            "latency_ms": [
+              "raw_latency_ms"
+            ],
+            "service": [
+              "raw_service"
+            ]
+          },
+          "fallback_lineage": {
+            "source_metrics": ".lab-sidecar/tasks/task_20260620_144959_ff2827/metrics/normalized_metrics.csv",
+            "fields_used": [
+              "latency_ms",
+              "latency_ms",
+              "service"
+            ],
+            "field_sources": {
+              "latency_ms": [
+                "raw_latency_ms"
+              ],
+              "service": [
+                "raw_service"
+              ]
+            },
+            "worker_run_id": "worker_run_20260620_145000_e2e690",
+            "request_path": "intelligence/worker_run_20260620_145000_e2e690/figure-request.json",
+            "worker_request_path": "intelligence/worker_run_20260620_145000_e2e690/worker-request.json",
+            "worker_result_path": "intelligence/worker_run_20260620_145000_e2e690/worker-result.json",
+            "validator_result_path": "intelligence/worker_run_20260620_145000_e2e690/validator-result.json",
+            "sandbox_png_path": "intelligence/worker_run_20260620_145000_e2e690/sandbox/fallback_latency_histogram-fallback.png",
+            "sandbox_svg_path": "intelligence/worker_run_20260620_145000_e2e690/sandbox/fallback_latency_histogram-fallback.svg",
+            "adopted_png_path": ".lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.png",
+            "adopted_svg_path": ".lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.svg"
+          }
+        }
+      },
+      "coverage": {
+        "deterministic_covered": false,
+        "fallback_covered": true,
+        "coverage_improved": true
+      },
+      "scores": {
+        "deterministic_refused_unsupported": true,
+        "deterministic_no_official_artifact": true,
+        "fallback_adopted": true,
+        "coverage_improved": true,
+        "chart_intent_preserved": true,
+        "official_artifacts_valid": true,
+        "validator_accepted": true,
+        "adoption_record_present": true,
+        "traceability_lineage_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 11,
+      "score_max": 11,
+      "passed": true,
+      "context_reduction_pct": 98.99,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144959_ff2827/figures/fallback_latency_histogram-fallback.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          640,
+          360
+        ],
+        "color_count": 129,
+        "nonblank": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "stacked_category_composition",
+      "expected": {
+        "chart_type": "stacked_bar",
+        "x": "category",
+        "y": "share",
+        "group_by": "segment"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/stacked_category_composition/inputs/stacked_category_composition.csv",
+            "bytes": 5892363,
+            "chars": 5890922,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 5892363,
+        "context_chars": 5890922,
+        "estimated_context_tokens": 1472731,
+        "raw_metric_row_bytes_exposed": 5892363
+      },
+      "deterministic_only": {
+        "workspace": "<benchmark-root>/stacked_category_composition/deterministic_off/workspace",
+        "task_ids": [
+          "task_20260620_145001_ace524"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/stacked_category_composition/deterministic_off/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback stacked_category_composition"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_145001_ace524\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_145001_ace524\nNext:\n- labsidecar collect task_20260620_145001_ace524\n- labsidecar artifacts task_20260620_145001_ace524\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_145001_ace524",
+              "--config",
+              "<benchmark-root>/stacked_category_composition/deterministic_off/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/deterministic_off/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_145001_ace524\nDetected fields: category, segment, share\nRows: 1440\nWrote: .lab-sidecar/tasks/task_20260620_145001_ace524/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_145001_ace524/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_145001_ace524/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_145001_ace524\n- labsidecar report task_20260620_145001_ace524\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_145001_ace524",
+              "--spec",
+              "<benchmark-root>/stacked_category_composition/deterministic_off/workspace/figure.yaml"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/deterministic_off/workspace",
+            "exit_code": 5,
+            "stdout": "",
+            "stderr": "Error: no supported figures could be generated for task 'task_20260620_145001_ace524'.\nReason: no supported chart could be generated\nWarnings:\n- Requested chart_type 'stacked_bar' is unsupported by deterministic figures; supported types are bar, box, line.\nUnsupported chart diagnostics:\n- chart_type=stacked_bar x=category y=share: Requested chart_type 'stacked_bar' is unsupported by deterministic figures; supported types are bar, box, line.\nFallback:\n- mode: off\n- status: not_needed\nSummary: .lab-sidecar/tasks/task_20260620_145001_ace524/figures/figure-summary.json\n"
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2487,
+            "chars": 2487,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 2965,
+            "chars": 2965,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 7544,
+            "chars": 7544,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 14609,
+        "context_chars": 14609,
+        "estimated_context_tokens": 3653,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "not_needed",
+        "worker_run_id": null,
+        "generated_figure": {
+          "figure_id": null,
+          "chart_type": null,
+          "png_path": null,
+          "svg_path": null,
+          "x": null,
+          "y": null,
+          "group_by": null,
+          "source": null,
+          "worker_run_id": null,
+          "validation_status": null,
+          "field_sources": null,
+          "fallback_lineage": null
+        }
+      },
+      "fallback_enabled": {
+        "workspace": "<benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace",
+        "task_ids": [
+          "task_20260620_145003_e7ffe0"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "inputs",
+              "--name",
+              "alpha4 fallback stacked_category_composition"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_145003_e7ffe0\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_145003_e7ffe0\nNext:\n- labsidecar collect task_20260620_145003_e7ffe0\n- labsidecar artifacts task_20260620_145003_e7ffe0\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_145003_e7ffe0",
+              "--config",
+              "<benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_145003_e7ffe0\nDetected fields: category, segment, share\nRows: 1440\nWrote: .lab-sidecar/tasks/task_20260620_145003_e7ffe0/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_145003_e7ffe0/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_145003_e7ffe0/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_145003_e7ffe0\n- labsidecar report task_20260620_145003_e7ffe0\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_145003_e7ffe0",
+              "--spec",
+              "<benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace/figure.yaml",
+              "--fallback",
+              "bounded",
+              "--fallback-worker",
+              "mock"
+            ],
+            "cwd": "<benchmark-root>/stacked_category_composition/fallback_bounded_mock/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_145003_e7ffe0\n- .lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.png\n- .lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.svg\nSpec: .lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/figure-summary.json\nFallback: mode=bounded status=adopted\nNext:\n- labsidecar report task_20260620_145003_e7ffe0\n- labsidecar slides task_20260620_145003_e7ffe0\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 12831,
+            "chars": 12831,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 2965,
+            "chars": 2965,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 14196,
+            "chars": 14196,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_145004_91dcdf/figure-request.json",
+            "bytes": 3944,
+            "chars": 3944,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_145004_91dcdf/validator-result.json",
+            "bytes": 1343,
+            "chars": 1343,
+            "purpose": "allowed_fallback_audit"
+          },
+          {
+            "path": "intelligence/worker_run_20260620_145004_91dcdf/adoption-record.json",
+            "bytes": 3465,
+            "chars": 3465,
+            "purpose": "allowed_fallback_audit"
+          }
+        ],
+        "context_bytes": 40345,
+        "context_chars": 40345,
+        "estimated_context_tokens": 10087,
+        "raw_metric_row_bytes_exposed": 0,
+        "fallback_status": "adopted",
+        "worker_run_id": "worker_run_20260620_145004_91dcdf",
+        "generated_figure": {
+          "figure_id": "fallback_category_composition",
+          "chart_type": "stacked_bar",
+          "png_path": ".lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.svg",
+          "x": "category",
+          "y": "share",
+          "group_by": "segment",
+          "source": "fallback",
+          "worker_run_id": "worker_run_20260620_145004_91dcdf",
+          "validation_status": "accepted",
+          "field_sources": {
+            "category": [
+              "raw_category"
+            ],
+            "share": [
+              "raw_share"
+            ],
+            "segment": [
+              "raw_segment"
+            ]
+          },
+          "fallback_lineage": {
+            "source_metrics": ".lab-sidecar/tasks/task_20260620_145003_e7ffe0/metrics/normalized_metrics.csv",
+            "fields_used": [
+              "category",
+              "share",
+              "segment"
+            ],
+            "field_sources": {
+              "category": [
+                "raw_category"
+              ],
+              "share": [
+                "raw_share"
+              ],
+              "segment": [
+                "raw_segment"
+              ]
+            },
+            "worker_run_id": "worker_run_20260620_145004_91dcdf",
+            "request_path": "intelligence/worker_run_20260620_145004_91dcdf/figure-request.json",
+            "worker_request_path": "intelligence/worker_run_20260620_145004_91dcdf/worker-request.json",
+            "worker_result_path": "intelligence/worker_run_20260620_145004_91dcdf/worker-result.json",
+            "validator_result_path": "intelligence/worker_run_20260620_145004_91dcdf/validator-result.json",
+            "sandbox_png_path": "intelligence/worker_run_20260620_145004_91dcdf/sandbox/fallback_category_composition-fallback.png",
+            "sandbox_svg_path": "intelligence/worker_run_20260620_145004_91dcdf/sandbox/fallback_category_composition-fallback.svg",
+            "adopted_png_path": ".lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.png",
+            "adopted_svg_path": ".lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.svg"
+          }
+        }
+      },
+      "coverage": {
+        "deterministic_covered": false,
+        "fallback_covered": true,
+        "coverage_improved": true
+      },
+      "scores": {
+        "deterministic_refused_unsupported": true,
+        "deterministic_no_official_artifact": true,
+        "fallback_adopted": true,
+        "coverage_improved": true,
+        "chart_intent_preserved": true,
+        "official_artifacts_valid": true,
+        "validator_accepted": true,
+        "adoption_record_present": true,
+        "traceability_lineage_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 11,
+      "score_max": 11,
+      "passed": true,
+      "context_reduction_pct": 99.32,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_145003_e7ffe0/figures/fallback_category_composition-fallback.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          640,
+          360
+        ],
+        "color_count": 137,
+        "nonblank": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    }
+  ],
+  "aggregate": {
+    "scenario_count": 4,
+    "passed_count": 4,
+    "passed": true,
+    "deterministic_covered_count": 0,
+    "fallback_covered_count": 4,
+    "coverage_delta": 4,
+    "raw_context_chars": 11175245,
+    "sidecar_context_chars": 160489,
+    "context_reduction_pct": 98.56,
+    "raw_estimated_tokens": 2793813,
+    "sidecar_estimated_tokens": 40124,
+    "token_reduction_pct": 98.56,
+    "raw_metric_row_bytes_exposed": 11177985,
+    "sidecar_raw_metric_row_bytes_exposed": 0,
+    "raw_metric_exposure_reduction_pct": 100.0,
+    "sidecar_violation_count": 0,
+    "score_total": 44,
+    "score_max": 44
+  }
+}

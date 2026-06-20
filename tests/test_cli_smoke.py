@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import yaml
+from PIL import Image
 from pptx import Presentation
 from typer.testing import CliRunner
 
@@ -64,6 +65,17 @@ def read_csv_rows(path: Path) -> list[dict[str, str]]:
 def assert_non_empty_file(path: Path) -> None:
     assert path.is_file()
     assert path.stat().st_size > 0
+
+
+def assert_nonblank_png(path: Path, min_width: int = 320, min_height: int = 180) -> None:
+    assert_non_empty_file(path)
+    with Image.open(path) as image:
+        rgb = image.convert("RGB")
+        assert rgb.size[0] >= min_width
+        assert rgb.size[1] >= min_height
+        colors = rgb.getcolors(maxcolors=1_000_000)
+        assert colors is not None
+        assert len(colors) > 1
 
 
 def write_stage3_messy_results(workspace: Path) -> Path:
@@ -1192,6 +1204,86 @@ def test_collect_csv_comparison_ingest_generates_normalized_metrics(tmp_path: Pa
     assert artifacts["metrics_collection_summary"]["type"] == "config"
 
 
+def test_collect_records_bounded_best_checkpoint_and_anomaly_summary(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "sweep-results"
+    source.mkdir()
+    (source / "metrics.csv").write_text(
+        "\n".join(
+            [
+                "variant,run_id,config_id,seed,epoch,step,val_accuracy,val_loss,checkpoint,status,error_flag,warning_flag,incomplete_flag,unstable_flag,artifact_present,anomaly_code",
+                "baseline,run_001,cfg_00,11,1,100,0.700,0.620,,ok,0,0,0,0,true,none",
+                "candidate,run_002,cfg_01,13,1,100,0.820,0.440,checkpoints/run_002/step_100.pt,ok,0,0,0,0,true,none",
+                "candidate,run_002,cfg_01,13,2,200,0.910,0.280,checkpoints/run_002/final.pt,ok,0,0,0,0,true,none",
+                "broken,run_003,cfg_02,17,1,100,0.510,0.910,,missing_final_metric,1,0,1,0,false,missing_final_metric",
+                "broken,run_003,cfg_02,17,2,200,0.500,0.940,,missing_final_metric,1,0,1,0,false,missing_final_metric",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "sweep-results"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 0
+    summary = json.loads(
+        (
+            tmp_path
+            / ".lab-sidecar"
+            / "tasks"
+            / task_id
+            / "metrics"
+            / "collection-summary.json"
+        ).read_text(encoding="utf-8")
+    )
+    bounded = summary["bounded_analysis"]
+    assert bounded["schema_version"] == "1"
+    assert bounded["row_count"] == 5
+
+    best_accuracy = next(item for item in bounded["best_rows"] if item["metric"] == "val_accuracy")
+    assert best_accuracy["direction"] == "max"
+    assert best_accuracy["value"] == 0.91
+    assert best_accuracy["row_number"] == 3
+    assert best_accuracy["selected_fields"]["variant"] == "candidate"
+    assert best_accuracy["selected_fields"]["run_id"] == "run_002"
+    assert best_accuracy["selected_fields"]["checkpoint"] == "checkpoints/run_002/final.pt"
+    assert best_accuracy["evidence"] == {
+        "artifact_id": "metrics_normalized_csv",
+        "path": "metrics/normalized_metrics.csv",
+        "row_number": 3,
+        "body": "omitted",
+    }
+
+    checkpoint = bounded["checkpoint_summary"]
+    assert checkpoint["present"] is True
+    assert checkpoint["available_checkpoint_count"] == 2
+    assert checkpoint["unique_checkpoint_count"] == 2
+    assert checkpoint["selected"]["checkpoint"] == "checkpoints/run_002/final.pt"
+    assert checkpoint["selected"]["selection_metric"] == "val_accuracy"
+    assert checkpoint["selected"]["row_number"] == 3
+
+    anomalies = bounded["anomaly_summary"]
+    assert anomalies["present"] is True
+    assert anomalies["anomaly_row_count"] == 2
+    assert anomalies["anomaly_group_count"] == 1
+    reasons = {item["reason"] for item in anomalies["counts_by_reason"]}
+    assert {
+        "status=missing_final_metric",
+        "error_flag=1",
+        "incomplete_flag=1",
+        "artifact_present=false",
+        "anomaly_code=missing_final_metric",
+    }.issubset(reasons)
+    example = anomalies["examples"][0]
+    assert example["row_count"] == 2
+    assert example["first_row_number"] == 4
+    assert example["last_row_number"] == 5
+    assert example["selected_fields"]["run_id"] == "run_003"
+    assert example["selected_fields"]["artifact_present"] == "false"
+    assert example["evidence"]["body"] == "omitted"
+
+
 def test_collect_run_working_dir_output_without_wrapper(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     assert invoke(tmp_path, ["init"]).exit_code == 0
@@ -2005,6 +2097,480 @@ def test_figures_spec_missing_metrics_field_returns_exit_code_5(tmp_path: Path) 
     assert "does_not_exist" in summary["skipped_candidates"][0]["reason"]
 
 
+def test_figures_unsupported_explicit_chart_records_bounded_diagnostics_without_fallback(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "scatter.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: accuracy_scatter",
+                "chart_type: scatter",
+                "title: Accuracy Scatter",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "scatter.yaml"])
+
+    assert result.exit_code == 5
+    assert "unsupported chart diagnostics" in result.output.lower()
+    assert "chart_type=scatter" in result.output
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    assert summary["generated_figures"] == []
+    assert summary["fallback"]["mode"] == "off"
+    assert summary["fallback"]["attempted"] is False
+    assert summary["fallback"]["status"] == "not_needed"
+    assert summary["unsupported_chart_diagnostics"]
+    diagnostic = summary["unsupported_chart_diagnostics"][0]
+    assert diagnostic["requested_chart_intent"]["chart_type"] == "scatter"
+    assert diagnostic["requested_chart_intent"]["x"] == "epoch"
+    assert diagnostic["requested_chart_intent"]["y"] == "val_accuracy"
+    assert "epoch" in diagnostic["available_fields"]
+    assert "val_accuracy" in diagnostic["available_fields"]
+    assert "supported types are bar, box, line" in diagnostic["reason"]
+    serialized_summary = json.dumps(summary, ensure_ascii=False)
+    assert "Best val_accuracy=0.86" not in serialized_summary
+    assert "epoch,train_loss,val_loss" not in serialized_summary
+    assert not (task_path / "intelligence").exists()
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["figure_lineage"]["unsupported_chart_diagnostics"]
+    assert traceability["figure_lineage"]["fallback"]["mode"] == "off"
+    assert_traceability_is_bounded(traceability)
+
+
+def test_figures_unsupported_explicit_chart_writes_bounded_request_for_fallback_mode(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "heatmap.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: confusion_heatmap",
+                "chart_type: heatmap",
+                "title: Confusion Heatmap",
+                "x: epoch",
+                "y: val_accuracy",
+                "group_by: source_file",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "heatmap.yaml", "--fallback", "bounded"])
+
+    assert result.exit_code == 5
+    assert "Fallback:" in result.output
+    assert "status: unavailable" in result.output
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    fallback = summary["fallback"]
+    assert fallback["mode"] == "bounded"
+    assert fallback["attempted"] is True
+    assert fallback["status"] == "unavailable"
+    assert fallback["worker_run_id"]
+    assert fallback["request_path"].endswith("/figure-request.json")
+    assert fallback["validator_result_path"].endswith("/validator-result.json")
+    worker_run_dir = task_path / fallback["request_path"].split("/", 1)[0] / fallback["request_path"].split("/", 1)[1]
+    request_path = task_path / fallback["request_path"]
+    validator_path = task_path / fallback["validator_result_path"]
+    assert request_path.is_file()
+    assert validator_path.is_file()
+    assert (task_path / "intelligence" / fallback["worker_run_id"] / "sandbox").is_dir()
+    assert not (task_path / "intelligence" / fallback["worker_run_id"] / "worker-request.json").exists()
+    assert not (task_path / "intelligence" / fallback["worker_run_id"] / "worker-result.json").exists()
+    assert not (task_path / "intelligence" / fallback["worker_run_id"] / "adoption-record.json").exists()
+
+    request = json.loads(request_path.read_text(encoding="utf-8"))
+    assert request["task_id"] == task_id
+    assert request["task_status"] == "completed"
+    assert request["task_mode"] == "ingest"
+    assert request["requested_chart_intent"]["chart_type"] == "heatmap"
+    assert request["requested_chart_intent"]["group_by"] == "source_file"
+    assert request["row_count"] > 0
+    assert request["metric_columns"]
+    assert "epoch" in request["metric_columns"]
+    assert "val_accuracy" in request["metric_columns"]
+    assert "source_file" in request["metric_columns"]
+    assert isinstance(request["units"], dict)
+    assert isinstance(request["groups"], dict)
+    assert isinstance(request["field_sources"], dict)
+    assert request["collection_diagnostics"]["processed_files"]
+    assert request["collection_diagnostics"]["warnings"] == []
+    assert request["artifacts"][0]["artifact_id"] == "metrics_normalized_csv"
+    serialized_request = json.dumps(request, ensure_ascii=False)
+    assert "RAW_ROW_SENTINEL" not in serialized_request
+    assert "epoch,train_loss,val_loss" not in serialized_request
+    assert "Best val_accuracy=0.86" not in serialized_request
+    assert "ppt/presentation.xml" not in serialized_request
+    assert '"prompt":' not in serialized_request.lower()
+    assert '"response":' not in serialized_request.lower()
+
+    validator = json.loads(validator_path.read_text(encoding="utf-8"))
+    assert validator["accepted"] is False
+    assert validator["proposal_type"] == "figure"
+    assert validator["checks"][0]["name"] == "worker_available"
+    assert "figure_fallback_unavailable" in "\n".join(validator["diagnostics"])
+    traceability = read_traceability(tmp_path, task_id)
+    serialized_traceability = json.dumps(traceability, ensure_ascii=False)
+    assert "epoch,train_loss,val_loss" not in serialized_traceability
+    assert "Best val_accuracy=0.86" not in serialized_traceability
+    assert traceability["figure_lineage"]["fallback"]["status"] == "unavailable"
+    assert_traceability_is_bounded(traceability)
+
+
+def test_figures_fallback_mock_worker_adopts_validated_official_artifact(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "fallback-metrics"
+    source.mkdir()
+    (source / "metrics.csv").write_text(
+        "\n".join(
+            [
+                "epoch,val_accuracy,secret_payload",
+                "1,0.70,ALPHA4_WORKER_RAW_SENTINEL_ROW_001",
+                "2,0.82,ALPHA4_WORKER_RAW_SENTINEL_ROW_002",
+                "3,0.91,ALPHA4_WORKER_RAW_SENTINEL_ROW_003",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - fallback-metrics/metrics.csv",
+                "fields:",
+                "  epoch: epoch",
+                "  val_accuracy:",
+                "    source: val_accuracy",
+                "    unit: ratio",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "fallback-metrics"]).output)
+    assert invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"]).exit_code == 0
+    (tmp_path / "heatmap.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: alpha4_heatmap",
+                "chart_type: heatmap",
+                "title: Alpha4 Heatmap",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(
+        tmp_path,
+        ["figures", task_id, "--spec", "heatmap.yaml", "--fallback", "bounded", "--fallback-worker", "mock"],
+    )
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    fallback = summary["fallback"]
+    assert fallback["status"] == "adopted"
+    assert fallback["worker_type"] == "mock_chart_fallback"
+    assert fallback["validation_status"] == "accepted"
+    assert fallback["adoption_record_path"].endswith("/adoption-record.json")
+    run_dir = task_path / "intelligence" / fallback["worker_run_id"]
+    sandbox = run_dir / "sandbox"
+    assert (run_dir / "figure-request.json").is_file()
+    assert (run_dir / "worker-request.json").is_file()
+    assert (run_dir / "worker-result.json").is_file()
+    assert (run_dir / "validator-result.json").is_file()
+    assert (sandbox / "figure-fallback-proposal.json").is_file()
+    assert (sandbox / "alpha4_heatmap-fallback.png").is_file()
+    assert (sandbox / "alpha4_heatmap-fallback.svg").is_file()
+    assert (run_dir / "adoption-record.json").is_file()
+    official_png = task_path / "figures" / "alpha4_heatmap-fallback.png"
+    official_svg = task_path / "figures" / "alpha4_heatmap-fallback.svg"
+    assert_nonblank_png(official_png)
+    assert_non_empty_file(official_svg)
+
+    request = json.loads((run_dir / "figure-request.json").read_text(encoding="utf-8"))
+    worker_request = json.loads((run_dir / "worker-request.json").read_text(encoding="utf-8"))
+    worker_result = json.loads((run_dir / "worker-result.json").read_text(encoding="utf-8"))
+    validator = json.loads((run_dir / "validator-result.json").read_text(encoding="utf-8"))
+    proposal = json.loads((sandbox / "figure-fallback-proposal.json").read_text(encoding="utf-8"))
+    adoption = json.loads((run_dir / "adoption-record.json").read_text(encoding="utf-8"))
+    serialized = json.dumps(
+        {
+            "request": request,
+            "worker_request": worker_request,
+            "worker_result": worker_result,
+            "validator": validator,
+            "proposal": proposal,
+            "adoption": adoption,
+            "summary": summary,
+        },
+        ensure_ascii=False,
+    )
+    assert validator["accepted"] is True
+    assert validator["proposal_type"] == "figure_fallback"
+    assert proposal["proposal_type"] == "figure_fallback"
+    assert proposal["source_metrics_fields"] == ["epoch", "val_accuracy"]
+    assert proposal["output_paths"]["png_path"] == "alpha4_heatmap-fallback.png"
+    assert worker_request["sandbox_path"].endswith("/sandbox")
+    assert summary["figure_count"] == 1
+    figure = summary["generated_figures"][0]
+    assert figure["source"] == "fallback"
+    assert figure["worker_run_id"] == fallback["worker_run_id"]
+    assert figure["validation_status"] == "accepted"
+    assert figure["png_path"] == f".lab-sidecar/tasks/{task_id}/figures/alpha4_heatmap-fallback.png"
+    assert figure["fallback_lineage"]["source_metrics"].endswith("metrics/normalized_metrics.csv")
+    assert figure["fallback_lineage"]["fields_used"] == ["epoch", "val_accuracy"]
+    assert figure["field_sources"] == {"epoch": ["epoch"], "val_accuracy": ["val_accuracy"]}
+    assert adoption["official_artifacts"][:2] == [
+        f".lab-sidecar/tasks/{task_id}/figures/alpha4_heatmap-fallback.png",
+        f".lab-sidecar/tasks/{task_id}/figures/alpha4_heatmap-fallback.svg",
+    ]
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = {artifact["artifact_id"] for artifact in manifest["artifacts"]}
+    assert "figure_alpha4_heatmap_png" in artifact_ids
+    assert "figure_alpha4_heatmap_svg" in artifact_ids
+    assert "ALPHA4_WORKER_RAW_SENTINEL_ROW" not in serialized
+    assert "1,0.70" not in serialized
+    assert '"prompt":' not in serialized.lower()
+    assert '"response":' not in serialized.lower()
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["figure_lineage"]["fallback"]["status"] == "adopted"
+    assert traceability["figure_lineage"]["fallback"]["adoption_record_path"].endswith("/adoption-record.json")
+    trace_figure = traceability["figure_lineage"]["figures"][0]
+    assert trace_figure["source"] == "fallback"
+    assert trace_figure["worker_run_id"] == fallback["worker_run_id"]
+    assert trace_figure["fallback_lineage"]["fields_used"] == ["epoch", "val_accuracy"]
+    assert "ALPHA4_WORKER_RAW_SENTINEL_ROW" not in json.dumps(traceability, ensure_ascii=False)
+    assert_traceability_is_bounded(traceability)
+
+
+def test_figures_fallback_mock_worker_rejects_malformed_image_without_adoption(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "heatmap.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: malformed_heatmap",
+                "chart_type: heatmap",
+                "title: Malformed Heatmap",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(
+        tmp_path,
+        ["figures", task_id, "--spec", "heatmap.yaml", "--fallback", "bounded", "--fallback-worker", "mock-malformed-image"],
+    )
+
+    assert result.exit_code == 5
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    fallback = summary["fallback"]
+    assert fallback["status"] == "rejected"
+    run_dir = task_path / "intelligence" / fallback["worker_run_id"]
+    sandbox = run_dir / "sandbox"
+    assert (sandbox / "malformed_heatmap-fallback.png").is_file()
+    assert not (task_path / "figures" / "malformed_heatmap-fallback.png").exists()
+    assert not (task_path / "figures" / "malformed_heatmap-fallback.svg").exists()
+    assert not (run_dir / "adoption-record.json").exists()
+    validator = json.loads((run_dir / "validator-result.json").read_text(encoding="utf-8"))
+    diagnostics = "\n".join(validator["diagnostics"])
+    assert validator["accepted"] is False
+    assert "PNG could not be parsed" in diagnostics
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = {artifact["artifact_id"] for artifact in manifest["artifacts"]}
+    assert "figure_malformed_heatmap_png" not in artifact_ids
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["figure_lineage"]["figure_count"] == 0
+    assert_traceability_is_bounded(traceability)
+
+
+def test_figures_fallback_mock_worker_rejects_tiny_image_without_adoption(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "heatmap.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: tiny_heatmap",
+                "chart_type: heatmap",
+                "title: Tiny Heatmap",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(
+        tmp_path,
+        ["figures", task_id, "--spec", "heatmap.yaml", "--fallback", "bounded", "--fallback-worker", "mock-tiny-image"],
+    )
+
+    assert result.exit_code == 5
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    fallback = summary["fallback"]
+    assert fallback["status"] == "rejected"
+    run_dir = task_path / "intelligence" / fallback["worker_run_id"]
+    assert not (run_dir / "adoption-record.json").exists()
+    assert not (task_path / "figures" / "tiny_heatmap-fallback.png").exists()
+    validator = json.loads((run_dir / "validator-result.json").read_text(encoding="utf-8"))
+    diagnostics = "\n".join(validator["diagnostics"])
+    assert validator["accepted"] is False
+    assert "PNG dimensions are too small" in diagnostics
+    assert "SVG dimensions are too small" in diagnostics
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = {artifact["artifact_id"] for artifact in manifest["artifacts"]}
+    assert "figure_tiny_heatmap_png" not in artifact_ids
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["figure_lineage"]["figure_count"] == 0
+    assert_traceability_is_bounded(traceability)
+
+
+def test_figures_fallback_mock_worker_rejects_missing_field_without_adoption(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "scatter.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: missing_field_scatter",
+                "chart_type: scatter",
+                "title: Missing Field Scatter",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(
+        tmp_path,
+        ["figures", task_id, "--spec", "scatter.yaml", "--fallback", "bounded", "--fallback-worker", "mock-missing-field"],
+    )
+
+    assert result.exit_code == 5
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    fallback = summary["fallback"]
+    assert fallback["status"] == "rejected"
+    run_dir = task_path / "intelligence" / fallback["worker_run_id"]
+    assert not (run_dir / "adoption-record.json").exists()
+    assert not (task_path / "figures" / "missing_field_scatter-fallback.png").exists()
+    validator = json.loads((run_dir / "validator-result.json").read_text(encoding="utf-8"))
+    diagnostics = "\n".join(validator["diagnostics"])
+    assert validator["accepted"] is False
+    assert "missing_metric_for_validator" in diagnostics
+    manifest = read_manifest(tmp_path, task_id)
+    artifact_ids = {artifact["artifact_id"] for artifact in manifest["artifacts"]}
+    assert "figure_missing_field_scatter_png" not in artifact_ids
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["figure_lineage"]["fallback"]["status"] == "rejected"
+    assert_traceability_is_bounded(traceability)
+
+
+def test_figures_fallback_mock_worker_rejects_sandbox_escape_without_official_writes(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "scatter.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: escape_scatter",
+                "chart_type: scatter",
+                "title: Escape Scatter",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(
+        tmp_path,
+        ["figures", task_id, "--spec", "scatter.yaml", "--fallback", "bounded", "--fallback-worker", "mock-escape"],
+    )
+
+    assert result.exit_code == 5
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    fallback = summary["fallback"]
+    assert fallback["status"] == "rejected"
+    run_dir = task_path / "intelligence" / fallback["worker_run_id"]
+    sandbox = run_dir / "sandbox"
+    assert (sandbox / "figure-fallback-proposal.json").is_file()
+    assert not (task_path / "figures" / "escape.png").exists()
+    assert not (task_path / "figures" / "escape.svg").exists()
+    assert not (run_dir / "adoption-record.json").exists()
+    validator = json.loads((run_dir / "validator-result.json").read_text(encoding="utf-8"))
+    diagnostics = "\n".join(validator["diagnostics"])
+    assert validator["accepted"] is False
+    assert "path escapes sandbox" in diagnostics
+    traceability = read_traceability(tmp_path, task_id)
+    assert traceability["figure_lineage"]["fallback"]["status"] == "rejected"
+    assert_traceability_is_bounded(traceability)
+
+
+def test_figures_supported_deterministic_spec_does_not_create_fallback_worker_run(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/csv-comparison"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    (tmp_path / "line.yaml").write_text(
+        "\n".join(
+            [
+                "figure_id: accuracy_curve_bounded_flag",
+                "chart_type: line",
+                "title: Validation Accuracy over Epoch",
+                "x: epoch",
+                "y: val_accuracy",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = invoke(tmp_path, ["figures", task_id, "--spec", "line.yaml", "--fallback", "bounded"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    assert_non_empty_file(task_path / "figures" / "accuracy_curve_bounded_flag.png")
+    summary = json.loads((task_path / "figures" / "figure-summary.json").read_text(encoding="utf-8"))
+    assert summary["generated_figures"][0]["chart_type"] == "line"
+    assert summary["fallback"]["mode"] == "bounded"
+    assert summary["fallback"]["attempted"] is False
+    assert summary["fallback"]["status"] == "not_needed"
+    assert summary["unsupported_chart_diagnostics"] == []
+    assert not (task_path / "intelligence").exists()
+
+
 def test_figures_auto_runtime_alias_uses_runtime_ms(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     assert invoke(tmp_path, ["init"]).exit_code == 0
@@ -2636,8 +3202,102 @@ def test_slides_failed_task_long_stderr_is_truncated_and_recorded(tmp_path: Path
     assert "... earlier lines truncated ..." in deck_text
     stderr_truncations = [item for item in summary["text_truncations"] if item["key"] == "stderr_tail"]
     assert stderr_truncations
-    assert "stderr-line-0" in stderr_truncations[0]["full"]
-    assert "stderr-line-39" in stderr_truncations[0]["full"]
+    stderr_truncation = stderr_truncations[0]
+    assert "full" not in stderr_truncation
+    assert stderr_truncation["full_omitted_reason"] == "full stderr log body omitted from slides summary"
+    assert stderr_truncation["omitted_line_count"] == 40
+    assert stderr_truncation["omitted_char_count"] > 40 * 180
+    assert stderr_truncation["truncated"] is True
+    assert "stderr-line-32" in stderr_truncation["display"]
+    assert "... truncated ..." in stderr_truncation["display"]
+    assert "stderr-line-0" not in json.dumps(summary, ensure_ascii=False)
+    for item in summary["text_truncations"]:
+        if item["key"].startswith("stderr_tail"):
+            assert "full" not in item
+            assert "full_omitted_reason" in item
+
+
+def test_slides_summary_omits_full_stdout_stderr_logs_after_full_cli_path(tmp_path: Path) -> None:
+    script = tmp_path / "long_logs_success.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import csv",
+                "import sys",
+                "from pathlib import Path",
+                "for index in range(60):",
+                "    print(f'RAW_LOG_BODY_MARKER stdout early {index:04d} FORBIDDEN_STDOUT_EARLY_{index:04d} ' + ('x' * 32))",
+                "    print(f'RAW_LOG_BODY_MARKER stderr early {index:04d} FORBIDDEN_STDERR_EARLY_{index:04d} ' + ('y' * 32), file=sys.stderr)",
+                "rows = [",
+                "    {'epoch': 1, 'train_loss': 1.10, 'val_loss': 1.00, 'val_accuracy': 0.60},",
+                "    {'epoch': 2, 'train_loss': 0.90, 'val_loss': 0.82, 'val_accuracy': 0.70},",
+                "    {'epoch': 3, 'train_loss': 0.70, 'val_loss': 0.64, 'val_accuracy': 0.78},",
+                "    {'epoch': 4, 'train_loss': 0.55, 'val_loss': 0.50, 'val_accuracy': 0.84},",
+                "    {'epoch': 5, 'train_loss': 0.45, 'val_loss': 0.42, 'val_accuracy': 0.88},",
+                "]",
+                "with Path('metrics.csv').open('w', newline='', encoding='utf-8') as fh:",
+                "    writer = csv.DictWriter(fh, fieldnames=['epoch', 'train_loss', 'val_loss', 'val_accuracy'])",
+                "    writer.writeheader()",
+                "    writer.writerows(rows)",
+                "for index in range(8):",
+                "    print(f'VISIBLE_STDOUT_TAIL_{index:04d} metric_ready')",
+                "    print(f'VISIBLE_STDERR_TAIL_{index:04d} warning_ready', file=sys.stderr)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    task_id = extract_task_id(invoke(tmp_path, ["run", f'"{sys.executable}" long_logs_success.py']).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
+    assert invoke(tmp_path, ["report", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["slides", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    assert_readable_deck(task_path / "slides" / "presentation-draft.pptx")
+    summary = json.loads((task_path / "slides" / "slides-summary.json").read_text(encoding="utf-8"))
+    serialized_summary = json.dumps(summary, ensure_ascii=False)
+    stdout_text = (task_path / "stdout.log").read_text(encoding="utf-8")
+    stderr_text = (task_path / "stderr.log").read_text(encoding="utf-8")
+    assert stdout_text not in serialized_summary
+    assert stderr_text not in serialized_summary
+    assert "RAW_LOG_BODY_MARKER" not in serialized_summary
+    assert "FORBIDDEN_STDOUT_EARLY_0000" not in serialized_summary
+    assert "FORBIDDEN_STDERR_EARLY_0000" not in serialized_summary
+
+    log_truncations = [
+        item
+        for item in summary["text_truncations"]
+        if item["key"].startswith(("stdout_tail", "stderr_tail"))
+    ]
+    assert {item["key"] for item in log_truncations}.issuperset({"stdout_tail", "stderr_tail"})
+    for item in log_truncations:
+        assert "full" not in item
+        assert item["full_omitted_reason"]
+        assert item["omitted_char_count"] > 0
+        assert item["omitted_line_count"] > 0
+        assert item["truncated"] is True
+
+    stdout_truncation = next(item for item in log_truncations if item["key"] == "stdout_tail")
+    stderr_truncation = next(item for item in log_truncations if item["key"] == "stderr_tail")
+    assert stdout_truncation["max_lines"] == 8
+    assert stderr_truncation["max_lines"] == 8
+    assert "... earlier lines truncated ..." in stdout_truncation["display"]
+    assert "... earlier lines truncated ..." in stderr_truncation["display"]
+    assert "VISIBLE_STDOUT_TAIL_0007" in stdout_truncation["display"]
+    assert "VISIBLE_STDERR_TAIL_0007" in stderr_truncation["display"]
+    assert "FORBIDDEN_STDOUT_EARLY" not in stdout_truncation["display"]
+    assert "FORBIDDEN_STDERR_EARLY" not in stderr_truncation["display"]
+
+    traceability = read_traceability(tmp_path, task_id)
+    serialized_traceability = json.dumps(traceability, ensure_ascii=False)
+    assert "RAW_LOG_BODY_MARKER" not in serialized_traceability
+    assert "FORBIDDEN_STDOUT_EARLY_0000" not in serialized_traceability
+    assert "FORBIDDEN_STDERR_EARLY_0000" not in serialized_traceability
+    assert_traceability_is_bounded(traceability)
 
 
 def test_slides_zh_project_template_generates_project_deck(tmp_path: Path) -> None:

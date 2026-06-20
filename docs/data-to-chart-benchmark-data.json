@@ -1,0 +1,1198 @@
+{
+  "schema_version": "1",
+  "date": "2026-06-20",
+  "package_version": "0.1.0",
+  "benchmark_root": "<benchmark-root>",
+  "scale": "full",
+  "token_estimate": {
+    "method": "ceil(chars / 4)",
+    "exact_provider_tokens_available": false
+  },
+  "sidecar_allowed_reads": [
+    "figures/figure-summary.json",
+    "metrics/collection-summary.json",
+    "provenance/traceability.json"
+  ],
+  "scenarios": [
+    {
+      "scenario_id": "training_curve",
+      "expected": {
+        "chart_type": "line",
+        "x": "epoch",
+        "y": "accuracy",
+        "group_by": "split"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/training_curve/inputs/training_curve.csv",
+            "bytes": 1213245,
+            "chars": 1213004,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 1213245,
+        "context_chars": 1213004,
+        "estimated_context_tokens": 303251,
+        "raw_metric_row_bytes_exposed": 1213245
+      },
+      "lab_sidecar": {
+        "workspace": "<benchmark-root>/training_curve/workspace",
+        "task_ids": [
+          "task_20260620_144949_c717b0"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/training_curve/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/training_curve/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "<benchmark-root>/training_curve/workspace/inputs",
+              "--name",
+              "data-to-chart training_curve"
+            ],
+            "cwd": "<benchmark-root>/training_curve/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144949_c717b0\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144949_c717b0\nNext:\n- labsidecar collect task_20260620_144949_c717b0\n- labsidecar artifacts task_20260620_144949_c717b0\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144949_c717b0",
+              "--config",
+              "<benchmark-root>/training_curve/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/training_curve/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144949_c717b0\nDetected fields: epoch, split, accuracy\nRows: 240\nWrote: .lab-sidecar/tasks/task_20260620_144949_c717b0/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144949_c717b0/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144949_c717b0/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144949_c717b0\n- labsidecar report task_20260620_144949_c717b0\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144949_c717b0"
+            ],
+            "cwd": "<benchmark-root>/training_curve/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144949_c717b0\n- .lab-sidecar/tasks/task_20260620_144949_c717b0/figures/line_accuracy_over_epoch.png\n- .lab-sidecar/tasks/task_20260620_144949_c717b0/figures/line_accuracy_over_epoch.svg\nSpec: .lab-sidecar/tasks/task_20260620_144949_c717b0/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144949_c717b0/figures/figure-summary.json\nFallback: mode=off status=not_needed\nNext:\n- labsidecar report task_20260620_144949_c717b0\n- labsidecar slides task_20260620_144949_c717b0\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2798,
+            "chars": 2798,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3374,
+            "chars": 3374,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 9023,
+            "chars": 9023,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 16716,
+        "context_chars": 16716,
+        "estimated_context_tokens": 4179,
+        "raw_metric_row_bytes_exposed": 0,
+        "generated_figure": {
+          "figure_id": "line_accuracy_over_epoch",
+          "chart_type": "line",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144949_c717b0/figures/line_accuracy_over_epoch.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144949_c717b0/figures/line_accuracy_over_epoch.svg",
+          "x": "epoch",
+          "y": "accuracy",
+          "group_by": "split",
+          "units": {
+            "accuracy": "ratio"
+          },
+          "field_sources": {
+            "epoch": [
+              "raw_epoch"
+            ],
+            "accuracy": [
+              "metric_value"
+            ],
+            "split": [
+              "raw_split"
+            ]
+          }
+        },
+        "traceability_present": true
+      },
+      "scores": {
+        "chart_type_correct": true,
+        "axes_group_correct": true,
+        "units_field_mapping_correct": true,
+        "visual_artifacts_valid": true,
+        "traceability_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 7,
+      "passed": true,
+      "context_reduction_pct": 98.62,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144949_c717b0/figures/line_accuracy_over_epoch.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144949_c717b0/figures/line_accuracy_over_epoch.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          1979,
+          1180
+        ],
+        "nonwhite_pixel_ratio": 0.08397,
+        "content_bbox": [
+          19,
+          20,
+          1962,
+          1160
+        ],
+        "border_margin_ok": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "multi_run_sweep",
+      "expected": {
+        "chart_type": "line",
+        "x": "step",
+        "y": "val_accuracy",
+        "group_by": "config_id"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/multi_run_sweep/inputs/multi_run_sweep.csv",
+            "bytes": 3647720,
+            "chars": 3646999,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 3647720,
+        "context_chars": 3646999,
+        "estimated_context_tokens": 911750,
+        "raw_metric_row_bytes_exposed": 3647720
+      },
+      "lab_sidecar": {
+        "workspace": "<benchmark-root>/multi_run_sweep/workspace",
+        "task_ids": [
+          "task_20260620_144951_a79799"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/multi_run_sweep/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/multi_run_sweep/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "<benchmark-root>/multi_run_sweep/workspace/inputs",
+              "--name",
+              "data-to-chart multi_run_sweep"
+            ],
+            "cwd": "<benchmark-root>/multi_run_sweep/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144951_a79799\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144951_a79799\nNext:\n- labsidecar collect task_20260620_144951_a79799\n- labsidecar artifacts task_20260620_144951_a79799\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144951_a79799",
+              "--config",
+              "<benchmark-root>/multi_run_sweep/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/multi_run_sweep/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144951_a79799\nDetected fields: step, config_id, seed, val_accuracy\nRows: 720\nWrote: .lab-sidecar/tasks/task_20260620_144951_a79799/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144951_a79799/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144951_a79799/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144951_a79799\n- labsidecar report task_20260620_144951_a79799\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144951_a79799"
+            ],
+            "cwd": "<benchmark-root>/multi_run_sweep/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144951_a79799\n- .lab-sidecar/tasks/task_20260620_144951_a79799/figures/line_val_accuracy_over_step.png\n- .lab-sidecar/tasks/task_20260620_144951_a79799/figures/line_val_accuracy_over_step.svg\nSpec: .lab-sidecar/tasks/task_20260620_144951_a79799/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144951_a79799/figures/figure-summary.json\nFallback: mode=off status=not_needed\nNext:\n- labsidecar report task_20260620_144951_a79799\n- labsidecar slides task_20260620_144951_a79799\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2921,
+            "chars": 2921,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3749,
+            "chars": 3749,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 9181,
+            "chars": 9181,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 17392,
+        "context_chars": 17392,
+        "estimated_context_tokens": 4348,
+        "raw_metric_row_bytes_exposed": 0,
+        "generated_figure": {
+          "figure_id": "line_val_accuracy_over_step",
+          "chart_type": "line",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144951_a79799/figures/line_val_accuracy_over_step.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144951_a79799/figures/line_val_accuracy_over_step.svg",
+          "x": "step",
+          "y": "val_accuracy",
+          "group_by": "config_id",
+          "units": {
+            "val_accuracy": "ratio"
+          },
+          "field_sources": {
+            "step": [
+              "raw_step"
+            ],
+            "val_accuracy": [
+              "raw_score"
+            ],
+            "config_id": [
+              "raw_config"
+            ]
+          }
+        },
+        "traceability_present": true
+      },
+      "scores": {
+        "chart_type_correct": true,
+        "axes_group_correct": true,
+        "units_field_mapping_correct": true,
+        "visual_artifacts_valid": true,
+        "traceability_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 7,
+      "passed": true,
+      "context_reduction_pct": 99.52,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144951_a79799/figures/line_val_accuracy_over_step.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144951_a79799/figures/line_val_accuracy_over_step.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          1979,
+          1180
+        ],
+        "nonwhite_pixel_ratio": 0.09181,
+        "content_bbox": [
+          19,
+          20,
+          1962,
+          1160
+        ],
+        "border_margin_ok": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "ablation",
+      "expected": {
+        "chart_type": "bar",
+        "x": "variant",
+        "y": "accuracy",
+        "group_by": null
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/ablation/inputs/ablation.csv",
+            "bytes": 20272,
+            "chars": 20267,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 20272,
+        "context_chars": 20267,
+        "estimated_context_tokens": 5067,
+        "raw_metric_row_bytes_exposed": 20272
+      },
+      "lab_sidecar": {
+        "workspace": "<benchmark-root>/ablation/workspace",
+        "task_ids": [
+          "task_20260620_144954_6fed4c"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/ablation/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/ablation/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "<benchmark-root>/ablation/workspace/inputs",
+              "--name",
+              "data-to-chart ablation"
+            ],
+            "cwd": "<benchmark-root>/ablation/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144954_6fed4c\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144954_6fed4c\nNext:\n- labsidecar collect task_20260620_144954_6fed4c\n- labsidecar artifacts task_20260620_144954_6fed4c\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144954_6fed4c",
+              "--config",
+              "<benchmark-root>/ablation/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/ablation/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144954_6fed4c\nDetected fields: variant, accuracy\nRows: 4\nWrote: .lab-sidecar/tasks/task_20260620_144954_6fed4c/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144954_6fed4c/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144954_6fed4c/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144954_6fed4c\n- labsidecar report task_20260620_144954_6fed4c\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144954_6fed4c"
+            ],
+            "cwd": "<benchmark-root>/ablation/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144954_6fed4c\n- .lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/bar_accuracy_by_variant.png\n- .lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/bar_accuracy_by_variant.svg\nSpec: .lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/figure-summary.json\nFallback: mode=off status=not_needed\nNext:\n- labsidecar report task_20260620_144954_6fed4c\n- labsidecar slides task_20260620_144954_6fed4c\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2630,
+            "chars": 2630,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3028,
+            "chars": 3028,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 8863,
+            "chars": 8863,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 16027,
+        "context_chars": 16027,
+        "estimated_context_tokens": 4007,
+        "raw_metric_row_bytes_exposed": 0,
+        "generated_figure": {
+          "figure_id": "bar_accuracy_by_variant",
+          "chart_type": "bar",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/bar_accuracy_by_variant.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/bar_accuracy_by_variant.svg",
+          "x": "variant",
+          "y": "accuracy",
+          "group_by": null,
+          "units": {
+            "accuracy": "ratio"
+          },
+          "field_sources": {
+            "variant": [
+              "raw_variant"
+            ],
+            "accuracy": [
+              "raw_accuracy"
+            ]
+          }
+        },
+        "traceability_present": true
+      },
+      "scores": {
+        "chart_type_correct": true,
+        "axes_group_correct": true,
+        "units_field_mapping_correct": true,
+        "visual_artifacts_valid": true,
+        "traceability_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 7,
+      "passed": true,
+      "context_reduction_pct": 20.92,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/bar_accuracy_by_variant.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144954_6fed4c/figures/bar_accuracy_by_variant.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          1979,
+          1180
+        ],
+        "nonwhite_pixel_ratio": 0.58251,
+        "content_bbox": [
+          19,
+          20,
+          1962,
+          1154
+        ],
+        "border_margin_ok": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "error_analysis",
+      "expected": {
+        "chart_type": "bar",
+        "x": "class",
+        "y": "error_rate",
+        "group_by": "split"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/error_analysis/inputs/error_analysis.csv",
+            "bytes": 40566,
+            "chars": 40557,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 40566,
+        "context_chars": 40557,
+        "estimated_context_tokens": 10140,
+        "raw_metric_row_bytes_exposed": 40566
+      },
+      "lab_sidecar": {
+        "workspace": "<benchmark-root>/error_analysis/workspace",
+        "task_ids": [
+          "task_20260620_144956_a10dd2"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/error_analysis/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/error_analysis/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "<benchmark-root>/error_analysis/workspace/inputs",
+              "--name",
+              "data-to-chart error_analysis"
+            ],
+            "cwd": "<benchmark-root>/error_analysis/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144956_a10dd2\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144956_a10dd2\nNext:\n- labsidecar collect task_20260620_144956_a10dd2\n- labsidecar artifacts task_20260620_144956_a10dd2\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144956_a10dd2",
+              "--config",
+              "<benchmark-root>/error_analysis/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/error_analysis/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144956_a10dd2\nDetected fields: class, split, error_rate\nRows: 8\nWrote: .lab-sidecar/tasks/task_20260620_144956_a10dd2/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144956_a10dd2/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144956_a10dd2/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144956_a10dd2\n- labsidecar report task_20260620_144956_a10dd2\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144956_a10dd2"
+            ],
+            "cwd": "<benchmark-root>/error_analysis/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144956_a10dd2\n- .lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/bar_error_rate_by_class.png\n- .lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/bar_error_rate_by_class.svg\nSpec: .lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/figure-summary.json\nFallback: mode=off status=not_needed\nNext:\n- labsidecar report task_20260620_144956_a10dd2\n- labsidecar slides task_20260620_144956_a10dd2\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2838,
+            "chars": 2838,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 6678,
+            "chars": 6678,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 9031,
+            "chars": 9031,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 20066,
+        "context_chars": 20066,
+        "estimated_context_tokens": 5017,
+        "raw_metric_row_bytes_exposed": 0,
+        "generated_figure": {
+          "figure_id": "bar_error_rate_by_class",
+          "chart_type": "bar",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/bar_error_rate_by_class.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/bar_error_rate_by_class.svg",
+          "x": "class",
+          "y": "error_rate",
+          "group_by": "split",
+          "units": {
+            "error_rate": "ratio"
+          },
+          "field_sources": {
+            "class": [
+              "raw_class"
+            ],
+            "error_rate": [
+              "raw_error_rate"
+            ],
+            "split": [
+              "raw_split"
+            ]
+          }
+        },
+        "traceability_present": true
+      },
+      "scores": {
+        "chart_type_correct": true,
+        "axes_group_correct": true,
+        "units_field_mapping_correct": true,
+        "visual_artifacts_valid": true,
+        "traceability_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 7,
+      "passed": true,
+      "context_reduction_pct": 50.52,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/bar_error_rate_by_class.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144956_a10dd2/figures/bar_error_rate_by_class.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          1979,
+          1180
+        ],
+        "nonwhite_pixel_ratio": 0.5187,
+        "content_bbox": [
+          20,
+          20,
+          1962,
+          1154
+        ],
+        "border_margin_ok": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "time_series",
+      "expected": {
+        "chart_type": "line",
+        "x": "timestamp",
+        "y": "throughput_rps",
+        "group_by": "service"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/time_series/inputs/time_series.csv",
+            "bytes": 1625628,
+            "chars": 1625307,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 1625628,
+        "context_chars": 1625307,
+        "estimated_context_tokens": 406327,
+        "raw_metric_row_bytes_exposed": 1625628
+      },
+      "lab_sidecar": {
+        "workspace": "<benchmark-root>/time_series/workspace",
+        "task_ids": [
+          "task_20260620_144958_26b9ba"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/time_series/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/time_series/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "<benchmark-root>/time_series/workspace/inputs",
+              "--name",
+              "data-to-chart time_series"
+            ],
+            "cwd": "<benchmark-root>/time_series/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_144958_26b9ba\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_144958_26b9ba\nNext:\n- labsidecar collect task_20260620_144958_26b9ba\n- labsidecar artifacts task_20260620_144958_26b9ba\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_144958_26b9ba",
+              "--config",
+              "<benchmark-root>/time_series/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/time_series/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_144958_26b9ba\nDetected fields: timestamp, service, throughput_rps\nRows: 320\nWrote: .lab-sidecar/tasks/task_20260620_144958_26b9ba/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_144958_26b9ba/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_144958_26b9ba/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_144958_26b9ba\n- labsidecar report task_20260620_144958_26b9ba\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_144958_26b9ba"
+            ],
+            "cwd": "<benchmark-root>/time_series/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_144958_26b9ba\n- .lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/line_throughput_rps_over_timestamp.png\n- .lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/line_throughput_rps_over_timestamp.svg\nSpec: .lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/figure-summary.json\nFallback: mode=off status=not_needed\nNext:\n- labsidecar report task_20260620_144958_26b9ba\n- labsidecar slides task_20260620_144958_26b9ba\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2935,
+            "chars": 2935,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 2920,
+            "chars": 2920,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 9203,
+            "chars": 9203,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 16608,
+        "context_chars": 16608,
+        "estimated_context_tokens": 4152,
+        "raw_metric_row_bytes_exposed": 0,
+        "generated_figure": {
+          "figure_id": "line_throughput_rps_over_timestamp",
+          "chart_type": "line",
+          "png_path": ".lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/line_throughput_rps_over_timestamp.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/line_throughput_rps_over_timestamp.svg",
+          "x": "timestamp",
+          "y": "throughput_rps",
+          "group_by": "service",
+          "units": {
+            "throughput_rps": "rps"
+          },
+          "field_sources": {
+            "timestamp": [
+              "raw_ts"
+            ],
+            "throughput_rps": [
+              "raw_throughput"
+            ],
+            "service": [
+              "raw_service"
+            ]
+          }
+        },
+        "traceability_present": true
+      },
+      "scores": {
+        "chart_type_correct": true,
+        "axes_group_correct": true,
+        "units_field_mapping_correct": true,
+        "visual_artifacts_valid": true,
+        "traceability_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 7,
+      "passed": true,
+      "context_reduction_pct": 98.98,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/line_throughput_rps_over_timestamp.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_144958_26b9ba/figures/line_throughput_rps_over_timestamp.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          1979,
+          1180
+        ],
+        "nonwhite_pixel_ratio": 0.07135,
+        "content_bbox": [
+          19,
+          20,
+          1962,
+          1160
+        ],
+        "border_margin_ok": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "categorical_comparison",
+      "expected": {
+        "chart_type": "bar",
+        "x": "model",
+        "y": "accuracy",
+        "group_by": "dataset"
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/categorical_comparison/inputs/categorical_comparison.csv",
+            "bytes": 30536,
+            "chars": 30529,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 30536,
+        "context_chars": 30529,
+        "estimated_context_tokens": 7633,
+        "raw_metric_row_bytes_exposed": 30536
+      },
+      "lab_sidecar": {
+        "workspace": "<benchmark-root>/categorical_comparison/workspace",
+        "task_ids": [
+          "task_20260620_145000_2b326e"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/categorical_comparison/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/categorical_comparison/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "<benchmark-root>/categorical_comparison/workspace/inputs",
+              "--name",
+              "data-to-chart categorical_comparison"
+            ],
+            "cwd": "<benchmark-root>/categorical_comparison/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_145000_2b326e\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_145000_2b326e\nNext:\n- labsidecar collect task_20260620_145000_2b326e\n- labsidecar artifacts task_20260620_145000_2b326e\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_145000_2b326e",
+              "--config",
+              "<benchmark-root>/categorical_comparison/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/categorical_comparison/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_145000_2b326e\nDetected fields: model, dataset, accuracy\nRows: 6\nWrote: .lab-sidecar/tasks/task_20260620_145000_2b326e/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_145000_2b326e/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_145000_2b326e/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_145000_2b326e\n- labsidecar report task_20260620_145000_2b326e\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_145000_2b326e"
+            ],
+            "cwd": "<benchmark-root>/categorical_comparison/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_145000_2b326e\n- .lab-sidecar/tasks/task_20260620_145000_2b326e/figures/bar_accuracy_by_model.png\n- .lab-sidecar/tasks/task_20260620_145000_2b326e/figures/bar_accuracy_by_model.svg\nSpec: .lab-sidecar/tasks/task_20260620_145000_2b326e/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_145000_2b326e/figures/figure-summary.json\nFallback: mode=off status=not_needed\nNext:\n- labsidecar report task_20260620_145000_2b326e\n- labsidecar slides task_20260620_145000_2b326e\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2822,
+            "chars": 2822,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3486,
+            "chars": 3486,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 9038,
+            "chars": 9038,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 16869,
+        "context_chars": 16869,
+        "estimated_context_tokens": 4218,
+        "raw_metric_row_bytes_exposed": 0,
+        "generated_figure": {
+          "figure_id": "bar_accuracy_by_model",
+          "chart_type": "bar",
+          "png_path": ".lab-sidecar/tasks/task_20260620_145000_2b326e/figures/bar_accuracy_by_model.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_145000_2b326e/figures/bar_accuracy_by_model.svg",
+          "x": "model",
+          "y": "accuracy",
+          "group_by": "dataset",
+          "units": {
+            "accuracy": "ratio"
+          },
+          "field_sources": {
+            "model": [
+              "raw_model"
+            ],
+            "accuracy": [
+              "raw_accuracy"
+            ],
+            "dataset": [
+              "raw_dataset"
+            ]
+          }
+        },
+        "traceability_present": true
+      },
+      "scores": {
+        "chart_type_correct": true,
+        "axes_group_correct": true,
+        "units_field_mapping_correct": true,
+        "visual_artifacts_valid": true,
+        "traceability_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 7,
+      "passed": true,
+      "context_reduction_pct": 44.74,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_145000_2b326e/figures/bar_accuracy_by_model.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_145000_2b326e/figures/bar_accuracy_by_model.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          1979,
+          1180
+        ],
+        "nonwhite_pixel_ratio": 0.58619,
+        "content_bbox": [
+          19,
+          20,
+          1962,
+          1154
+        ],
+        "border_margin_ok": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    },
+    {
+      "scenario_id": "multi_seed_distribution",
+      "expected": {
+        "chart_type": "box",
+        "x": "method",
+        "y": "accuracy",
+        "group_by": null
+      },
+      "raw_agent": {
+        "files_read": [
+          {
+            "path": "<benchmark-root>/multi_seed_distribution/inputs/multi_seed_distribution.csv",
+            "bytes": 1215724,
+            "chars": 1215483,
+            "purpose": "raw_agent_table_context"
+          }
+        ],
+        "context_bytes": 1215724,
+        "context_chars": 1215483,
+        "estimated_context_tokens": 303871,
+        "raw_metric_row_bytes_exposed": 1215724
+      },
+      "lab_sidecar": {
+        "workspace": "<benchmark-root>/multi_seed_distribution/workspace",
+        "task_ids": [
+          "task_20260620_145002_e93e07"
+        ],
+        "commands_run": [
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "init"
+            ],
+            "cwd": "<benchmark-root>/multi_seed_distribution/workspace",
+            "exit_code": 0,
+            "stdout": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/multi_seed_distribution/workspace\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "ingest",
+              "<benchmark-root>/multi_seed_distribution/workspace/inputs",
+              "--name",
+              "data-to-chart multi_seed_distribution"
+            ],
+            "cwd": "<benchmark-root>/multi_seed_distribution/workspace",
+            "exit_code": 0,
+            "stdout": "Imported as task: task_20260620_145002_e93e07\nSource: inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260620_145002_e93e07\nNext:\n- labsidecar collect task_20260620_145002_e93e07\n- labsidecar artifacts task_20260620_145002_e93e07\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "collect",
+              "task_20260620_145002_e93e07",
+              "--config",
+              "<benchmark-root>/multi_seed_distribution/workspace/metrics.yaml"
+            ],
+            "cwd": "<benchmark-root>/multi_seed_distribution/workspace",
+            "exit_code": 0,
+            "stdout": "Collected metrics for task_20260620_145002_e93e07\nDetected fields: method, seed, accuracy\nRows: 240\nWrote: .lab-sidecar/tasks/task_20260620_145002_e93e07/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260620_145002_e93e07/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260620_145002_e93e07/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260620_145002_e93e07\n- labsidecar report task_20260620_145002_e93e07\n",
+            "stderr": ""
+          },
+          {
+            "args": [
+              "<python>",
+              "-m",
+              "lab_sidecar.cli.app",
+              "figures",
+              "task_20260620_145002_e93e07"
+            ],
+            "cwd": "<benchmark-root>/multi_seed_distribution/workspace",
+            "exit_code": 0,
+            "stdout": "Generated 1 figure(s) for task_20260620_145002_e93e07\n- .lab-sidecar/tasks/task_20260620_145002_e93e07/figures/box_accuracy_by_method.png\n- .lab-sidecar/tasks/task_20260620_145002_e93e07/figures/box_accuracy_by_method.svg\nSpec: .lab-sidecar/tasks/task_20260620_145002_e93e07/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260620_145002_e93e07/figures/figure-summary.json\nFallback: mode=off status=not_needed\nNext:\n- labsidecar report task_20260620_145002_e93e07\n- labsidecar slides task_20260620_145002_e93e07\n",
+            "stderr": ""
+          }
+        ],
+        "files_read": [
+          {
+            "path": "figures/figure-summary.json",
+            "bytes": 2706,
+            "chars": 2706,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "metrics/collection-summary.json",
+            "bytes": 3468,
+            "chars": 3468,
+            "purpose": "allowed_sidecar_summary"
+          },
+          {
+            "path": "provenance/traceability.json",
+            "bytes": 8991,
+            "chars": 8991,
+            "purpose": "allowed_sidecar_summary"
+          }
+        ],
+        "context_bytes": 16691,
+        "context_chars": 16691,
+        "estimated_context_tokens": 4173,
+        "raw_metric_row_bytes_exposed": 0,
+        "generated_figure": {
+          "figure_id": "box_accuracy_by_method",
+          "chart_type": "box",
+          "png_path": ".lab-sidecar/tasks/task_20260620_145002_e93e07/figures/box_accuracy_by_method.png",
+          "svg_path": ".lab-sidecar/tasks/task_20260620_145002_e93e07/figures/box_accuracy_by_method.svg",
+          "x": "method",
+          "y": "accuracy",
+          "group_by": null,
+          "units": {
+            "accuracy": "ratio"
+          },
+          "field_sources": {
+            "method": [
+              "raw_method"
+            ],
+            "accuracy": [
+              "raw_accuracy"
+            ]
+          }
+        },
+        "traceability_present": true
+      },
+      "scores": {
+        "chart_type_correct": true,
+        "axes_group_correct": true,
+        "units_field_mapping_correct": true,
+        "visual_artifacts_valid": true,
+        "traceability_complete": true,
+        "sidecar_bounded": true,
+        "context_reduction_positive": true
+      },
+      "score_total": 7,
+      "passed": true,
+      "context_reduction_pct": 98.63,
+      "visual_validation": {
+        "png_path": ".lab-sidecar/tasks/task_20260620_145002_e93e07/figures/box_accuracy_by_method.png",
+        "svg_path": ".lab-sidecar/tasks/task_20260620_145002_e93e07/figures/box_accuracy_by_method.svg",
+        "png_exists": true,
+        "svg_exists": true,
+        "png_size": [
+          1979,
+          1180
+        ],
+        "nonwhite_pixel_ratio": 0.06763,
+        "content_bbox": [
+          19,
+          20,
+          1962,
+          1154
+        ],
+        "border_margin_ok": true,
+        "svg_parseable": true,
+        "passed": true
+      },
+      "violations": []
+    }
+  ],
+  "aggregate": {
+    "scenario_count": 7,
+    "passed_count": 7,
+    "passed": true,
+    "raw_context_chars": 7792146,
+    "sidecar_context_chars": 120369,
+    "context_reduction_pct": 98.46,
+    "raw_estimated_tokens": 1948039,
+    "sidecar_estimated_tokens": 30094,
+    "token_reduction_pct": 98.46,
+    "raw_metric_row_bytes_exposed": 7793691,
+    "sidecar_raw_metric_row_bytes_exposed": 0,
+    "raw_metric_exposure_reduction_pct": 100.0,
+    "sidecar_violation_count": 0,
+    "score_total": 49,
+    "score_max": 49
+  }
+}

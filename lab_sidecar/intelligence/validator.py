@@ -13,7 +13,7 @@ from lab_sidecar.intelligence.schemas import ProposalSkeleton, ValidatorCheck, V
 PATH_FIELD_HINTS = ("path", "paths", "file", "files", "dir", "directory", "output", "outputs")
 SOURCE_PATH_KEYS = {"source_file", "source_files", "source_metrics", "source_path", "source_paths"}
 OUTPUT_PATH_KEYS = {"output", "outputs", "output_path", "output_paths", "png", "svg"}
-SUPPORTED_CHART_TYPES = {"line", "bar"}
+SUPPORTED_CHART_TYPES = {"line", "bar", "box"}
 
 
 def validate_proposal(

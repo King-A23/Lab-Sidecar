@@ -1,0 +1,992 @@
+{
+  "schema_version": "1",
+  "date": "2026-06-19",
+  "package_version": "0.1.0",
+  "comparison_base": "v0.1.0-alpha.2",
+  "candidate": "local main intended for v0.1.0-alpha.3",
+  "benchmark_root": "<benchmark-root>",
+  "token_estimate": {
+    "method": "ceil(chars / 4)",
+    "exact_provider_tokens_available": false
+  },
+  "quality_rubric": {
+    "metric_correctness": "0-2 key metric values/counts are correct",
+    "deliverable_completeness": "0-2 deliverables exist or are clearly accounted for",
+    "traceability": "0-2 claims point to evidence",
+    "boundedness": "0-2 avoids full logs/raw rows/artifact bodies",
+    "no_invention": "0-2 avoids unsupported significance, ranking, or causal claims"
+  },
+  "scenarios": [
+    {
+      "scenario_id": "simple_success",
+      "title": "Simple Success",
+      "fixture": "examples/simple-success",
+      "summary": {
+        "scenario_id": "simple_success",
+        "title": "Simple Success",
+        "raw_context_chars": 2727,
+        "sidecar_context_chars": 109868,
+        "raw_estimated_tokens": 682,
+        "sidecar_estimated_tokens": 27467,
+        "context_reduction_pct": -3928.9,
+        "token_reduction_pct": -3927.42,
+        "raw_quality_total": 7,
+        "sidecar_quality_total": 10,
+        "quality_delta": 3,
+        "raw_metric_row_bytes_exposed": 124,
+        "sidecar_metric_row_bytes_exposed": 0,
+        "sidecar_traceability_present": true,
+        "sidecar_sqlite_independent_check": true,
+        "sidecar_violations": []
+      },
+      "runs": [
+        {
+          "scenario_id": "simple_success",
+          "arm": "raw_agent",
+          "workspace": "<benchmark-root>/raw-simple_success",
+          "task_ids": [],
+          "commands_run": [],
+          "files_read": [
+            {
+              "path": "examples/simple-success/README.md",
+              "bytes": 1086,
+              "chars": 1086,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/simple-success/metrics.csv",
+              "bytes": 124,
+              "chars": 124,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/simple-success/train.py",
+              "bytes": 1517,
+              "chars": 1517,
+              "purpose": "raw_baseline_input"
+            }
+          ],
+          "context_bytes": 2727,
+          "context_chars": 2727,
+          "estimated_context_tokens": 682,
+          "full_artifact_bodies_exposed": [
+            "examples/simple-success/metrics.csv"
+          ],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 124,
+          "generated_deliverables": [
+            "raw_analysis_summary.md"
+          ],
+          "traceability_present": false,
+          "sqlite_independent_check": false,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "deliverable_completeness": 1,
+            "traceability": 1,
+            "boundedness": 1,
+            "no_invention": 2
+          },
+          "quality_total": 7,
+          "violations": [],
+          "notes": [
+            "best val_accuracy 0.86 at epoch 5",
+            "Raw arm intentionally exposes source file bodies as main-agent context."
+          ],
+          "analysis_summary": "The simple-success fixture is a deterministic successful training stand-in. It has 5 metric rows; the best validation accuracy is 0.86 at epoch 5 with validation loss 0.46. Expected Lab-Sidecar deliverables are normalized metrics, figures, a report fragment, and a PPTX draft. Evidence comes from README.md, metrics.csv, and train.py; no statistical significance or causal claim is made."
+        },
+        {
+          "scenario_id": "simple_success",
+          "arm": "lab_sidecar",
+          "workspace": "<benchmark-root>/sidecar-simple_success",
+          "task_ids": [
+            "task_20260619_185314_ba7ee1"
+          ],
+          "commands_run": [
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "init"
+              ],
+              "returncode": 0,
+              "bytes": 277,
+              "chars": 277
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "run",
+                "python examples/simple-success/train.py --output metrics.csv",
+                "--name",
+                "alpha3 simple success"
+              ],
+              "returncode": 0,
+              "bytes": 426,
+              "chars": 426
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 764,
+              "chars": 764
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "collect",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 479,
+              "chars": 479
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "figures",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 741,
+              "chars": 741
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "report",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 254,
+              "chars": 254
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "slides",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 323,
+              "chars": 323
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "package",
+                "task_20260619_185314_ba7ee1",
+                "--output",
+                "package-alpha3-simple"
+              ],
+              "returncode": 0,
+              "bytes": 187,
+              "chars": 187
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 1160,
+              "chars": 1160
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 2214,
+              "chars": 2214
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 1160,
+              "chars": 1160
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_185314_ba7ee1"
+              ],
+              "returncode": 0,
+              "bytes": 2214,
+              "chars": 2214
+            }
+          ],
+          "files_read": [
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185314_ba7ee1/manifest.json",
+              "bytes": 10455,
+              "chars": 10455,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185314_ba7ee1/metrics/collection-summary.json",
+              "bytes": 1403,
+              "chars": 1403,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185314_ba7ee1/figures/figure-summary.json",
+              "bytes": 2668,
+              "chars": 2668,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185314_ba7ee1/reports/report-summary.json",
+              "bytes": 11468,
+              "chars": 11438,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185314_ba7ee1/slides/slides-summary.json",
+              "bytes": 24332,
+              "chars": 24008,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185314_ba7ee1/provenance/traceability.json",
+              "bytes": 37580,
+              "chars": 37516,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": "package-alpha3-simple/artifact-index.json",
+              "bytes": 8717,
+              "chars": 8717,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": "package-alpha3-simple/package-summary.json",
+              "bytes": 3464,
+              "chars": 3464,
+              "purpose": "bounded_sidecar_artifact"
+            }
+          ],
+          "context_bytes": 110286,
+          "context_chars": 109868,
+          "estimated_context_tokens": 27467,
+          "full_artifact_bodies_exposed": [],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 0,
+          "generated_deliverables": [
+            "metrics/normalized_metrics.csv",
+            "metrics/normalized_metrics.json",
+            "figures/figure-summary.json",
+            "reports/report-fragment.md",
+            "slides/presentation-draft.pptx",
+            "provenance/traceability.json",
+            "package-alpha3-simple/artifact-index.json",
+            "package-alpha3-simple/package-summary.json"
+          ],
+          "traceability_present": true,
+          "sqlite_independent_check": true,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "deliverable_completeness": 2,
+            "traceability": 2,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 10,
+          "violations": [],
+          "notes": [
+            "best val_accuracy 0.86 at epoch 5",
+            "Read only allowed bounded sidecar metadata; full logs, normalized metric rows, report bodies, PPTX internals, raw/source_refs.json, and raw source files were not read.",
+            "Deleted .lab-sidecar/index.sqlite before post-delete summarize/artifacts checks; both commands succeeded."
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "csv_comparison",
+      "title": "CSV Comparison",
+      "fixture": "examples/csv-comparison",
+      "summary": {
+        "scenario_id": "csv_comparison",
+        "title": "CSV Comparison",
+        "raw_context_chars": 1495,
+        "sidecar_context_chars": 110846,
+        "raw_estimated_tokens": 374,
+        "sidecar_estimated_tokens": 27712,
+        "context_reduction_pct": -7314.45,
+        "token_reduction_pct": -7309.63,
+        "raw_quality_total": 7,
+        "sidecar_quality_total": 10,
+        "quality_delta": 3,
+        "raw_metric_row_bytes_exposed": 467,
+        "sidecar_metric_row_bytes_exposed": 0,
+        "sidecar_traceability_present": true,
+        "sidecar_sqlite_independent_check": true,
+        "sidecar_violations": []
+      },
+      "runs": [
+        {
+          "scenario_id": "csv_comparison",
+          "arm": "raw_agent",
+          "workspace": "<benchmark-root>/raw-csv_comparison",
+          "task_ids": [],
+          "commands_run": [],
+          "files_read": [
+            {
+              "path": "examples/csv-comparison/README.md",
+              "bytes": 1028,
+              "chars": 1028,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/csv-comparison/baseline.csv",
+              "bytes": 159,
+              "chars": 159,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/csv-comparison/model_a.csv",
+              "bytes": 154,
+              "chars": 154,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/csv-comparison/model_b.csv",
+              "bytes": 154,
+              "chars": 154,
+              "purpose": "raw_baseline_input"
+            }
+          ],
+          "context_bytes": 1495,
+          "context_chars": 1495,
+          "estimated_context_tokens": 374,
+          "full_artifact_bodies_exposed": [
+            "examples/csv-comparison/baseline.csv",
+            "examples/csv-comparison/model_a.csv",
+            "examples/csv-comparison/model_b.csv"
+          ],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 467,
+          "generated_deliverables": [
+            "raw_analysis_summary.md"
+          ],
+          "traceability_present": false,
+          "sqlite_independent_check": false,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "deliverable_completeness": 1,
+            "traceability": 1,
+            "boundedness": 1,
+            "no_invention": 2
+          },
+          "quality_total": 7,
+          "violations": [],
+          "notes": [
+            "model_a highest final val_accuracy 0.83",
+            "Raw arm intentionally exposes source file bodies as main-agent context."
+          ],
+          "analysis_summary": "The csv-comparison fixture compares baseline, model_a, and model_b over 5 epochs with a shared seed. Final validation accuracy is 0.83 for model_a, 0.81 for model_b, and 0.77 for baseline; model_a is highest in this fixture. Expected Lab-Sidecar deliverables are normalized metrics, comparison figures, a report fragment, and a PPTX draft. Evidence comes from README.md and the three CSV files; no significance or generalization claim is made."
+        },
+        {
+          "scenario_id": "csv_comparison",
+          "arm": "lab_sidecar",
+          "workspace": "<benchmark-root>/sidecar-csv_comparison",
+          "task_ids": [
+            "task_20260619_185318_188987"
+          ],
+          "commands_run": [
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "init"
+              ],
+              "returncode": 0,
+              "bytes": 277,
+              "chars": 277
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "ingest",
+                "examples/csv-comparison",
+                "--name",
+                "alpha3 csv comparison"
+              ],
+              "returncode": 0,
+              "bytes": 260,
+              "chars": 260
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "collect",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 481,
+              "chars": 481
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "figures",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 670,
+              "chars": 670
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "report",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 254,
+              "chars": 254
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "slides",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 323,
+              "chars": 323
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "package",
+                "task_20260619_185318_188987",
+                "--output",
+                "package-alpha3-csv"
+              ],
+              "returncode": 0,
+              "bytes": 184,
+              "chars": 184
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 1106,
+              "chars": 1106
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 1862,
+              "chars": 1862
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 1106,
+              "chars": 1106
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_185318_188987"
+              ],
+              "returncode": 0,
+              "bytes": 1862,
+              "chars": 1862
+            }
+          ],
+          "files_read": [
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185318_188987/manifest.json",
+              "bytes": 9073,
+              "chars": 9073,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185318_188987/metrics/collection-summary.json",
+              "bytes": 2944,
+              "chars": 2944,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185318_188987/figures/figure-summary.json",
+              "bytes": 2325,
+              "chars": 2325,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185318_188987/reports/report-summary.json",
+              "bytes": 12251,
+              "chars": 12201,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185318_188987/slides/slides-summary.json",
+              "bytes": 26296,
+              "chars": 25948,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185318_188987/provenance/traceability.json",
+              "bytes": 38817,
+              "chars": 38745,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": "package-alpha3-csv/artifact-index.json",
+              "bytes": 8297,
+              "chars": 8297,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": "package-alpha3-csv/package-summary.json",
+              "bytes": 2928,
+              "chars": 2928,
+              "purpose": "bounded_sidecar_artifact"
+            }
+          ],
+          "context_bytes": 111316,
+          "context_chars": 110846,
+          "estimated_context_tokens": 27712,
+          "full_artifact_bodies_exposed": [],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 0,
+          "generated_deliverables": [
+            "metrics/normalized_metrics.csv",
+            "metrics/normalized_metrics.json",
+            "figures/figure-summary.json",
+            "reports/report-fragment.md",
+            "slides/presentation-draft.pptx",
+            "provenance/traceability.json",
+            "package-alpha3-csv/artifact-index.json",
+            "package-alpha3-csv/package-summary.json"
+          ],
+          "traceability_present": true,
+          "sqlite_independent_check": true,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "deliverable_completeness": 2,
+            "traceability": 2,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 10,
+          "violations": [],
+          "notes": [
+            "model_a highest final val_accuracy 0.83",
+            "Read only allowed bounded sidecar metadata; full logs, normalized metric rows, report bodies, PPTX internals, raw/source_refs.json, and raw source files were not read.",
+            "Deleted .lab-sidecar/index.sqlite before post-delete summarize/artifacts checks; both commands succeeded."
+          ]
+        }
+      ]
+    },
+    {
+      "scenario_id": "project_presentation_pack",
+      "title": "Project Presentation Pack",
+      "fixture": "examples/project-presentation-pack",
+      "summary": {
+        "scenario_id": "project_presentation_pack",
+        "title": "Project Presentation Pack",
+        "raw_context_chars": 3679,
+        "sidecar_context_chars": 135243,
+        "raw_estimated_tokens": 920,
+        "sidecar_estimated_tokens": 33811,
+        "context_reduction_pct": -3576.08,
+        "token_reduction_pct": -3575.11,
+        "raw_quality_total": 7,
+        "sidecar_quality_total": 10,
+        "quality_delta": 3,
+        "raw_metric_row_bytes_exposed": 1901,
+        "sidecar_metric_row_bytes_exposed": 0,
+        "sidecar_traceability_present": true,
+        "sidecar_sqlite_independent_check": true,
+        "sidecar_violations": []
+      },
+      "runs": [
+        {
+          "scenario_id": "project_presentation_pack",
+          "arm": "raw_agent",
+          "workspace": "<benchmark-root>/raw-project_presentation_pack",
+          "task_ids": [],
+          "commands_run": [],
+          "files_read": [
+            {
+              "path": "examples/project-presentation-pack/README.md",
+              "bytes": 1344,
+              "chars": 1344,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/project-presentation-pack/project_goal.md",
+              "bytes": 434,
+              "chars": 434,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/project-presentation-pack/weekly_metrics.csv",
+              "bytes": 399,
+              "chars": 399,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/project-presentation-pack/final_metrics.csv",
+              "bytes": 323,
+              "chars": 323,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "examples/project-presentation-pack/ablation.json",
+              "bytes": 1179,
+              "chars": 1179,
+              "purpose": "raw_baseline_input"
+            }
+          ],
+          "context_bytes": 3679,
+          "context_chars": 3679,
+          "estimated_context_tokens": 920,
+          "full_artifact_bodies_exposed": [
+            "examples/project-presentation-pack/weekly_metrics.csv",
+            "examples/project-presentation-pack/final_metrics.csv",
+            "examples/project-presentation-pack/ablation.json"
+          ],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 1901,
+          "generated_deliverables": [
+            "raw_analysis_summary.md"
+          ],
+          "traceability_present": false,
+          "sqlite_independent_check": false,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "deliverable_completeness": 1,
+            "traceability": 1,
+            "boundedness": 1,
+            "no_invention": 2
+          },
+          "quality_total": 7,
+          "violations": [],
+          "notes": [
+            "transformer_small_aug highest final accuracy 0.884",
+            "quantized variant reduces latency while staying above transformer_small baseline accuracy",
+            "Raw arm intentionally exposes source file bodies as main-agent context."
+          ],
+          "analysis_summary": "The project-presentation-pack fixture describes a compact image classifier course project. The best final accuracy is 0.884 for transformer_small_aug, while the quantized variant reaches 0.872 accuracy at 5.9 ms latency. The ablation data identifies augmentation plus scheduler as the best accuracy variant and quantization as the latency-saving variant. Expected Lab-Sidecar deliverables are normalized metrics, deterministic figures, a report fragment, and a zh-project PPTX draft. Evidence comes from README.md, project_goal.md, weekly_metrics.csv, final_metrics.csv, and ablation.json; no unsupported deployment claim is made."
+        },
+        {
+          "scenario_id": "project_presentation_pack",
+          "arm": "lab_sidecar",
+          "workspace": "<benchmark-root>/sidecar-project_presentation_pack",
+          "task_ids": [
+            "task_20260619_185323_ee26a4"
+          ],
+          "commands_run": [
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "init"
+              ],
+              "returncode": 0,
+              "bytes": 288,
+              "chars": 288
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "ingest",
+                "examples/project-presentation-pack",
+                "--name",
+                "alpha3 project pack"
+              ],
+              "returncode": 0,
+              "bytes": 271,
+              "chars": 271
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "collect",
+                "task_20260619_185323_ee26a4"
+              ],
+              "returncode": 0,
+              "bytes": 516,
+              "chars": 516
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "figures",
+                "task_20260619_185323_ee26a4"
+              ],
+              "returncode": 0,
+              "bytes": 484,
+              "chars": 484
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "report",
+                "task_20260619_185323_ee26a4"
+              ],
+              "returncode": 0,
+              "bytes": 254,
+              "chars": 254
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "slides",
+                "task_20260619_185323_ee26a4",
+                "--template",
+                "zh-project"
+              ],
+              "returncode": 0,
+              "bytes": 323,
+              "chars": 323
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "package",
+                "task_20260619_185323_ee26a4",
+                "--output",
+                "package-alpha3-project"
+              ],
+              "returncode": 0,
+              "bytes": 199,
+              "chars": 199
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_185323_ee26a4"
+              ],
+              "returncode": 0,
+              "bytes": 1150,
+              "chars": 1150
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_185323_ee26a4"
+              ],
+              "returncode": 0,
+              "bytes": 1588,
+              "chars": 1588
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_185323_ee26a4"
+              ],
+              "returncode": 0,
+              "bytes": 1150,
+              "chars": 1150
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_185323_ee26a4"
+              ],
+              "returncode": 0,
+              "bytes": 1588,
+              "chars": 1588
+            }
+          ],
+          "files_read": [
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185323_ee26a4/manifest.json",
+              "bytes": 8185,
+              "chars": 8185,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185323_ee26a4/metrics/collection-summary.json",
+              "bytes": 3212,
+              "chars": 3212,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185323_ee26a4/figures/figure-summary.json",
+              "bytes": 1400,
+              "chars": 1400,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185323_ee26a4/reports/report-summary.json",
+              "bytes": 18981,
+              "chars": 18921,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185323_ee26a4/slides/slides-summary.json",
+              "bytes": 36191,
+              "chars": 35531,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": ".lab-sidecar/tasks/task_20260619_185323_ee26a4/provenance/traceability.json",
+              "bytes": 50105,
+              "chars": 50031,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": "package-alpha3-project/artifact-index.json",
+              "bytes": 7511,
+              "chars": 7511,
+              "purpose": "bounded_sidecar_artifact"
+            },
+            {
+              "path": "package-alpha3-project/package-summary.json",
+              "bytes": 2641,
+              "chars": 2641,
+              "purpose": "bounded_sidecar_artifact"
+            }
+          ],
+          "context_bytes": 136037,
+          "context_chars": 135243,
+          "estimated_context_tokens": 33811,
+          "full_artifact_bodies_exposed": [],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 0,
+          "generated_deliverables": [
+            "metrics/normalized_metrics.csv",
+            "metrics/normalized_metrics.json",
+            "figures/figure-summary.json",
+            "reports/report-fragment.md",
+            "slides/presentation-draft.pptx",
+            "provenance/traceability.json",
+            "package-alpha3-project/artifact-index.json",
+            "package-alpha3-project/package-summary.json"
+          ],
+          "traceability_present": true,
+          "sqlite_independent_check": true,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "deliverable_completeness": 2,
+            "traceability": 2,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 10,
+          "violations": [],
+          "notes": [
+            "transformer_small_aug highest final accuracy 0.884",
+            "quantized variant reduces latency while staying above transformer_small baseline accuracy",
+            "Read only allowed bounded sidecar metadata; full logs, normalized metric rows, report bodies, PPTX internals, raw/source_refs.json, and raw source files were not read.",
+            "Deleted .lab-sidecar/index.sqlite before post-delete summarize/artifacts checks; both commands succeeded."
+          ]
+        }
+      ]
+    }
+  ],
+  "aggregate": {
+    "raw_context_chars": 7901,
+    "sidecar_context_chars": 355957,
+    "raw_estimated_tokens": 1976,
+    "sidecar_estimated_tokens": 88990,
+    "context_reduction_pct": -4405.21,
+    "token_reduction_pct": -4403.54,
+    "raw_quality_total": 21,
+    "sidecar_quality_total": 30,
+    "quality_delta": 9,
+    "raw_metric_row_bytes_exposed": 2492,
+    "sidecar_metric_row_bytes_exposed": 0,
+    "sidecar_violation_count": 0,
+    "scenario_count": 3
+  }
+}

@@ -1,0 +1,2032 @@
+{
+  "schema_version": "1",
+  "date": "2026-06-19",
+  "package_version": "0.1.0",
+  "comparison_base": "v0.1.0-alpha.2",
+  "candidate": "local main intended for v0.1.0-alpha.3",
+  "benchmark_root": "<benchmark-root>",
+  "token_estimate": {
+    "method": "ceil(chars / 4)",
+    "exact_provider_tokens_available": false
+  },
+  "quality_rubric": {
+    "metric_correctness": "0-2 key metrics, rankings, and best checkpoints are correct",
+    "anomaly_detection": "0-2 warnings, incomplete runs, and missing artifacts are identified accurately",
+    "deliverable_completeness": "0-2 expected reports, figures, slides, packages, and summaries are generated or clearly accounted for",
+    "traceability": "0-2 claims point to bounded evidence and provenance",
+    "boundedness": "0-2 the arm respects its context rules",
+    "no_invention": "0-2 unsupported significance, causality, deployment, or generalization claims are avoided"
+  },
+  "fixture_generation": [
+    {
+      "scenario_id": "large_training_run",
+      "workspace_roots": [
+        "<benchmark-root>/raw-large-training",
+        "<benchmark-root>/sidecar-large-training"
+      ],
+      "fixture_generation_commands": [
+        "<python> <benchmark-runner> (inline generator: write_large_training_fixture)",
+        "<python> train_large.py --output metrics.csv --stdout-bytes 5600000 > stdout.log 2> stderr.log"
+      ],
+      "determinism": {
+        "rows": 60000,
+        "stdout_target_bytes": 5600000,
+        "stderr_warning_lines": 700,
+        "random_seed": null
+      }
+    },
+    {
+      "scenario_id": "multi_run_sweep",
+      "workspace_roots": [
+        "<benchmark-root>/raw-sweep",
+        "<benchmark-root>/sidecar-sweep"
+      ],
+      "fixture_generation_commands": [
+        "<python> <benchmark-runner> (inline generator: write_sweep_fixture)"
+      ],
+      "determinism": {
+        "runs": 80,
+        "configs": 20,
+        "steps_per_run": 1250,
+        "metric_rows": 100000,
+        "intentional_anomalies": [
+          "missing_final_metric",
+          "unstable_seed",
+          "warning_only",
+          "incomplete_artifact"
+        ]
+      }
+    },
+    {
+      "scenario_id": "complex_project_pack",
+      "workspace_roots": [
+        "<benchmark-root>/raw-project",
+        "<benchmark-root>/sidecar-project"
+      ],
+      "fixture_generation_commands": [
+        "<python> <benchmark-runner> (inline generator: write_project_fixture)"
+      ],
+      "determinism": {
+        "weekly_metric_rows": 12000,
+        "final_metric_rows": 240,
+        "error_analysis_rows": 480,
+        "experiment_notes_bytes": "20-100 KB deterministic notes",
+        "dataset_notes_bytes": "deterministic caveat notes"
+      }
+    }
+  ],
+  "scenarios": [
+    {
+      "scenario_id": "large_training_run",
+      "title": "Large Training Run",
+      "analysis_prompt": "Summarize the run outcome, identify the best validation checkpoint, describe metric trends and notable warnings, list expected deliverables, explain the evidence behind every claim, and state limits or unknowns without inventing causal conclusions.",
+      "summary": {
+        "title": "Large Training Run",
+        "raw_context_chars": 10544598,
+        "sidecar_context_chars": 164019,
+        "raw_estimated_tokens": 2636150,
+        "sidecar_estimated_tokens": 41005,
+        "context_reduction_pct": 98.44,
+        "token_reduction_pct": 98.44,
+        "raw_quality_total": 10,
+        "sidecar_quality_total": 12,
+        "quality_delta": 2,
+        "raw_log_bytes_exposed": 5684964,
+        "sidecar_log_bytes_exposed": 0,
+        "raw_metric_row_bytes_exposed": 4859335,
+        "sidecar_metric_row_bytes_exposed": 0,
+        "raw_notes_bytes_exposed": 0,
+        "sidecar_notes_bytes_exposed": 0,
+        "raw_log_exposure_reduction_pct": 100.0,
+        "raw_metric_exposure_reduction_pct": 100.0,
+        "sidecar_traceability_present": true,
+        "sidecar_package_metadata_present": true,
+        "sidecar_sqlite_independent_check": true,
+        "sidecar_violations": []
+      },
+      "runs": [
+        {
+          "scenario_id": "large_training_run",
+          "arm": "raw_agent",
+          "workspace": "<benchmark-root>/raw-large-training",
+          "task_ids": [],
+          "commands_run": [
+            {
+              "args": [
+                "<python>",
+                "train_large.py",
+                "--output",
+                "metrics.csv",
+                "--stdout-bytes",
+                "5600000"
+              ],
+              "cwd": "<benchmark-root>/raw-large-training",
+              "returncode": 0,
+              "bytes": 0,
+              "chars": 0,
+              "purpose": "fixture_generation"
+            }
+          ],
+          "files_read": [
+            {
+              "path": "<benchmark-root>/raw-large-training/config.json",
+              "relative_path": "config.json",
+              "bytes": 299,
+              "chars": 299,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-large-training/stdout.log",
+              "relative_path": "stdout.log",
+              "bytes": 5600172,
+              "chars": 5600172,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-large-training/stderr.log",
+              "relative_path": "stderr.log",
+              "bytes": 84792,
+              "chars": 84792,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-large-training/metrics.csv",
+              "relative_path": "metrics.csv",
+              "bytes": 4859335,
+              "chars": 4859335,
+              "purpose": "raw_baseline_input"
+            }
+          ],
+          "context_bytes": 10544598,
+          "context_chars": 10544598,
+          "estimated_context_tokens": 2636150,
+          "full_artifact_bodies_exposed": [
+            "config.json",
+            "stdout.log",
+            "stderr.log",
+            "metrics.csv"
+          ],
+          "raw_log_bytes_exposed": 5684964,
+          "raw_metric_row_bytes_exposed": 4859335,
+          "raw_notes_bytes_exposed": 0,
+          "generated_deliverables": [
+            "raw_analysis_summary.md"
+          ],
+          "traceability_present": false,
+          "package_metadata_present": false,
+          "sqlite_independent_check": false,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "anomaly_detection": 2,
+            "deliverable_completeness": 1,
+            "traceability": 1,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 10,
+          "violations": [],
+          "notes": [
+            "best_checkpoint=checkpoints/epoch_120_step_060000.pt",
+            "warning_count=700",
+            "Raw arm intentionally exposed full logs and full metrics as counted context."
+          ],
+          "analysis_summary": "Raw read confirms 60000 metric rows and a completed run. Best checkpoint is checkpoints/epoch_120_step_060000.pt with val_accuracy=0.904197 at step 60000. Validation accuracy moved from 0.460007 to 0.904197 while validation loss moved from 1.729975 to 0.247182. stderr contains 700 WARN lines and 1 non-fatal diagnostic line. Expected deliverables are metrics, figures, report, slides, traceability, and package metadata."
+        },
+        {
+          "scenario_id": "large_training_run",
+          "arm": "lab_sidecar",
+          "workspace": "<benchmark-root>/sidecar-large-training",
+          "package_dir": "<benchmark-root>/package-alpha3-scale-large-training",
+          "task_ids": [
+            "task_20260619_235511_300a3d"
+          ],
+          "commands_run": [
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "init"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 293,
+              "chars": 293,
+              "stdout_preview": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/sidecar-large-training\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "run",
+                "<python> train_large.py --output metrics.csv --stdout-bytes 5600000",
+                "--name",
+                "alpha3 scale large training"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 487,
+              "chars": 487,
+              "stdout_preview": "Task created: task_20260619_235511_300a3d\nStatus: completed\nCommand: <python> train_large.py --output metrics.csv --stdout-bytes 5600000\nArtifacts: .lab-sidecar/tasks/task_20260619_235511_300a3d\nStdout: .lab-sidecar/tasks/task_20260619_235511_300a3d/stdout.log\nStderr: .lab-sidecar/tasks/task_20260619_235511_300a3d/stderr.log\nNext:\n- labsidecar collect task_20260619_235511_300a3d\n- labsidecar artifacts task_20260619_235511_300a3d\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 830,
+              "chars": 830,
+              "stdout_preview": "Task: task_20260619_235511_300a3d\nName: alpha3 scale large training\nStatus: completed\nMode: run\nCommand: <python> train_large.py --output metrics.csv --stdout-bytes 560...\nWorking dir: .\nArtifact dir: .lab-sidecar/tasks/task_20260619_235511_300a3d\nCreated: 2026-06-19T23:55:11+08:00\nStarted: 2026-06-19T23:55:12+08:00\nFinished: 2026-06-19T23:55:12+08:00\nArtifacts: 6\nArtifact types: log=2, reproduce=4\nMetrics:\n- collection summary: (not generated)\n- normalized table: (not generated)\nFigures:\n- summary: (not generated)\nReport:\n- (not generated)\nSlides:\n- (not generated)\nNext:\n- labsidecar summarize task_20260619_235511_300a3d\n- labsidecar collect task_20260619_235511_300a3d\n- labsidecar figures task_20260619_235511_300a3d\n- labsidecar report task_20260619_235511_300a3d\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "collect",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 519,
+              "chars": 519,
+              "stdout_preview": "Collected metrics for task_20260619_235511_300a3d\nDetected fields: model, seed, step, epoch, train_loss, val_loss, val_accuracy, f1, duration_ms\nRows: 60001\nWrote: .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260619_235511_300a3d\n- labsidecar report task_20260619_235511_300a3d\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "figures",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 1084,
+              "chars": 1084,
+              "stdout_preview": "Generated 2 figure(s) for task_20260619_235511_300a3d\n- .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/line_val_accuracy_over_epoch.png\n- .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/line_val_accuracy_over_epoch.svg\n- .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/line_train_loss_over_epoch.png\n- .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/line_train_loss_over_epoch.svg\nSpec: .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/figure-summary.json\nWarnings:\n- Skipped 'val_loss' because auto line chart limit is 2.\n- Skipped 'f1' because auto line chart limit is 2.\nNext:\n- labsidecar report task_20260619_235511_300a3d\n- labsidecar slides task_20260619_235511_300a3d\n",
+              "stderr_preview": "<repo>/lab_sidecar/figures/service.py:235: DtypeWarning: Columns (0: model, 1: dataset, 2: optimizer, 3: schedule, 4: notes, 5: artifact_present) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "report",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 546,
+              "chars": 546,
+              "stdout_preview": "Report fragment created:\n.lab-sidecar/tasks/task_20260619_235511_300a3d/reports/report-fragment.md\nSummary: .lab-sidecar/tasks/task_20260619_235511_300a3d/reports/report-summary.json\nTemplate: zh-lab\nNext:\n- labsidecar slides task_20260619_235511_300a3d\n",
+              "stderr_preview": "<repo>/lab_sidecar/reports/service.py:183: DtypeWarning: Columns (0: model, 1: dataset, 2: optimizer, 3: schedule, 4: notes, 5: artifact_present) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "slides",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 1196,
+              "chars": 1196,
+              "stdout_preview": "Presentation draft created:\n.lab-sidecar/tasks/task_20260619_235511_300a3d/slides/presentation-draft.pptx\nSummary: .lab-sidecar/tasks/task_20260619_235511_300a3d/slides/slides-summary.json\nTemplate: zh-summary\nSlides: 7\nNext:\n- labsidecar artifacts task_20260619_235511_300a3d\n- labsidecar open task_20260619_235511_300a3d\n",
+              "stderr_preview": "<repo>/lab_sidecar/slides/service.py:321: DtypeWarning: Columns (0: model, 1: dataset, 2: optimizer, 3: schedule, 4: notes, 5: artifact_present) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n<repo>/lab_sidecar/slides/service.py:373: DtypeWarning: Columns (0: model, 1: dataset, 2: optimizer, 3: schedule, 4: notes, 5: artifact_present) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n<repo>/lab_sidecar/slides/service.py:436: DtypeWarning: Columns (0: model, 1: dataset, 2: optimizer, 3: schedule, 4: notes, 5: artifact_present) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "package",
+                "task_20260619_235511_300a3d",
+                "--output",
+                "<benchmark-root>/package-alpha3-scale-large-training"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 194,
+              "chars": 194,
+              "stdout_preview": "Package created: <benchmark-root>/package-alpha3-scale-large-training\nType: result\nIncluded files: 19\nOmitted by default: 4\nUnavailable optional files: 0\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 1266,
+              "chars": 1266,
+              "stdout_preview": "Task: task_20260619_235511_300a3d\nName: alpha3 scale large training\nStatus: completed\nMode: run\nCommand: <python> train_large.py --output metrics.csv --stdout-bytes 560...\nWorking dir: .\nArtifact dir: .lab-sidecar/tasks/task_20260619_235511_300a3d\nCreated: 2026-06-19T23:55:11+08:00\nStarted: 2026-06-19T23:55:12+08:00\nFinished: 2026-06-19T23:55:12+08:00\nArtifacts: 20\nArtifact types: config=5, figure=4, log=2, presentation=1, provenance=1, report=1, reproduce=4, table=2\nKey artifacts:\n- metrics: metrics/normalized_metrics.csv\n- figures: figures/figure-summary.json\n- report: reports/report-fragment.md\n- slides: slides/presentation-draft.pptx\nMetrics:\n- rows: 60001\n- detected fields: model, seed, step, epoch, train_loss, val_loss, val_accuracy, f1, duration_ms\n- summary: metrics/collection-summary.json\n- normalized table: metrics/normalized_metrics.csv\nFigures:\n- generated figures: 2\n- summary: figures/figure-summary.json\nReport:\n- reports/report-fragment.md\nSlides:\n- slides/presentation-draft.pptx\nNext:\n- labsidecar summarize task_20260619_235511_300a3d\n- labsidecar collect task_20260619_235511_300a3d\n- labsidecar figures task_20260",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 2214,
+              "chars": 2214,
+              "stdout_preview": "Artifacts for task_20260619_235511_300a3d\n[log] .lab-sidecar/tasks/task_20260619_235511_300a3d/stdout.log - Captured stdout log\n[log] .lab-sidecar/tasks/task_20260619_235511_300a3d/stderr.log - Captured stderr log\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/command.txt - Original command used to run the task\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/env.json - Environment snapshot captured at task start\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/git.json - Git snapshot captured at task start\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/dependencies.json - Python dependency snapshot captured at task start\n[table] .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/normalized_metrics.csv - Normalized metrics table\n[table] .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/normalized_metrics.json - Normalized metrics as JSON rows\n[config] .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/collection-summary.json - Metrics collection summary and warnings\n[figure] .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/line_val_accuracy_over_epoch.png - Validation Accuracy ove",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 1266,
+              "chars": 1266,
+              "stdout_preview": "Task: task_20260619_235511_300a3d\nName: alpha3 scale large training\nStatus: completed\nMode: run\nCommand: <python> train_large.py --output metrics.csv --stdout-bytes 560...\nWorking dir: .\nArtifact dir: .lab-sidecar/tasks/task_20260619_235511_300a3d\nCreated: 2026-06-19T23:55:11+08:00\nStarted: 2026-06-19T23:55:12+08:00\nFinished: 2026-06-19T23:55:12+08:00\nArtifacts: 20\nArtifact types: config=5, figure=4, log=2, presentation=1, provenance=1, report=1, reproduce=4, table=2\nKey artifacts:\n- metrics: metrics/normalized_metrics.csv\n- figures: figures/figure-summary.json\n- report: reports/report-fragment.md\n- slides: slides/presentation-draft.pptx\nMetrics:\n- rows: 60001\n- detected fields: model, seed, step, epoch, train_loss, val_loss, val_accuracy, f1, duration_ms\n- summary: metrics/collection-summary.json\n- normalized table: metrics/normalized_metrics.csv\nFigures:\n- generated figures: 2\n- summary: figures/figure-summary.json\nReport:\n- reports/report-fragment.md\nSlides:\n- slides/presentation-draft.pptx\nNext:\n- labsidecar summarize task_20260619_235511_300a3d\n- labsidecar collect task_20260619_235511_300a3d\n- labsidecar figures task_20260",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output_post_sqlite_delete"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_235511_300a3d"
+              ],
+              "cwd": "<benchmark-root>/sidecar-large-training",
+              "returncode": 0,
+              "bytes": 2214,
+              "chars": 2214,
+              "stdout_preview": "Artifacts for task_20260619_235511_300a3d\n[log] .lab-sidecar/tasks/task_20260619_235511_300a3d/stdout.log - Captured stdout log\n[log] .lab-sidecar/tasks/task_20260619_235511_300a3d/stderr.log - Captured stderr log\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/command.txt - Original command used to run the task\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/env.json - Environment snapshot captured at task start\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/git.json - Git snapshot captured at task start\n[reproduce] .lab-sidecar/tasks/task_20260619_235511_300a3d/reproduce/dependencies.json - Python dependency snapshot captured at task start\n[table] .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/normalized_metrics.csv - Normalized metrics table\n[table] .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/normalized_metrics.json - Normalized metrics as JSON rows\n[config] .lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/collection-summary.json - Metrics collection summary and warnings\n[figure] .lab-sidecar/tasks/task_20260619_235511_300a3d/figures/line_val_accuracy_over_epoch.png - Validation Accuracy ove",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output_post_sqlite_delete"
+            }
+          ],
+          "files_read": [
+            {
+              "path": "<benchmark-root>/sidecar-large-training/.lab-sidecar/tasks/task_20260619_235511_300a3d/manifest.json",
+              "relative_path": "manifest.json",
+              "bytes": 10590,
+              "chars": 10590,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-large-training/.lab-sidecar/tasks/task_20260619_235511_300a3d/metrics/collection-summary.json",
+              "relative_path": "metrics/collection-summary.json",
+              "bytes": 8173,
+              "chars": 8173,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-large-training/.lab-sidecar/tasks/task_20260619_235511_300a3d/figures/figure-summary.json",
+              "relative_path": "figures/figure-summary.json",
+              "bytes": 2907,
+              "chars": 2907,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-large-training/.lab-sidecar/tasks/task_20260619_235511_300a3d/reports/report-summary.json",
+              "relative_path": "reports/report-summary.json",
+              "bytes": 25277,
+              "chars": 25257,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-large-training/.lab-sidecar/tasks/task_20260619_235511_300a3d/slides/slides-summary.json",
+              "relative_path": "slides/slides-summary.json",
+              "bytes": 40631,
+              "chars": 40101,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-large-training/.lab-sidecar/tasks/task_20260619_235511_300a3d/provenance/traceability.json",
+              "relative_path": "provenance/traceability.json",
+              "bytes": 52670,
+              "chars": 52606,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/package-alpha3-scale-large-training/artifact-index.json",
+              "relative_path": "package/artifact-index.json",
+              "bytes": 8731,
+              "chars": 8731,
+              "purpose": "sidecar_allowed_package_metadata"
+            },
+            {
+              "path": "<benchmark-root>/package-alpha3-scale-large-training/package-summary.json",
+              "relative_path": "package/package-summary.json",
+              "bytes": 3545,
+              "chars": 3545,
+              "purpose": "sidecar_allowed_package_metadata"
+            }
+          ],
+          "context_bytes": 164633,
+          "context_chars": 164019,
+          "estimated_context_tokens": 41005,
+          "full_artifact_bodies_exposed": [],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 0,
+          "raw_notes_bytes_exposed": 0,
+          "generated_deliverables": [
+            "README.md",
+            "artifact-index.json",
+            "figures/figure-spec.yaml",
+            "figures/figure-summary.json",
+            "figures/line_train_loss_over_epoch.png",
+            "figures/line_train_loss_over_epoch.svg",
+            "figures/line_val_accuracy_over_epoch.png",
+            "figures/line_val_accuracy_over_epoch.svg",
+            "manifest.json",
+            "metrics/collection-summary.json",
+            "metrics/normalized_metrics.csv",
+            "metrics/normalized_metrics.json",
+            "package-summary.json",
+            "provenance/traceability.json",
+            "redaction-notes.md",
+            "reports/report-fragment.md",
+            "reports/report-summary.json",
+            "reproduce/command.txt",
+            "reproduce/dependencies.json",
+            "reproduce/env.json",
+            "reproduce/git.json",
+            "slides/presentation-draft.pptx",
+            "slides/slides-summary.json"
+          ],
+          "traceability_present": true,
+          "package_metadata_present": true,
+          "sqlite_independent_check": true,
+          "violations": [],
+          "quality_scores": {
+            "metric_correctness": 2,
+            "anomaly_detection": 2,
+            "deliverable_completeness": 2,
+            "traceability": 2,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 12,
+          "notes": [
+            "bounded_best_checkpoint=checkpoints/epoch_120_step_060000.pt",
+            "bounded_best_row_metric=val_accuracy",
+            "bounded_analysis.best_rows and checkpoint_summary support exact best-checkpoint claims without reading normalized metrics."
+          ],
+          "analysis_summary": "Sidecar bounded evidence confirms 60001 normalized rows and exact best checkpoint checkpoints/epoch_120_step_060000.pt via val_accuracy=0.904197 at row 60001. best_rows selected_fields include step=60000 and checkpoint=checkpoints/epoch_120_step_060000.pt; evidence points to normalized metrics row with body omitted. Report, slide, traceability, and package metadata are present without reading full logs or metrics."
+        }
+      ]
+    },
+    {
+      "scenario_id": "multi_run_sweep",
+      "title": "Multi-Run Sweep",
+      "analysis_prompt": "Rank the top configurations by validation accuracy and stability, identify outlier or incomplete runs, summarize tradeoffs between quality and runtime, list generated or missing deliverables, cite evidence for each claim, and state what cannot be concluded from this sweep.",
+      "summary": {
+        "title": "Multi-Run Sweep",
+        "raw_context_chars": 13273482,
+        "sidecar_context_chars": 198486,
+        "raw_estimated_tokens": 3318371,
+        "sidecar_estimated_tokens": 49622,
+        "context_reduction_pct": 98.5,
+        "token_reduction_pct": 98.5,
+        "raw_quality_total": 10,
+        "sidecar_quality_total": 12,
+        "quality_delta": 2,
+        "raw_log_bytes_exposed": 170312,
+        "sidecar_log_bytes_exposed": 0,
+        "raw_metric_row_bytes_exposed": 13074263,
+        "sidecar_metric_row_bytes_exposed": 0,
+        "raw_notes_bytes_exposed": 0,
+        "sidecar_notes_bytes_exposed": 0,
+        "raw_log_exposure_reduction_pct": 100.0,
+        "raw_metric_exposure_reduction_pct": 100.0,
+        "sidecar_traceability_present": true,
+        "sidecar_package_metadata_present": true,
+        "sidecar_sqlite_independent_check": true,
+        "sidecar_violations": []
+      },
+      "runs": [
+        {
+          "scenario_id": "multi_run_sweep",
+          "arm": "raw_agent",
+          "workspace": "<benchmark-root>/raw-sweep",
+          "task_ids": [],
+          "commands_run": [],
+          "files_read": [
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/sweep_manifest.json",
+              "relative_path": "sweep-inputs/sweep_manifest.json",
+              "bytes": 28907,
+              "chars": 28907,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/sweep_metrics.csv",
+              "relative_path": "sweep-inputs/sweep_metrics.csv",
+              "bytes": 13069131,
+              "chars": 13069131,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/sweep_config_summary.csv",
+              "relative_path": "sweep-inputs/sweep_config_summary.csv",
+              "bytes": 4445,
+              "chars": 4445,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/sweep_anomaly_events.csv",
+              "relative_path": "sweep-inputs/sweep_anomaly_events.csv",
+              "bytes": 687,
+              "chars": 687,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_000.log",
+              "relative_path": "sweep-inputs/logs/run_000.log",
+              "bytes": 2542,
+              "chars": 2542,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_001.log",
+              "relative_path": "sweep-inputs/logs/run_001.log",
+              "bytes": 2381,
+              "chars": 2381,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_002.log",
+              "relative_path": "sweep-inputs/logs/run_002.log",
+              "bytes": 2358,
+              "chars": 2358,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_003.log",
+              "relative_path": "sweep-inputs/logs/run_003.log",
+              "bytes": 2519,
+              "chars": 2519,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_004.log",
+              "relative_path": "sweep-inputs/logs/run_004.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_005.log",
+              "relative_path": "sweep-inputs/logs/run_005.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_006.log",
+              "relative_path": "sweep-inputs/logs/run_006.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_007.log",
+              "relative_path": "sweep-inputs/logs/run_007.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_008.log",
+              "relative_path": "sweep-inputs/logs/run_008.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_009.log",
+              "relative_path": "sweep-inputs/logs/run_009.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_010.log",
+              "relative_path": "sweep-inputs/logs/run_010.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_011.log",
+              "relative_path": "sweep-inputs/logs/run_011.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_012.log",
+              "relative_path": "sweep-inputs/logs/run_012.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_013.log",
+              "relative_path": "sweep-inputs/logs/run_013.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_014.log",
+              "relative_path": "sweep-inputs/logs/run_014.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_015.log",
+              "relative_path": "sweep-inputs/logs/run_015.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_016.log",
+              "relative_path": "sweep-inputs/logs/run_016.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_017.log",
+              "relative_path": "sweep-inputs/logs/run_017.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_018.log",
+              "relative_path": "sweep-inputs/logs/run_018.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_019.log",
+              "relative_path": "sweep-inputs/logs/run_019.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_020.log",
+              "relative_path": "sweep-inputs/logs/run_020.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_021.log",
+              "relative_path": "sweep-inputs/logs/run_021.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_022.log",
+              "relative_path": "sweep-inputs/logs/run_022.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_023.log",
+              "relative_path": "sweep-inputs/logs/run_023.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_024.log",
+              "relative_path": "sweep-inputs/logs/run_024.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_025.log",
+              "relative_path": "sweep-inputs/logs/run_025.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_026.log",
+              "relative_path": "sweep-inputs/logs/run_026.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_027.log",
+              "relative_path": "sweep-inputs/logs/run_027.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_028.log",
+              "relative_path": "sweep-inputs/logs/run_028.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_029.log",
+              "relative_path": "sweep-inputs/logs/run_029.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_030.log",
+              "relative_path": "sweep-inputs/logs/run_030.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_031.log",
+              "relative_path": "sweep-inputs/logs/run_031.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_032.log",
+              "relative_path": "sweep-inputs/logs/run_032.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_033.log",
+              "relative_path": "sweep-inputs/logs/run_033.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_034.log",
+              "relative_path": "sweep-inputs/logs/run_034.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_035.log",
+              "relative_path": "sweep-inputs/logs/run_035.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_036.log",
+              "relative_path": "sweep-inputs/logs/run_036.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_037.log",
+              "relative_path": "sweep-inputs/logs/run_037.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_038.log",
+              "relative_path": "sweep-inputs/logs/run_038.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_039.log",
+              "relative_path": "sweep-inputs/logs/run_039.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_040.log",
+              "relative_path": "sweep-inputs/logs/run_040.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_041.log",
+              "relative_path": "sweep-inputs/logs/run_041.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_042.log",
+              "relative_path": "sweep-inputs/logs/run_042.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_043.log",
+              "relative_path": "sweep-inputs/logs/run_043.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_044.log",
+              "relative_path": "sweep-inputs/logs/run_044.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_045.log",
+              "relative_path": "sweep-inputs/logs/run_045.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_046.log",
+              "relative_path": "sweep-inputs/logs/run_046.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_047.log",
+              "relative_path": "sweep-inputs/logs/run_047.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_048.log",
+              "relative_path": "sweep-inputs/logs/run_048.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_049.log",
+              "relative_path": "sweep-inputs/logs/run_049.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_050.log",
+              "relative_path": "sweep-inputs/logs/run_050.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_051.log",
+              "relative_path": "sweep-inputs/logs/run_051.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_052.log",
+              "relative_path": "sweep-inputs/logs/run_052.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_053.log",
+              "relative_path": "sweep-inputs/logs/run_053.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_054.log",
+              "relative_path": "sweep-inputs/logs/run_054.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_055.log",
+              "relative_path": "sweep-inputs/logs/run_055.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_056.log",
+              "relative_path": "sweep-inputs/logs/run_056.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_057.log",
+              "relative_path": "sweep-inputs/logs/run_057.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_058.log",
+              "relative_path": "sweep-inputs/logs/run_058.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_059.log",
+              "relative_path": "sweep-inputs/logs/run_059.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_060.log",
+              "relative_path": "sweep-inputs/logs/run_060.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_061.log",
+              "relative_path": "sweep-inputs/logs/run_061.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_062.log",
+              "relative_path": "sweep-inputs/logs/run_062.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_063.log",
+              "relative_path": "sweep-inputs/logs/run_063.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_064.log",
+              "relative_path": "sweep-inputs/logs/run_064.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_065.log",
+              "relative_path": "sweep-inputs/logs/run_065.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_066.log",
+              "relative_path": "sweep-inputs/logs/run_066.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_067.log",
+              "relative_path": "sweep-inputs/logs/run_067.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_068.log",
+              "relative_path": "sweep-inputs/logs/run_068.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_069.log",
+              "relative_path": "sweep-inputs/logs/run_069.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_070.log",
+              "relative_path": "sweep-inputs/logs/run_070.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_071.log",
+              "relative_path": "sweep-inputs/logs/run_071.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_072.log",
+              "relative_path": "sweep-inputs/logs/run_072.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_073.log",
+              "relative_path": "sweep-inputs/logs/run_073.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_074.log",
+              "relative_path": "sweep-inputs/logs/run_074.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_075.log",
+              "relative_path": "sweep-inputs/logs/run_075.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_076.log",
+              "relative_path": "sweep-inputs/logs/run_076.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_077.log",
+              "relative_path": "sweep-inputs/logs/run_077.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_078.log",
+              "relative_path": "sweep-inputs/logs/run_078.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-sweep/sweep-inputs/logs/run_079.log",
+              "relative_path": "sweep-inputs/logs/run_079.log",
+              "bytes": 2112,
+              "chars": 2112,
+              "purpose": "raw_baseline_input"
+            }
+          ],
+          "context_bytes": 13273482,
+          "context_chars": 13273482,
+          "estimated_context_tokens": 3318371,
+          "full_artifact_bodies_exposed": [
+            "sweep-inputs/sweep_manifest.json",
+            "sweep-inputs/sweep_metrics.csv",
+            "sweep-inputs/sweep_config_summary.csv",
+            "sweep-inputs/sweep_anomaly_events.csv",
+            "sweep-inputs/logs/run_000.log",
+            "sweep-inputs/logs/run_001.log",
+            "sweep-inputs/logs/run_002.log",
+            "sweep-inputs/logs/run_003.log",
+            "sweep-inputs/logs/run_004.log",
+            "sweep-inputs/logs/run_005.log",
+            "sweep-inputs/logs/run_006.log",
+            "sweep-inputs/logs/run_007.log",
+            "sweep-inputs/logs/run_008.log",
+            "sweep-inputs/logs/run_009.log",
+            "sweep-inputs/logs/run_010.log",
+            "sweep-inputs/logs/run_011.log",
+            "sweep-inputs/logs/run_012.log",
+            "sweep-inputs/logs/run_013.log",
+            "sweep-inputs/logs/run_014.log",
+            "sweep-inputs/logs/run_015.log",
+            "sweep-inputs/logs/run_016.log",
+            "sweep-inputs/logs/run_017.log",
+            "sweep-inputs/logs/run_018.log",
+            "sweep-inputs/logs/run_019.log",
+            "sweep-inputs/logs/run_020.log",
+            "sweep-inputs/logs/run_021.log",
+            "sweep-inputs/logs/run_022.log",
+            "sweep-inputs/logs/run_023.log",
+            "sweep-inputs/logs/run_024.log",
+            "sweep-inputs/logs/run_025.log",
+            "sweep-inputs/logs/run_026.log",
+            "sweep-inputs/logs/run_027.log",
+            "sweep-inputs/logs/run_028.log",
+            "sweep-inputs/logs/run_029.log",
+            "sweep-inputs/logs/run_030.log",
+            "sweep-inputs/logs/run_031.log",
+            "sweep-inputs/logs/run_032.log",
+            "sweep-inputs/logs/run_033.log",
+            "sweep-inputs/logs/run_034.log",
+            "sweep-inputs/logs/run_035.log",
+            "sweep-inputs/logs/run_036.log",
+            "sweep-inputs/logs/run_037.log",
+            "sweep-inputs/logs/run_038.log",
+            "sweep-inputs/logs/run_039.log",
+            "sweep-inputs/logs/run_040.log",
+            "sweep-inputs/logs/run_041.log",
+            "sweep-inputs/logs/run_042.log",
+            "sweep-inputs/logs/run_043.log",
+            "sweep-inputs/logs/run_044.log",
+            "sweep-inputs/logs/run_045.log",
+            "sweep-inputs/logs/run_046.log",
+            "sweep-inputs/logs/run_047.log",
+            "sweep-inputs/logs/run_048.log",
+            "sweep-inputs/logs/run_049.log",
+            "sweep-inputs/logs/run_050.log",
+            "sweep-inputs/logs/run_051.log",
+            "sweep-inputs/logs/run_052.log",
+            "sweep-inputs/logs/run_053.log",
+            "sweep-inputs/logs/run_054.log",
+            "sweep-inputs/logs/run_055.log",
+            "sweep-inputs/logs/run_056.log",
+            "sweep-inputs/logs/run_057.log",
+            "sweep-inputs/logs/run_058.log",
+            "sweep-inputs/logs/run_059.log",
+            "sweep-inputs/logs/run_060.log",
+            "sweep-inputs/logs/run_061.log",
+            "sweep-inputs/logs/run_062.log",
+            "sweep-inputs/logs/run_063.log",
+            "sweep-inputs/logs/run_064.log",
+            "sweep-inputs/logs/run_065.log",
+            "sweep-inputs/logs/run_066.log",
+            "sweep-inputs/logs/run_067.log",
+            "sweep-inputs/logs/run_068.log",
+            "sweep-inputs/logs/run_069.log",
+            "sweep-inputs/logs/run_070.log",
+            "sweep-inputs/logs/run_071.log",
+            "sweep-inputs/logs/run_072.log",
+            "sweep-inputs/logs/run_073.log",
+            "sweep-inputs/logs/run_074.log",
+            "sweep-inputs/logs/run_075.log",
+            "sweep-inputs/logs/run_076.log",
+            "sweep-inputs/logs/run_077.log",
+            "sweep-inputs/logs/run_078.log",
+            "sweep-inputs/logs/run_079.log"
+          ],
+          "raw_log_bytes_exposed": 170312,
+          "raw_metric_row_bytes_exposed": 13074263,
+          "raw_notes_bytes_exposed": 0,
+          "generated_deliverables": [
+            "raw_analysis_summary.md"
+          ],
+          "traceability_present": false,
+          "package_metadata_present": false,
+          "sqlite_independent_check": false,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "anomaly_detection": 2,
+            "deliverable_completeness": 1,
+            "traceability": 1,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 10,
+          "violations": [],
+          "notes": [
+            "Raw arm read manifest, all metric rows, config summary rows, anomaly rows, and all per-run logs.",
+            "top_configs=cfg_19; cfg_18; cfg_17",
+            "anomaly_runs=run_000; run_001; run_002; run_003"
+          ],
+          "analysis_summary": "Raw read ranks top configurations by validation accuracy and stability: cfg_19 cfg_19_convnext_tiny_lr0.0051_bs128 mean=0.861950 stability_std=0.000620 duration_ms=242.200; cfg_18 cfg_18_vit_tiny_lr0.0049_bs96 mean=0.855600 stability_std=0.000650 duration_ms=237.400; cfg_17 cfg_17_resnet34_lr0.0047_bs64 mean=0.849250 stability_std=0.000680 duration_ms=232.600. Anomalies are run_000=missing_final_metric; run_001=unstable_seed; run_002=warning_only; run_003=incomplete_artifact. Missing or incomplete artifacts are limited to runs with artifact_present=false."
+        },
+        {
+          "scenario_id": "multi_run_sweep",
+          "arm": "lab_sidecar",
+          "workspace": "<benchmark-root>/sidecar-sweep",
+          "package_dir": "<benchmark-root>/package-alpha3-scale-sweep",
+          "task_ids": [
+            "task_20260619_235519_6300dc"
+          ],
+          "commands_run": [
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "init"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 284,
+              "chars": 284,
+              "stdout_preview": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/sidecar-sweep\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "ingest",
+                "sweep-inputs",
+                "--name",
+                "alpha3 scale multi-run sweep"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 249,
+              "chars": 249,
+              "stdout_preview": "Imported as task: task_20260619_235519_6300dc\nSource: sweep-inputs\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260619_235519_6300dc\nNext:\n- labsidecar collect task_20260619_235519_6300dc\n- labsidecar artifacts task_20260619_235519_6300dc\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "collect",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 602,
+              "chars": 602,
+              "stdout_preview": "Collected metrics for task_20260619_235519_6300dc\nDetected fields: error_flag, val_accuracy, val_loss, duration_ms, top_1_val_accuracy, top_2_val_accuracy, top_3_val_accuracy, model, seed, step, epoch, run_accuracy, train_loss\nRows: 100104\nWrote: .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260619_235519_6300dc\n- labsidecar report task_20260619_235519_6300dc\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "figures",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 1133,
+              "chars": 1133,
+              "stdout_preview": "Generated 2 figure(s) for task_20260619_235519_6300dc\n- .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_train_loss_over_epoch.png\n- .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_train_loss_over_epoch.svg\n- .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_val_loss_over_epoch.png\n- .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_val_loss_over_epoch.svg\nSpec: .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/figure-summary.json\nWarnings:\n- Skipped 'val_accuracy' because fewer than 2 numeric points are available.\nNext:\n- labsidecar report task_20260619_235519_6300dc\n- labsidecar slides task_20260619_235519_6300dc\n",
+              "stderr_preview": "<repo>/lab_sidecar/figures/service.py:235: DtypeWarning: Columns (0: artifact_present, 1: event_note, 2: top_1_config, 3: top_2_config, 4: top_3_config, 5: tradeoff_note, 6: dataset_slice, 7: expected_artifact, 8: intentional_anomaly) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "report",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 635,
+              "chars": 635,
+              "stdout_preview": "Report fragment created:\n.lab-sidecar/tasks/task_20260619_235519_6300dc/reports/report-fragment.md\nSummary: .lab-sidecar/tasks/task_20260619_235519_6300dc/reports/report-summary.json\nTemplate: zh-lab\nNext:\n- labsidecar slides task_20260619_235519_6300dc\n",
+              "stderr_preview": "<repo>/lab_sidecar/reports/service.py:183: DtypeWarning: Columns (0: artifact_present, 1: event_note, 2: top_1_config, 3: top_2_config, 4: top_3_config, 5: tradeoff_note, 6: dataset_slice, 7: expected_artifact, 8: intentional_anomaly) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "slides",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 1463,
+              "chars": 1463,
+              "stdout_preview": "Presentation draft created:\n.lab-sidecar/tasks/task_20260619_235519_6300dc/slides/presentation-draft.pptx\nSummary: .lab-sidecar/tasks/task_20260619_235519_6300dc/slides/slides-summary.json\nTemplate: zh-summary\nSlides: 8\nNext:\n- labsidecar artifacts task_20260619_235519_6300dc\n- labsidecar open task_20260619_235519_6300dc\n",
+              "stderr_preview": "<repo>/lab_sidecar/slides/service.py:321: DtypeWarning: Columns (0: artifact_present, 1: event_note, 2: top_1_config, 3: top_2_config, 4: top_3_config, 5: tradeoff_note, 6: dataset_slice, 7: expected_artifact, 8: intentional_anomaly) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n<repo>/lab_sidecar/slides/service.py:373: DtypeWarning: Columns (0: artifact_present, 1: event_note, 2: top_1_config, 3: top_2_config, 4: top_3_config, 5: tradeoff_note, 6: dataset_slice, 7: expected_artifact, 8: intentional_anomaly) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n<repo>/lab_sidecar/slides/service.py:436: DtypeWarning: Columns (0: artifact_present, 1: event_note, 2: top_1_config, 3: top_2_config, 4: top_3_config, 5: tradeoff_note, 6: dataset_slice, 7: expected_artifact, 8: intentional_anomaly) have mixed types. Specify dtype option on import or set low_memory=False.\n  df = pd.read_csv(metrics_path)\n",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "package",
+                "task_20260619_235519_6300dc",
+                "--output",
+                "<benchmark-root>/package-alpha3-scale-sweep"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 185,
+              "chars": 185,
+              "stdout_preview": "Package created: <benchmark-root>/package-alpha3-scale-sweep\nType: result\nIncluded files: 15\nOmitted by default: 6\nUnavailable optional files: 4\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 1223,
+              "chars": 1223,
+              "stdout_preview": "Task: task_20260619_235519_6300dc\nName: alpha3 scale multi-run sweep\nStatus: completed\nMode: ingest\nSource: sweep-inputs\nArtifact dir: .lab-sidecar/tasks/task_20260619_235519_6300dc\nCreated: 2026-06-19T23:55:19+08:00\nStarted: 2026-06-19T23:55:19+08:00\nFinished: 2026-06-19T23:55:19+08:00\nArtifacts: 17\nArtifact types: config=5, figure=4, log=2, presentation=1, provenance=1, raw=1, report=1, table=2\nKey artifacts:\n- metrics: metrics/normalized_metrics.csv\n- figures: figures/figure-summary.json\n- report: reports/report-fragment.md\n- slides: slides/presentation-draft.pptx\nMetrics:\n- rows: 100104\n- detected fields: error_flag, val_accuracy, val_loss, duration_ms, top_1_val_accuracy, top_2_val_accuracy, top_3_val_accuracy, model, seed, step, epoch, run_accuracy, train_loss\n- summary: metrics/collection-summary.json\n- normalized table: metrics/normalized_metrics.csv\nFigures:\n- generated figures: 2\n- summary: figures/figure-summary.json\nReport:\n- reports/report-fragment.md\nSlides:\n- slides/presentation-draft.pptx\nNext:\n- labsidecar summarize task_20260619_235519_6300dc\n- labsidecar collect task_20260619_235519_6300dc\n- labsidecar figures task_20260619_235519_6300dc\n- labsidecar report task_",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 1846,
+              "chars": 1846,
+              "stdout_preview": "Artifacts for task_20260619_235519_6300dc\n[log] .lab-sidecar/tasks/task_20260619_235519_6300dc/stdout.log - Empty stdout log for imported results\n[log] .lab-sidecar/tasks/task_20260619_235519_6300dc/stderr.log - Empty stderr log for imported results\n[raw] .lab-sidecar/tasks/task_20260619_235519_6300dc/raw/source_refs.json - References to imported source files\n[table] .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/normalized_metrics.csv - Normalized metrics table\n[table] .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/normalized_metrics.json - Normalized metrics as JSON rows\n[config] .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/collection-summary.json - Metrics collection summary and warnings\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_train_loss_over_epoch.png - Training Loss over Epoch\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_train_loss_over_epoch.svg - Training Loss over Epoch\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_val_loss_over_epoch.png - Validation Loss over Epoch\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_val_loss_over_epoch.svg - Validation Lo",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 1223,
+              "chars": 1223,
+              "stdout_preview": "Task: task_20260619_235519_6300dc\nName: alpha3 scale multi-run sweep\nStatus: completed\nMode: ingest\nSource: sweep-inputs\nArtifact dir: .lab-sidecar/tasks/task_20260619_235519_6300dc\nCreated: 2026-06-19T23:55:19+08:00\nStarted: 2026-06-19T23:55:19+08:00\nFinished: 2026-06-19T23:55:19+08:00\nArtifacts: 17\nArtifact types: config=5, figure=4, log=2, presentation=1, provenance=1, raw=1, report=1, table=2\nKey artifacts:\n- metrics: metrics/normalized_metrics.csv\n- figures: figures/figure-summary.json\n- report: reports/report-fragment.md\n- slides: slides/presentation-draft.pptx\nMetrics:\n- rows: 100104\n- detected fields: error_flag, val_accuracy, val_loss, duration_ms, top_1_val_accuracy, top_2_val_accuracy, top_3_val_accuracy, model, seed, step, epoch, run_accuracy, train_loss\n- summary: metrics/collection-summary.json\n- normalized table: metrics/normalized_metrics.csv\nFigures:\n- generated figures: 2\n- summary: figures/figure-summary.json\nReport:\n- reports/report-fragment.md\nSlides:\n- slides/presentation-draft.pptx\nNext:\n- labsidecar summarize task_20260619_235519_6300dc\n- labsidecar collect task_20260619_235519_6300dc\n- labsidecar figures task_20260619_235519_6300dc\n- labsidecar report task_",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output_post_sqlite_delete"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_235519_6300dc"
+              ],
+              "cwd": "<benchmark-root>/sidecar-sweep",
+              "returncode": 0,
+              "bytes": 1846,
+              "chars": 1846,
+              "stdout_preview": "Artifacts for task_20260619_235519_6300dc\n[log] .lab-sidecar/tasks/task_20260619_235519_6300dc/stdout.log - Empty stdout log for imported results\n[log] .lab-sidecar/tasks/task_20260619_235519_6300dc/stderr.log - Empty stderr log for imported results\n[raw] .lab-sidecar/tasks/task_20260619_235519_6300dc/raw/source_refs.json - References to imported source files\n[table] .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/normalized_metrics.csv - Normalized metrics table\n[table] .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/normalized_metrics.json - Normalized metrics as JSON rows\n[config] .lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/collection-summary.json - Metrics collection summary and warnings\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_train_loss_over_epoch.png - Training Loss over Epoch\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_train_loss_over_epoch.svg - Training Loss over Epoch\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_val_loss_over_epoch.png - Validation Loss over Epoch\n[figure] .lab-sidecar/tasks/task_20260619_235519_6300dc/figures/line_val_loss_over_epoch.svg - Validation Lo",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output_post_sqlite_delete"
+            }
+          ],
+          "files_read": [
+            {
+              "path": "<benchmark-root>/sidecar-sweep/.lab-sidecar/tasks/task_20260619_235519_6300dc/manifest.json",
+              "relative_path": "manifest.json",
+              "bytes": 9146,
+              "chars": 9146,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-sweep/.lab-sidecar/tasks/task_20260619_235519_6300dc/metrics/collection-summary.json",
+              "relative_path": "metrics/collection-summary.json",
+              "bytes": 23534,
+              "chars": 23534,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-sweep/.lab-sidecar/tasks/task_20260619_235519_6300dc/figures/figure-summary.json",
+              "relative_path": "figures/figure-summary.json",
+              "bytes": 2652,
+              "chars": 2652,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-sweep/.lab-sidecar/tasks/task_20260619_235519_6300dc/reports/report-summary.json",
+              "relative_path": "reports/report-summary.json",
+              "bytes": 21928,
+              "chars": 21878,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-sweep/.lab-sidecar/tasks/task_20260619_235519_6300dc/slides/slides-summary.json",
+              "relative_path": "slides/slides-summary.json",
+              "bytes": 41625,
+              "chars": 40921,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-sweep/.lab-sidecar/tasks/task_20260619_235519_6300dc/provenance/traceability.json",
+              "relative_path": "provenance/traceability.json",
+              "bytes": 78520,
+              "chars": 78448,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/package-alpha3-scale-sweep/artifact-index.json",
+              "relative_path": "package/artifact-index.json",
+              "bytes": 8290,
+              "chars": 8290,
+              "purpose": "sidecar_allowed_package_metadata"
+            },
+            {
+              "path": "<benchmark-root>/package-alpha3-scale-sweep/package-summary.json",
+              "relative_path": "package/package-summary.json",
+              "bytes": 2928,
+              "chars": 2928,
+              "purpose": "sidecar_allowed_package_metadata"
+            }
+          ],
+          "context_bytes": 199312,
+          "context_chars": 198486,
+          "estimated_context_tokens": 49622,
+          "full_artifact_bodies_exposed": [],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 0,
+          "raw_notes_bytes_exposed": 0,
+          "generated_deliverables": [
+            "README.md",
+            "artifact-index.json",
+            "figures/figure-spec.yaml",
+            "figures/figure-summary.json",
+            "figures/line_train_loss_over_epoch.png",
+            "figures/line_train_loss_over_epoch.svg",
+            "figures/line_val_loss_over_epoch.png",
+            "figures/line_val_loss_over_epoch.svg",
+            "manifest.json",
+            "metrics/collection-summary.json",
+            "metrics/normalized_metrics.csv",
+            "metrics/normalized_metrics.json",
+            "package-summary.json",
+            "provenance/traceability.json",
+            "redaction-notes.md",
+            "reports/report-fragment.md",
+            "reports/report-summary.json",
+            "slides/presentation-draft.pptx",
+            "slides/slides-summary.json"
+          ],
+          "traceability_present": true,
+          "package_metadata_present": true,
+          "sqlite_independent_check": true,
+          "violations": [],
+          "quality_scores": {
+            "metric_correctness": 2,
+            "anomaly_detection": 2,
+            "deliverable_completeness": 2,
+            "traceability": 2,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 12,
+          "notes": [
+            "bounded_top_configs=cfg_19; cfg_18; cfg_17",
+            "bounded_anomaly_groups=12",
+            "bounded_analysis.best_rows exposes a compact top-config summary row, and anomaly_summary exposes incomplete/anomaly run groups."
+          ],
+          "analysis_summary": "Sidecar bounded evidence ranks top configurations as cfg_19, cfg_18, cfg_17 from best_rows selected_fields on metric val_accuracy=0.86195; stability/duration tradeoff evidence is included in selected fields. anomaly_summary reports 5008 anomaly rows across 12 groups, including run_000 reasons=status=missing_final_metric,error_flag=1,incomplete_flag=1; run_001 reasons=status=unstable_seed,unstable_flag=1,anomaly_code=unstable_seed; run_002 reasons=warning_flag=1,anomaly_code=warning_only; run_003 reasons=status=incomplete_artifact,incomplete_flag=1,artifact_present=false. Evidence points to normalized metrics rows with bodies omitted; raw logs were not read."
+        }
+      ]
+    },
+    {
+      "scenario_id": "complex_project_pack",
+      "title": "Complex Project Pack",
+      "analysis_prompt": "Prepare a concise project-readiness summary, identify the strongest supported claims, identify claims that must not be made, summarize final model quality and deployment tradeoffs, list report and slide deliverables, cite evidence for each claim, and state remaining unknowns.",
+      "summary": {
+        "title": "Complex Project Pack",
+        "raw_context_chars": 844652,
+        "sidecar_context_chars": 162539,
+        "raw_estimated_tokens": 211163,
+        "sidecar_estimated_tokens": 40635,
+        "context_reduction_pct": 80.76,
+        "token_reduction_pct": 80.76,
+        "raw_quality_total": 10,
+        "sidecar_quality_total": 12,
+        "quality_delta": 2,
+        "raw_log_bytes_exposed": 0,
+        "sidecar_log_bytes_exposed": 0,
+        "raw_metric_row_bytes_exposed": 830231,
+        "sidecar_metric_row_bytes_exposed": 0,
+        "raw_notes_bytes_exposed": 14421,
+        "sidecar_notes_bytes_exposed": 0,
+        "raw_log_exposure_reduction_pct": null,
+        "raw_metric_exposure_reduction_pct": 100.0,
+        "sidecar_traceability_present": true,
+        "sidecar_package_metadata_present": true,
+        "sidecar_sqlite_independent_check": true,
+        "sidecar_violations": []
+      },
+      "runs": [
+        {
+          "scenario_id": "complex_project_pack",
+          "arm": "raw_agent",
+          "workspace": "<benchmark-root>/raw-project",
+          "task_ids": [],
+          "commands_run": [],
+          "files_read": [
+            {
+              "path": "<benchmark-root>/raw-project/project-pack/project_goal.md",
+              "relative_path": "project-pack/project_goal.md",
+              "bytes": 176,
+              "chars": 176,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-project/project-pack/experiment_notes.md",
+              "relative_path": "project-pack/experiment_notes.md",
+              "bytes": 13964,
+              "chars": 13964,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-project/project-pack/weekly_metrics.csv",
+              "relative_path": "project-pack/weekly_metrics.csv",
+              "bytes": 742731,
+              "chars": 742731,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-project/project-pack/final_metrics.csv",
+              "relative_path": "project-pack/final_metrics.csv",
+              "bytes": 46100,
+              "chars": 46100,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-project/project-pack/ablation.json",
+              "relative_path": "project-pack/ablation.json",
+              "bytes": 908,
+              "chars": 908,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-project/project-pack/error_analysis.csv",
+              "relative_path": "project-pack/error_analysis.csv",
+              "bytes": 40492,
+              "chars": 40492,
+              "purpose": "raw_baseline_input"
+            },
+            {
+              "path": "<benchmark-root>/raw-project/project-pack/dataset_notes.md",
+              "relative_path": "project-pack/dataset_notes.md",
+              "bytes": 281,
+              "chars": 281,
+              "purpose": "raw_baseline_input"
+            }
+          ],
+          "context_bytes": 844652,
+          "context_chars": 844652,
+          "estimated_context_tokens": 211163,
+          "full_artifact_bodies_exposed": [
+            "project-pack/project_goal.md",
+            "project-pack/experiment_notes.md",
+            "project-pack/weekly_metrics.csv",
+            "project-pack/final_metrics.csv",
+            "project-pack/ablation.json",
+            "project-pack/error_analysis.csv",
+            "project-pack/dataset_notes.md"
+          ],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 830231,
+          "raw_notes_bytes_exposed": 14421,
+          "generated_deliverables": [
+            "raw_analysis_summary.md"
+          ],
+          "traceability_present": false,
+          "package_metadata_present": false,
+          "sqlite_independent_check": false,
+          "quality_scores": {
+            "metric_correctness": 2,
+            "anomaly_detection": 2,
+            "deliverable_completeness": 1,
+            "traceability": 1,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 10,
+          "violations": [],
+          "notes": [
+            "strongest_candidate=candidate_e",
+            "Raw arm read all notes, metric files, nested ablation JSON, and error analysis."
+          ],
+          "analysis_summary": "Raw read identifies candidate_e as strongest by test_accuracy=0.814040 and macro_f1=0.796360, with latency tradeoff 90.080ms. Unsupported claims include: Do not claim production readiness; only local deterministic validation was exercised. Do not claim fairness across unsupported demographic groups; subgroup labels are synthetic. Do not claim causal improvement; the benchmark is observational and file-first. Report, slide, package, traceability, and metric artifacts are expected deliverables; external drift and production behavior remain unknown."
+        },
+        {
+          "scenario_id": "complex_project_pack",
+          "arm": "lab_sidecar",
+          "workspace": "<benchmark-root>/sidecar-project",
+          "package_dir": "<benchmark-root>/package-alpha3-scale-project",
+          "task_ids": [
+            "task_20260619_235530_4ca496"
+          ],
+          "commands_run": [
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "init"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 286,
+              "chars": 286,
+              "stdout_preview": "Initialized Lab-Sidecar workspace.\nRoot: <benchmark-root>/sidecar-project\nState dir: .lab-sidecar\nConfig: .lab-sidecar/config.yaml\nIndex: .lab-sidecar/index.sqlite\nNext:\n- labsidecar run \"<command>\"\n- labsidecar ingest <path>\n- labsidecar doctor\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "ingest",
+                "project-pack",
+                "--name",
+                "alpha3 scale project pack"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 249,
+              "chars": 249,
+              "stdout_preview": "Imported as task: task_20260619_235530_4ca496\nSource: project-pack\nStatus: completed\nArtifacts: .lab-sidecar/tasks/task_20260619_235530_4ca496\nNext:\n- labsidecar collect task_20260619_235530_4ca496\n- labsidecar artifacts task_20260619_235530_4ca496\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "collect",
+                "task_20260619_235530_4ca496"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 590,
+              "chars": 590,
+              "stdout_preview": "Collected metrics for task_20260619_235530_4ca496\nDetected fields: delta_accuracy, delta_latency_ms, model, seed, test_accuracy, macro_f1, latency_ms, memory_mb, step, train_loss, val_loss, val_accuracy, duration_ms\nRows: 12244\nWrote: .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/normalized_metrics.csv\nWrote: .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/normalized_metrics.json\nSummary: .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/collection-summary.json\nNext:\n- labsidecar figures task_20260619_235530_4ca496\n- labsidecar report task_20260619_235530_4ca496\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "figures",
+                "task_20260619_235530_4ca496"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 871,
+              "chars": 871,
+              "stdout_preview": "Generated 2 figure(s) for task_20260619_235530_4ca496\n- .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_val_accuracy_over_step.png\n- .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_val_accuracy_over_step.svg\n- .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_train_loss_over_step.png\n- .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_train_loss_over_step.svg\nSpec: .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/figure-spec.yaml\nSummary: .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/figure-summary.json\nWarnings:\n- Skipped 'test_accuracy' because fewer than 2 numeric points are available.\n- Skipped 'val_loss' because auto line chart limit is 2.\n- Skipped 'macro_f1' because auto line chart limit is 2.\nNext:\n- labsidecar report task_20260619_235530_4ca496\n- labsidecar slides task_20260619_235530_4ca496\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "report",
+                "task_20260619_235530_4ca496"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 254,
+              "chars": 254,
+              "stdout_preview": "Report fragment created:\n.lab-sidecar/tasks/task_20260619_235530_4ca496/reports/report-fragment.md\nSummary: .lab-sidecar/tasks/task_20260619_235530_4ca496/reports/report-summary.json\nTemplate: zh-lab\nNext:\n- labsidecar slides task_20260619_235530_4ca496\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "slides",
+                "task_20260619_235530_4ca496",
+                "--template",
+                "zh-project"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 323,
+              "chars": 323,
+              "stdout_preview": "Presentation draft created:\n.lab-sidecar/tasks/task_20260619_235530_4ca496/slides/presentation-draft.pptx\nSummary: .lab-sidecar/tasks/task_20260619_235530_4ca496/slides/slides-summary.json\nTemplate: zh-project\nSlides: 7\nNext:\n- labsidecar artifacts task_20260619_235530_4ca496\n- labsidecar open task_20260619_235530_4ca496\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "package",
+                "task_20260619_235530_4ca496",
+                "--output",
+                "<benchmark-root>/package-alpha3-scale-project"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 187,
+              "chars": 187,
+              "stdout_preview": "Package created: <benchmark-root>/package-alpha3-scale-project\nType: result\nIncluded files: 15\nOmitted by default: 6\nUnavailable optional files: 4\n",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_235530_4ca496"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 1208,
+              "chars": 1208,
+              "stdout_preview": "Task: task_20260619_235530_4ca496\nName: alpha3 scale project pack\nStatus: completed\nMode: ingest\nSource: project-pack\nArtifact dir: .lab-sidecar/tasks/task_20260619_235530_4ca496\nCreated: 2026-06-19T23:55:30+08:00\nStarted: 2026-06-19T23:55:30+08:00\nFinished: 2026-06-19T23:55:30+08:00\nArtifacts: 17\nArtifact types: config=5, figure=4, log=2, presentation=1, provenance=1, raw=1, report=1, table=2\nKey artifacts:\n- metrics: metrics/normalized_metrics.csv\n- figures: figures/figure-summary.json\n- report: reports/report-fragment.md\n- slides: slides/presentation-draft.pptx\nMetrics:\n- rows: 12244\n- detected fields: delta_accuracy, delta_latency_ms, model, seed, test_accuracy, macro_f1, latency_ms, memory_mb, step, train_loss, val_loss, val_accuracy, duration_ms\n- summary: metrics/collection-summary.json\n- normalized table: metrics/normalized_metrics.csv\nFigures:\n- generated figures: 2\n- summary: figures/figure-summary.json\nReport:\n- reports/report-fragment.md\nSlides:\n- slides/presentation-draft.pptx\nNext:\n- labsidecar summarize task_20260619_235530_4ca496\n- labsidecar collect task_20260619_235530_4ca496\n- labsidecar figures task_20260619_235530_4ca496\n- labsidecar report task_20260619_235530",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_235530_4ca496"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 1854,
+              "chars": 1854,
+              "stdout_preview": "Artifacts for task_20260619_235530_4ca496\n[log] .lab-sidecar/tasks/task_20260619_235530_4ca496/stdout.log - Empty stdout log for imported results\n[log] .lab-sidecar/tasks/task_20260619_235530_4ca496/stderr.log - Empty stderr log for imported results\n[raw] .lab-sidecar/tasks/task_20260619_235530_4ca496/raw/source_refs.json - References to imported source files\n[table] .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/normalized_metrics.csv - Normalized metrics table\n[table] .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/normalized_metrics.json - Normalized metrics as JSON rows\n[config] .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/collection-summary.json - Metrics collection summary and warnings\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_val_accuracy_over_step.png - Validation Accuracy over Step\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_val_accuracy_over_step.svg - Validation Accuracy over Step\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_train_loss_over_step.png - Training Loss over Step\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_train_loss_over_step.svg - Tr",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "summarize",
+                "task_20260619_235530_4ca496"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 1208,
+              "chars": 1208,
+              "stdout_preview": "Task: task_20260619_235530_4ca496\nName: alpha3 scale project pack\nStatus: completed\nMode: ingest\nSource: project-pack\nArtifact dir: .lab-sidecar/tasks/task_20260619_235530_4ca496\nCreated: 2026-06-19T23:55:30+08:00\nStarted: 2026-06-19T23:55:30+08:00\nFinished: 2026-06-19T23:55:30+08:00\nArtifacts: 17\nArtifact types: config=5, figure=4, log=2, presentation=1, provenance=1, raw=1, report=1, table=2\nKey artifacts:\n- metrics: metrics/normalized_metrics.csv\n- figures: figures/figure-summary.json\n- report: reports/report-fragment.md\n- slides: slides/presentation-draft.pptx\nMetrics:\n- rows: 12244\n- detected fields: delta_accuracy, delta_latency_ms, model, seed, test_accuracy, macro_f1, latency_ms, memory_mb, step, train_loss, val_loss, val_accuracy, duration_ms\n- summary: metrics/collection-summary.json\n- normalized table: metrics/normalized_metrics.csv\nFigures:\n- generated figures: 2\n- summary: figures/figure-summary.json\nReport:\n- reports/report-fragment.md\nSlides:\n- slides/presentation-draft.pptx\nNext:\n- labsidecar summarize task_20260619_235530_4ca496\n- labsidecar collect task_20260619_235530_4ca496\n- labsidecar figures task_20260619_235530_4ca496\n- labsidecar report task_20260619_235530",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output_post_sqlite_delete"
+            },
+            {
+              "args": [
+                "<python>",
+                "-m",
+                "lab_sidecar.cli.app",
+                "artifacts",
+                "task_20260619_235530_4ca496"
+              ],
+              "cwd": "<benchmark-root>/sidecar-project",
+              "returncode": 0,
+              "bytes": 1854,
+              "chars": 1854,
+              "stdout_preview": "Artifacts for task_20260619_235530_4ca496\n[log] .lab-sidecar/tasks/task_20260619_235530_4ca496/stdout.log - Empty stdout log for imported results\n[log] .lab-sidecar/tasks/task_20260619_235530_4ca496/stderr.log - Empty stderr log for imported results\n[raw] .lab-sidecar/tasks/task_20260619_235530_4ca496/raw/source_refs.json - References to imported source files\n[table] .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/normalized_metrics.csv - Normalized metrics table\n[table] .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/normalized_metrics.json - Normalized metrics as JSON rows\n[config] .lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/collection-summary.json - Metrics collection summary and warnings\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_val_accuracy_over_step.png - Validation Accuracy over Step\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_val_accuracy_over_step.svg - Validation Accuracy over Step\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_train_loss_over_step.png - Training Loss over Step\n[figure] .lab-sidecar/tasks/task_20260619_235530_4ca496/figures/line_train_loss_over_step.svg - Tr",
+              "stderr_preview": "",
+              "purpose": "sidecar_cli_output_post_sqlite_delete"
+            }
+          ],
+          "files_read": [
+            {
+              "path": "<benchmark-root>/sidecar-project/.lab-sidecar/tasks/task_20260619_235530_4ca496/manifest.json",
+              "relative_path": "manifest.json",
+              "bytes": 9111,
+              "chars": 9111,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-project/.lab-sidecar/tasks/task_20260619_235530_4ca496/metrics/collection-summary.json",
+              "relative_path": "metrics/collection-summary.json",
+              "bytes": 11910,
+              "chars": 11910,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-project/.lab-sidecar/tasks/task_20260619_235530_4ca496/figures/figure-summary.json",
+              "relative_path": "figures/figure-summary.json",
+              "bytes": 3252,
+              "chars": 3252,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-project/.lab-sidecar/tasks/task_20260619_235530_4ca496/reports/report-summary.json",
+              "relative_path": "reports/report-summary.json",
+              "bytes": 20972,
+              "chars": 20922,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-project/.lab-sidecar/tasks/task_20260619_235530_4ca496/slides/slides-summary.json",
+              "relative_path": "slides/slides-summary.json",
+              "bytes": 40363,
+              "chars": 39773,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/sidecar-project/.lab-sidecar/tasks/task_20260619_235530_4ca496/provenance/traceability.json",
+              "relative_path": "provenance/traceability.json",
+              "bytes": 57533,
+              "chars": 57459,
+              "purpose": "sidecar_allowed_artifact"
+            },
+            {
+              "path": "<benchmark-root>/package-alpha3-scale-project/artifact-index.json",
+              "relative_path": "package/artifact-index.json",
+              "bytes": 8297,
+              "chars": 8297,
+              "purpose": "sidecar_allowed_package_metadata"
+            },
+            {
+              "path": "<benchmark-root>/package-alpha3-scale-project/package-summary.json",
+              "relative_path": "package/package-summary.json",
+              "bytes": 2931,
+              "chars": 2931,
+              "purpose": "sidecar_allowed_package_metadata"
+            }
+          ],
+          "context_bytes": 163253,
+          "context_chars": 162539,
+          "estimated_context_tokens": 40635,
+          "full_artifact_bodies_exposed": [],
+          "raw_log_bytes_exposed": 0,
+          "raw_metric_row_bytes_exposed": 0,
+          "raw_notes_bytes_exposed": 0,
+          "generated_deliverables": [
+            "README.md",
+            "artifact-index.json",
+            "figures/figure-spec.yaml",
+            "figures/figure-summary.json",
+            "figures/line_train_loss_over_step.png",
+            "figures/line_train_loss_over_step.svg",
+            "figures/line_val_accuracy_over_step.png",
+            "figures/line_val_accuracy_over_step.svg",
+            "manifest.json",
+            "metrics/collection-summary.json",
+            "metrics/normalized_metrics.csv",
+            "metrics/normalized_metrics.json",
+            "package-summary.json",
+            "provenance/traceability.json",
+            "redaction-notes.md",
+            "reports/report-fragment.md",
+            "reports/report-summary.json",
+            "slides/presentation-draft.pptx",
+            "slides/slides-summary.json"
+          ],
+          "traceability_present": true,
+          "package_metadata_present": true,
+          "sqlite_independent_check": true,
+          "violations": [],
+          "quality_scores": {
+            "metric_correctness": 2,
+            "anomaly_detection": 2,
+            "deliverable_completeness": 2,
+            "traceability": 2,
+            "boundedness": 2,
+            "no_invention": 2
+          },
+          "quality_total": 12,
+          "notes": [
+            "bounded_best_candidate=candidate_e",
+            "bounded_analysis.best_rows supplies best-row/tradeoff evidence; anomaly_summary supplies unsupported-claim caveats."
+          ],
+          "analysis_summary": "Sidecar bounded evidence identifies candidate_e as best row for test_accuracy=0.81404 with macro_f1=0.796360 and latency_ms=90.080. anomaly_summary records unsupported-claim caveats (status=unsupported_claim; warning_flag=1), so production readiness, fairness, and causal claims remain unsupported. Report, slides, traceability, and package metadata are present."
+        }
+      ]
+    }
+  ],
+  "aggregate": {
+    "raw_context_chars": 24662732,
+    "sidecar_context_chars": 525044,
+    "context_reduction_pct": 97.87,
+    "raw_estimated_tokens": 6165684,
+    "sidecar_estimated_tokens": 131262,
+    "token_reduction_pct": 97.87,
+    "raw_quality_total": 30,
+    "sidecar_quality_total": 36,
+    "quality_delta": 6,
+    "raw_log_bytes_exposed": 5855276,
+    "sidecar_log_bytes_exposed": 0,
+    "raw_log_exposure_reduction_pct": 100.0,
+    "raw_metric_row_bytes_exposed": 18763829,
+    "sidecar_metric_row_bytes_exposed": 0,
+    "raw_metric_exposure_reduction_pct": 100.0,
+    "sidecar_violation_count": 0,
+    "sidecar_violations": []
+  },
+  "acceptance": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "three_scenarios",
+        "passed": true
+      },
+      {
+        "name": "raw_and_sidecar_runs",
+        "passed": true
+      },
+      {
+        "name": "fixtures_under_private_tmp",
+        "passed": true
+      },
+      {
+        "name": "context_and_token_fields",
+        "passed": true
+      },
+      {
+        "name": "sidecar_allowlist",
+        "passed": true
+      },
+      {
+        "name": "task_local_traceability",
+        "passed": true
+      },
+      {
+        "name": "package_metadata",
+        "passed": true
+      },
+      {
+        "name": "sqlite_independent_inspection",
+        "passed": true
+      },
+      {
+        "name": "benchmark_root_under_private_tmp",
+        "passed": true
+      }
+    ],
+    "sidecar_violation_count": 0
+  }
+}

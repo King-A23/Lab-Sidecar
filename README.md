@@ -96,6 +96,8 @@ Expected files:
 
 The task-local `provenance/traceability.json` file is refreshed as metrics, figures, reports, slides, or packages are generated. It records source references, generated artifact hashes/sizes, metric lineage, figure lineage, report claim traces, slide evidence, reproduce metadata pointers, and omission notes without embedding full logs, full metric rows, report bodies, PPTX contents, worker prompt/response bodies, raw source files, or SQLite.
 
+Chart fallback is opt-in. Deterministic `line`, `bar`, and `box` figures are always attempted first. For an explicit unsupported chart spec, `figures --fallback bounded` writes bounded request and validation records under `intelligence/<worker_run_id>/`; official fallback PNG/SVG files are created only after validator acceptance. See [docs/alpha4-bounded-chart-fallback-operator-guide.md](docs/alpha4-bounded-chart-fallback-operator-guide.md).
+
 The `package` command creates a shareable, inspectable single-task folder with `README.md`, `manifest.json`, `package-summary.json`, `artifact-index.json`, `redaction-notes.md`, reproduce metadata, task-local traceability evidence, and generated metrics/figures/report/slides artifacts when present. By default it does not copy full `stdout.log` or `stderr.log`, raw source files, `.lab-sidecar/index.sqlite`, worker prompt/response bodies, temporary sandbox files, or unrelated workspace files. Failed tasks package as diagnostic folders and are labeled as failed-task diagnostics, not successful experiment summaries.
 
 For an existing-results path, try:
@@ -145,6 +147,9 @@ tasks, inside the ingested source refs. Missing sources, missing mapped
 fields, unsupported file types, excluded files, and unit conflicts are recorded
 in `metrics/collection-summary.json`. Lab-Sidecar does not recursively scan
 entire workspaces by default and does not convert units automatically.
+The same summary also includes bounded best-row, checkpoint, and anomaly
+metadata so agents can answer common ranking or incomplete-run questions without
+reading full normalized metric tables.
 
 To compare a small set of collected local tasks, pass two to five task ids:
 
@@ -175,7 +180,7 @@ Both `labsidecar` and `lab-sidecar` console scripts point at the same CLI after 
 | `artifacts <task_id>` | List artifacts recorded in `manifest.json`. |
 | `cancel <task_id>` | Cancel a running task started by Lab-Sidecar. |
 | `collect <task_id>` | Normalize CSV/JSON metrics into task-local tables. |
-| `figures <task_id>` | Generate static PNG/SVG figures. |
+| `figures <task_id>` | Generate static PNG/SVG figures; `--fallback bounded` is opt-in for unsupported explicit chart specs. |
 | `report <task_id>` | Generate a deterministic Markdown report fragment. |
 | `slides <task_id>` | Generate a static editable PPTX draft. |
 
@@ -243,6 +248,7 @@ Host setup is in [docs/mcp-host-config.md](docs/mcp-host-config.md). A repo-scop
 - MCP-facing command execution has conservative workspace and command checks, but it is not operating-system isolation, a container runtime, or a malware scanner.
 - Generated logs and artifacts may contain local paths, command arguments, environment details, metrics, or snippets of output. Review and redact before sharing.
 - Reports and slides are deterministic summaries of recorded artifacts, not autonomous research conclusions.
+- Bounded chart fallback is local and artifact-scoped. It is not a hosted service, remote runner, browser UI, or general multi-agent framework.
 - The current project does not include a browser app, HTTP service, remote runner, cloud sync, animation/video export, or default AI analysis.
 
 ## Install And Development

@@ -17,7 +17,9 @@ from lab_sidecar.core.manifest import load_task
 from lab_sidecar.core.paths import config_path, resolve_workspace_path, sqlite_path, state_dir
 from lab_sidecar.core.models import TaskStatus
 from lab_sidecar.collectors.service import MetricsCollectionService, MetricsConfigLoadError, NoMetricsFoundError
+from lab_sidecar.figures.fallback_worker import FallbackWorkerMode
 from lab_sidecar.figures.service import (
+    FallbackMode,
     FigureGenerationService,
     FigureSpecLoadError,
     MetricsNotReadyError,
@@ -817,12 +819,19 @@ def collect(
 def figures(
     task_id: str = typer.Argument(..., help="Task id to generate figures for."),
     spec: Path | None = typer.Option(None, "--spec", help="Optional figure spec YAML path."),
+    fallback: FallbackMode = typer.Option("off", "--fallback", help="off or bounded."),
+    fallback_worker: FallbackWorkerMode = typer.Option(
+        "unavailable",
+        "--fallback-worker",
+        help="Internal Alpha4 fallback worker mode.",
+        hidden=True,
+    ),
 ) -> None:
     """Generate static PNG/SVG figures from normalized metrics."""
     root = _root()
     service = FigureGenerationService(root)
     try:
-        result = service.generate(task_id, spec_path=spec)
+        result = service.generate(task_id, spec_path=spec, fallback_mode=fallback, fallback_worker_mode=fallback_worker)
     except FileNotFoundError:
         _fail(
             f"Error: task '{task_id}' was not found.\n"
@@ -844,10 +853,37 @@ def figures(
     except NoFiguresGeneratedError as exc:
         messages = [*exc.errors, *exc.warnings]
         warning_text = "\n".join(f"- {message}" for message in messages) or "- no supported chart pattern"
+        diagnostics_text = ""
+        if exc.unsupported_chart_diagnostics:
+            items = []
+            for item in exc.unsupported_chart_diagnostics:
+                intent = item.get("requested_chart_intent") if isinstance(item, dict) else None
+                chart_type = intent.get("chart_type") if isinstance(intent, dict) else None
+                x_field = intent.get("x") if isinstance(intent, dict) else None
+                y_field = intent.get("y") if isinstance(intent, dict) else None
+                reason = item.get("reason") if isinstance(item, dict) else None
+                items.append(
+                    f"- chart_type={chart_type or '(unknown)'} x={x_field or '(unknown)'} y={y_field or '(unknown)'}: {reason or 'unsupported chart intent'}"
+                )
+            diagnostics_text = "\nUnsupported chart diagnostics:\n" + "\n".join(items)
+        fallback_text = ""
+        if exc.fallback:
+            fallback_lines = [f"- mode: {exc.fallback.get('mode')}", f"- status: {exc.fallback.get('status')}"]
+            if exc.fallback.get("request_path"):
+                fallback_lines.append(f"- request: {exc.fallback['request_path']}")
+            if exc.fallback.get("validator_result_path"):
+                fallback_lines.append(f"- validator: {exc.fallback['validator_result_path']}")
+            fallback_text = "\nFallback:\n" + "\n".join(fallback_lines)
+        summary_text = ""
+        if exc.summary_path is not None:
+            summary_text = f"\nSummary: {exc.summary_path.relative_to(root).as_posix()}"
         _fail(
             f"Error: no supported figures could be generated for task '{task_id}'.\n"
             f"Reason: {exc}\n"
-            f"Warnings:\n{warning_text}",
+            f"Warnings:\n{warning_text}"
+            f"{diagnostics_text}"
+            f"{fallback_text}"
+            f"{summary_text}",
             code=5,
         )
 
@@ -857,6 +893,7 @@ def figures(
         typer.echo(f"- {item.svg_path.relative_to(root).as_posix()}")
     typer.echo(f"Spec: {result.spec_path.relative_to(root).as_posix()}")
     typer.echo(f"Summary: {result.summary_path.relative_to(root).as_posix()}")
+    typer.echo(f"Fallback: mode={result.fallback['mode']} status={result.fallback['status']}")
     if result.warnings:
         typer.echo("Warnings:")
         for warning in result.warnings:

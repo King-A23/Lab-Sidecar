@@ -153,6 +153,7 @@ class MetricsCollectionService:
             unit_diagnostics=unit_diagnostics,
             detected_fields=detected_fields,
             row_count=len(rows),
+            rows=rows,
             config_path=config_path,
             config=config,
             outputs=[csv_path, json_path],
@@ -290,6 +291,7 @@ class MetricsCollectionService:
         unit_diagnostics: list[dict[str, str]],
         detected_fields: list[str],
         row_count: int,
+        rows: list[dict[str, object]],
         config_path: Path | None,
         config: MetricsCollectionConfig | None,
         outputs: list[Path],
@@ -332,6 +334,7 @@ class MetricsCollectionService:
             "matched_source_fields": _merge_matched_source_fields(collected_files),
             "row_count": row_count,
             "detected_fields": detected_fields,
+            "bounded_analysis": _bounded_analysis_summary(rows),
             "output_files": [to_manifest_path(path, self.root) for path in outputs] if row_count else [],
         }
 
@@ -386,6 +389,501 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow({field: row.get(field, "") for field in fieldnames})
+
+
+MAX_BOUNDED_BEST_ROWS = 6
+MAX_BOUNDED_SELECTED_FIELDS = 14
+MAX_BOUNDED_ANOMALY_GROUPS = 20
+MAX_BOUNDED_STRING_CHARS = 180
+
+HIGHER_IS_BETTER_METRICS = (
+    "val_accuracy",
+    "test_accuracy",
+    "accuracy",
+    "acc",
+    "macro_f1",
+    "f1_score",
+    "f1",
+    "precision",
+    "recall",
+    "auc",
+    "score",
+)
+LOWER_IS_BETTER_METRICS = (
+    "val_loss",
+    "test_loss",
+    "train_loss",
+    "loss",
+    "error_rate",
+    "runtime_ms",
+    "latency_ms",
+    "duration_ms",
+    "time_ms",
+    "memory_mb",
+    "errors",
+)
+IDENTITY_FIELD_PRIORITY = (
+    "source_file",
+    "variant",
+    "model",
+    "method",
+    "algorithm",
+    "run_id",
+    "config_id",
+    "seed",
+    "dataset",
+    "dataset_slice",
+    "split",
+    "epoch",
+    "step",
+    "checkpoint",
+    "ckpt",
+    "status",
+    "anomaly_code",
+    "artifact_present",
+)
+CONTEXT_FIELD_PRIORITY = (
+    "val_accuracy",
+    "test_accuracy",
+    "accuracy",
+    "val_loss",
+    "test_loss",
+    "train_loss",
+    "macro_f1",
+    "f1",
+    "precision",
+    "recall",
+    "duration_ms",
+    "runtime_ms",
+    "latency_ms",
+    "memory_mb",
+)
+ANOMALY_FIELD_HINTS = (
+    "anomaly",
+    "warning",
+    "warn",
+    "error",
+    "failure",
+    "failed",
+    "incomplete",
+    "unstable",
+    "missing",
+    "status",
+    "artifact_present",
+)
+OK_ANOMALY_VALUES = {
+    "",
+    "0",
+    "0.0",
+    "false",
+    "no",
+    "none",
+    "null",
+    "ok",
+    "clean",
+    "complete",
+    "completed",
+    "success",
+    "succeeded",
+    "passed",
+    "pass",
+}
+FALSE_VALUES = {"false", "0", "0.0", "no", "n", "missing", "none"}
+
+
+def _bounded_analysis_summary(rows: list[dict[str, object]]) -> dict[str, Any]:
+    best_rows = _best_row_summaries(rows)
+    return {
+        "schema_version": "1",
+        "row_count": len(rows),
+        "limits": {
+            "best_rows": MAX_BOUNDED_BEST_ROWS,
+            "selected_fields_per_row": MAX_BOUNDED_SELECTED_FIELDS,
+            "anomaly_groups": MAX_BOUNDED_ANOMALY_GROUPS,
+            "string_chars": MAX_BOUNDED_STRING_CHARS,
+        },
+        "best_rows": best_rows,
+        "checkpoint_summary": _checkpoint_summary(rows, best_rows),
+        "anomaly_summary": _anomaly_summary(rows),
+    }
+
+
+def _best_row_summaries(rows: list[dict[str, object]]) -> list[dict[str, Any]]:
+    if not rows:
+        return []
+    summaries: list[dict[str, Any]] = []
+    for metric, direction in _ordered_candidate_metrics(rows):
+        best = _best_row_for_metric(rows, metric, direction)
+        if best is None:
+            continue
+        row_number, row, value = best
+        summaries.append(
+            {
+                "metric": metric,
+                "direction": direction,
+                "value": _json_number(value),
+                "row_number": row_number,
+                "selected_fields": _selected_fields(row, metric),
+                "omitted_field_count": max(0, len(row) - len(_selected_fields(row, metric))),
+                "evidence": {
+                    "artifact_id": "metrics_normalized_csv",
+                    "path": "metrics/normalized_metrics.csv",
+                    "row_number": row_number,
+                    "body": "omitted",
+                },
+            }
+        )
+        if len(summaries) >= MAX_BOUNDED_BEST_ROWS:
+            break
+    return summaries
+
+
+def _ordered_candidate_metrics(rows: list[dict[str, object]]) -> list[tuple[str, str]]:
+    fields = _fieldnames(rows)
+    numeric_fields = {field for field in fields if _has_numeric_value(rows, field)}
+    candidates: list[tuple[str, str]] = []
+    for metric in HIGHER_IS_BETTER_METRICS:
+        for field in fields:
+            if field in numeric_fields and _normalized_field(field) == metric:
+                _append_metric(candidates, field, "max")
+    for metric in LOWER_IS_BETTER_METRICS:
+        for field in fields:
+            if field in numeric_fields and _normalized_field(field) == metric:
+                _append_metric(candidates, field, "min")
+    for field in fields:
+        if field not in numeric_fields:
+            continue
+        direction = _metric_direction(field)
+        if direction:
+            _append_metric(candidates, field, direction)
+    return candidates
+
+
+def _append_metric(candidates: list[tuple[str, str]], field: str, direction: str) -> None:
+    if not any(existing_field == field for existing_field, _direction in candidates):
+        candidates.append((field, direction))
+
+
+def _metric_direction(field: str) -> str | None:
+    normalized = _normalized_field(field)
+    if normalized in HIGHER_IS_BETTER_METRICS:
+        return "max"
+    if normalized in LOWER_IS_BETTER_METRICS:
+        return "min"
+    for hint in HIGHER_IS_BETTER_METRICS:
+        if hint in normalized:
+            return "max"
+    for hint in LOWER_IS_BETTER_METRICS:
+        if hint in normalized:
+            return "min"
+    return None
+
+
+def _has_numeric_value(rows: list[dict[str, object]], field: str) -> bool:
+    return any(_parse_number(row.get(field)) is not None for row in rows)
+
+
+def _best_row_for_metric(
+    rows: list[dict[str, object]],
+    metric: str,
+    direction: str,
+) -> tuple[int, dict[str, object], float] | None:
+    best: tuple[int, dict[str, object], float] | None = None
+    for index, row in enumerate(rows, start=1):
+        value = _parse_number(row.get(metric))
+        if value is None:
+            continue
+        if best is None:
+            best = (index, row, value)
+            continue
+        best_value = best[2]
+        if direction == "max" and value > best_value:
+            best = (index, row, value)
+        elif direction == "min" and value < best_value:
+            best = (index, row, value)
+    return best
+
+
+def _selected_fields(row: dict[str, object], metric: str) -> dict[str, Any]:
+    selected: dict[str, Any] = {}
+    for field in [*IDENTITY_FIELD_PRIORITY, metric, *CONTEXT_FIELD_PRIORITY]:
+        if field in row and field not in selected and not _is_empty_value(row.get(field)):
+            selected[field] = _bounded_scalar(row[field])
+        if len(selected) >= MAX_BOUNDED_SELECTED_FIELDS:
+            return selected
+    for field, value in row.items():
+        if field in selected or _is_empty_value(value):
+            continue
+        selected[field] = _bounded_scalar(value)
+        if len(selected) >= MAX_BOUNDED_SELECTED_FIELDS:
+            break
+    return selected
+
+
+def _checkpoint_summary(rows: list[dict[str, object]], best_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    checkpoint_fields = [field for field in _fieldnames(rows) if _is_checkpoint_field(field)]
+    if not checkpoint_fields:
+        return {"present": False, "reason": "checkpoint field not found"}
+
+    checkpoint_values: list[tuple[int, str, object, dict[str, object]]] = []
+    for index, row in enumerate(rows, start=1):
+        for field in checkpoint_fields:
+            value = row.get(field)
+            if _is_empty_value(value):
+                continue
+            checkpoint_values.append((index, field, value, row))
+
+    if not checkpoint_values:
+        return {
+            "present": False,
+            "checkpoint_fields": checkpoint_fields,
+            "available_checkpoint_count": 0,
+            "reason": "checkpoint fields were present but empty",
+        }
+
+    selected = _selected_checkpoint(checkpoint_values, best_rows)
+    unique_values = {_string_value(value) for _index, _field, value, _row in checkpoint_values}
+    summary: dict[str, Any] = {
+        "present": True,
+        "checkpoint_fields": checkpoint_fields,
+        "available_checkpoint_count": len(checkpoint_values),
+        "unique_checkpoint_count": len(unique_values),
+        "selected": selected,
+    }
+    if selected:
+        summary["omitted_checkpoint_count"] = max(0, len(unique_values) - 1)
+    return summary
+
+
+def _selected_checkpoint(
+    checkpoint_values: list[tuple[int, str, object, dict[str, object]]],
+    best_rows: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    by_row = {index: (field, value, row) for index, field, value, row in checkpoint_values}
+    for best in best_rows:
+        row_number = best.get("row_number")
+        if not isinstance(row_number, int) or row_number not in by_row:
+            continue
+        field, value, row = by_row[row_number]
+        return {
+            "checkpoint_field": field,
+            "checkpoint": _bounded_scalar(value),
+            "selection_metric": best.get("metric"),
+            "selection_direction": best.get("direction"),
+            "selection_value": best.get("value"),
+            "row_number": row_number,
+            "selected_fields": _selected_fields(row, str(best.get("metric") or "")),
+            "evidence": {
+                "artifact_id": "metrics_normalized_csv",
+                "path": "metrics/normalized_metrics.csv",
+                "row_number": row_number,
+                "body": "omitted",
+            },
+        }
+    index, field, value, row = checkpoint_values[-1]
+    return {
+        "checkpoint_field": field,
+        "checkpoint": _bounded_scalar(value),
+        "selection_metric": None,
+        "selection_direction": "last_nonempty_checkpoint",
+        "selection_value": None,
+        "row_number": index,
+        "selected_fields": _selected_fields(row, field),
+        "evidence": {
+            "artifact_id": "metrics_normalized_csv",
+            "path": "metrics/normalized_metrics.csv",
+            "row_number": index,
+            "body": "omitted",
+        },
+    }
+
+
+def _anomaly_summary(rows: list[dict[str, object]]) -> dict[str, Any]:
+    if not rows:
+        return {
+            "present": False,
+            "anomaly_row_count": 0,
+            "anomaly_group_count": 0,
+            "counts_by_reason": [],
+            "examples": [],
+        }
+
+    groups: dict[tuple[tuple[str, ...], tuple[tuple[str, str], ...]], dict[str, Any]] = {}
+    counts_by_reason: dict[str, int] = {}
+    anomaly_row_count = 0
+    for row_number, row in enumerate(rows, start=1):
+        reasons = _row_anomaly_reasons(row)
+        if not reasons:
+            continue
+        anomaly_row_count += 1
+        for reason in reasons:
+            counts_by_reason[reason] = counts_by_reason.get(reason, 0) + 1
+        identity = _anomaly_identity(row)
+        key = (tuple(reasons), tuple(sorted(identity.items())))
+        group = groups.setdefault(
+            key,
+            {
+                "reasons": reasons,
+                "row_count": 0,
+                "first_row_number": row_number,
+                "last_row_number": row_number,
+                "selected_fields": _anomaly_selected_fields(row),
+                "evidence": {
+                    "artifact_id": "metrics_normalized_csv",
+                    "path": "metrics/normalized_metrics.csv",
+                    "body": "omitted",
+                },
+            },
+        )
+        group["row_count"] += 1
+        group["last_row_number"] = row_number
+
+    ordered_groups = sorted(
+        groups.values(),
+        key=lambda item: (-int(item["row_count"]), int(item["first_row_number"])),
+    )
+    return {
+        "present": bool(anomaly_row_count),
+        "anomaly_row_count": anomaly_row_count,
+        "anomaly_group_count": len(groups),
+        "counts_by_reason": [
+            {"reason": reason, "row_count": count}
+            for reason, count in sorted(counts_by_reason.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "examples": ordered_groups[:MAX_BOUNDED_ANOMALY_GROUPS],
+        "omitted_group_count": max(0, len(ordered_groups) - MAX_BOUNDED_ANOMALY_GROUPS),
+    }
+
+
+def _row_anomaly_reasons(row: dict[str, object]) -> list[str]:
+    reasons: list[str] = []
+    for field, value in row.items():
+        if not _is_anomaly_field(field):
+            continue
+        reason = _anomaly_reason(field, value)
+        if reason and reason not in reasons:
+            reasons.append(reason)
+    return reasons
+
+
+def _is_anomaly_field(field: str) -> bool:
+    normalized = _normalized_field(field)
+    return any(hint in normalized for hint in ANOMALY_FIELD_HINTS)
+
+
+def _anomaly_reason(field: str, value: object) -> str | None:
+    normalized_field = _normalized_field(field)
+    normalized_value = _normalized_value(value)
+    if normalized_field == "artifact_present":
+        if not normalized_value:
+            return None
+        if normalized_value in FALSE_VALUES:
+            return "artifact_present=false"
+        return None
+    if "status" in normalized_field:
+        if normalized_value in OK_ANOMALY_VALUES:
+            return None
+        return f"{field}={_bounded_scalar(value)}"
+    if any(hint in normalized_field for hint in ("warning", "warn", "error", "failure", "failed", "incomplete", "unstable", "missing")):
+        if normalized_value in OK_ANOMALY_VALUES:
+            return None
+        return f"{field}={_bounded_scalar(value)}"
+    if "anomaly" in normalized_field:
+        if normalized_value in OK_ANOMALY_VALUES:
+            return None
+        return f"{field}={_bounded_scalar(value)}"
+    return None
+
+
+def _anomaly_identity(row: dict[str, object]) -> dict[str, str]:
+    identity: dict[str, str] = {}
+    for field in ("source_file", "run_id", "variant", "model", "config_id", "seed", "status", "anomaly_code"):
+        value = row.get(field)
+        if not _is_empty_value(value):
+            identity[field] = str(_bounded_scalar(value))
+    return identity
+
+
+def _anomaly_selected_fields(row: dict[str, object]) -> dict[str, Any]:
+    selected: dict[str, Any] = {}
+    for field in [
+        "source_file",
+        "run_id",
+        "variant",
+        "model",
+        "config_id",
+        "seed",
+        "status",
+        "anomaly_code",
+        "artifact_present",
+        "error_flag",
+        "warning_flag",
+        "incomplete_flag",
+        "unstable_flag",
+        "epoch",
+        "step",
+    ]:
+        if field in row and not _is_empty_value(row.get(field)):
+            selected[field] = _bounded_scalar(row[field])
+    return selected
+
+
+def _is_checkpoint_field(field: str) -> bool:
+    normalized = _normalized_field(field)
+    return "checkpoint" in normalized or "ckpt" in normalized
+
+
+def _parse_number(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _json_number(value: float) -> int | float:
+    if value.is_integer():
+        return int(value)
+    return float(round(value, 12))
+
+
+def _bounded_scalar(value: object) -> object:
+    if isinstance(value, bool | int | float) or value is None:
+        return value
+    text = str(value)
+    if len(text) <= MAX_BOUNDED_STRING_CHARS:
+        return text
+    return text[: MAX_BOUNDED_STRING_CHARS - 3].rstrip() + "..."
+
+
+def _is_empty_value(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    return False
+
+
+def _string_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value)
+
+
+def _normalized_field(field: str) -> str:
+    return field.strip().lower()
+
+
+def _normalized_value(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).strip().lower()
 
 
 def _write_json(path: Path, data: Any) -> None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import pandas as pd
 
@@ -15,6 +15,7 @@ PROCESS_METRIC_PRIORITY = [
     "val_accuracy",
     "test_accuracy",
     "acc",
+    "throughput_rps",
     "loss",
     "train_loss",
     "val_loss",
@@ -31,6 +32,10 @@ BAR_CATEGORY_PRIORITY = [
     "method",
     "algorithm",
     "variant",
+    "class",
+    "label",
+    "category",
+    "dataset",
     "DATA_TIMER",
     "BACKLOG_FACTOR",
     "Stage",
@@ -43,9 +48,11 @@ BAR_METRIC_PRIORITY = [
     "val_accuracy",
     "test_accuracy",
     "acc",
+    "error_rate",
     "f1",
     "f1_score",
     "macro_f1",
+    "throughput_rps",
     "latency",
     "latency_ms",
     "runtime",
@@ -64,7 +71,20 @@ BAR_METRIC_PRIORITY = [
     "BadCrcTotal",
     "WallSeconds",
 ]
-LINE_GROUP_PRIORITY = ["model", "method", "experiment", "source_file"]
+LINE_GROUP_PRIORITY = ["split", "config_id", "service", "model", "method", "experiment", "source_file"]
+TIME_AXIS_PRIORITY = ["timestamp", "time", "date", "datetime"]
+BOX_CATEGORY_PRIORITY = ["method", "model", "algorithm", "variant", "config_id", "dataset", "source_file"]
+BOX_METRIC_PRIORITY = [
+    "accuracy",
+    "final_accuracy",
+    "val_accuracy",
+    "test_accuracy",
+    "acc",
+    "f1",
+    "f1_score",
+    "macro_f1",
+    "score",
+]
 
 METRIC_ALIASES = {
     "accuracy": ["accuracy", "val_accuracy", "test_accuracy", "acc"],
@@ -74,8 +94,11 @@ METRIC_ALIASES = {
     "recall": ["recall", "macro_recall"],
     "runtime": ["runtime", "runtime_ms", "latency", "latency_ms", "time", "time_ms"],
     "latency": ["latency", "latency_ms", "runtime", "runtime_ms", "time", "time_ms"],
+    "throughput": ["throughput", "throughput_rps", "rps", "requests_per_second"],
+    "throughput_rps": ["throughput_rps", "throughput", "rps", "requests_per_second"],
     "memory": ["memory", "memory_mb", "peak_memory_mb"],
     "score": ["score", "Score"],
+    "error_rate": ["error_rate", "error", "errors"],
     "utilization": ["util", "utilization", "AvgUtil", "AUtil", "BUtil"],
     "timeout": ["timeout", "DataTimeoutPerMin", "DataTimeoutTotal", "AckTimeoutTotal"],
     "errors": ["error", "errors", "BadCrcTotal"],
@@ -99,6 +122,7 @@ FRIENDLY_LABELS = {
     "macro_recall": "Macro Recall",
     "latency": "Latency",
     "latency_ms": "Latency (ms)",
+    "throughput_rps": "Throughput (rps)",
     "runtime": "Runtime",
     "runtime_ms": "Runtime (ms)",
     "time": "Time",
@@ -114,6 +138,7 @@ FRIENDLY_LABELS = {
     "DataTimeoutTotal": "Data Timeouts",
     "AckTimeoutTotal": "ACK Timeouts",
     "BadCrcTotal": "Bad CRC Count",
+    "error_rate": "Error Rate",
     "DurationSec": "Duration (s)",
     "WallSeconds": "Wall Time (s)",
     "DATA_TIMER": "DATA_TIMER",
@@ -122,6 +147,14 @@ FRIENDLY_LABELS = {
     "Scenario": "Scenario",
     "epoch": "Epoch",
     "step": "Step",
+    "timestamp": "Timestamp",
+    "time": "Time",
+    "date": "Date",
+    "datetime": "Datetime",
+    "split": "Split",
+    "config_id": "Config",
+    "service": "Service",
+    "class": "Class",
     "model": "Model",
     "method": "Method",
     "algorithm": "Algorithm",
@@ -132,6 +165,10 @@ FRIENDLY_LABELS = {
 MAX_AUTO_LINE_CHARTS = 2
 MAX_COMPARISON_LINES = 8
 MAX_BAR_CATEGORIES = 12
+MAX_BAR_GROUPS = 8
+MAX_BOX_CATEGORIES = 12
+
+SUPPORTED_CHART_TYPES = {"line", "bar", "box"}
 
 
 class FigureSpecValidationError(ValueError):
@@ -147,7 +184,7 @@ class FigureOutput:
 @dataclass
 class FigureSpec:
     figure_id: str
-    chart_type: Literal["line", "bar"]
+    chart_type: str
     title: str
     x: str
     y: str
@@ -168,6 +205,7 @@ class FigurePlan:
     warnings: list[str] = field(default_factory=list)
     skipped_candidates: list[dict[str, str]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    unsupported_chart_diagnostics: list[dict[str, Any]] = field(default_factory=list)
 
 
 def build_auto_figure_plan(
@@ -186,7 +224,12 @@ def build_auto_figure_plan(
         specs = _build_line_specs(df, x_column, warnings, skipped, units or {}, groups or {})
         return FigurePlan(specs=specs, warnings=warnings, skipped_candidates=skipped)
 
-    specs = _build_bar_specs(df, warnings, skipped, units or {})
+    if _seed_distribution_candidate(df):
+        specs = _build_box_specs(df, warnings, skipped, units or {})
+        if specs:
+            return FigurePlan(specs=specs, warnings=warnings, skipped_candidates=skipped)
+
+    specs = _build_bar_specs(df, warnings, skipped, units or {}, groups or {})
     return FigurePlan(specs=specs, warnings=warnings, skipped_candidates=skipped)
 
 
@@ -197,6 +240,37 @@ def build_explicit_figure_plan(
 ) -> FigurePlan:
     errors: list[str] = []
     skipped: list[dict[str, str]] = []
+    unsupported_chart_diagnostics: list[dict[str, Any]] = []
+
+    if spec.chart_type not in SUPPORTED_CHART_TYPES:
+        reason = (
+            f"Requested chart_type '{spec.chart_type}' is unsupported by deterministic figures; "
+            f"supported types are {', '.join(sorted(SUPPORTED_CHART_TYPES))}."
+        )
+        errors.append(reason)
+        skipped.append(
+            _skip(
+                spec.figure_id,
+                reason,
+                chart_type=spec.chart_type,
+                x=spec.x,
+                y=spec.y,
+                group_by=spec.group_by,
+            )
+        )
+        unsupported_chart_diagnostics.append(
+            _unsupported_chart_diagnostic(
+                spec,
+                available_fields=list(df.columns),
+                reason=reason,
+            )
+        )
+        return FigurePlan(
+            specs=[],
+            skipped_candidates=skipped,
+            errors=errors,
+            unsupported_chart_diagnostics=unsupported_chart_diagnostics,
+        )
 
     missing = [field for field in _required_metric_fields(spec) if field not in df.columns]
     if missing:
@@ -212,7 +286,7 @@ def build_explicit_figure_plan(
         return FigurePlan(specs=[], skipped_candidates=skipped, errors=errors)
 
     spec.units = _spec_units(spec, units or {})
-    return FigurePlan(specs=[spec])
+    return FigurePlan(specs=[spec], unsupported_chart_diagnostics=unsupported_chart_diagnostics)
 
 
 def parse_explicit_spec(data: Any, task_path: Path) -> FigureSpec:
@@ -232,18 +306,16 @@ def parse_explicit_spec(data: Any, task_path: Path) -> FigureSpec:
     group_by = data.get("group_by")
     if group_by is not None and not isinstance(group_by, str):
         raise FigureSpecValidationError("field 'group_by' must be a string when provided")
-    if chart_type not in {"line", "bar"}:
-        raise FigureSpecValidationError("field 'chart_type' must be 'line' or 'bar'")
 
     output = _parse_output(data.get("output"), figure_id, task_path)
     return FigureSpec(
         figure_id=figure_id,
-        chart_type=chart_type,  # type: ignore[arg-type]
+        chart_type=chart_type,
         title=title,
         x=x,
         y=y,
         group_by=group_by,
-        aggregation="mean" if chart_type == "bar" else None,
+        aggregation="mean" if chart_type == "bar" else ("distribution" if chart_type == "box" else None),
         output=output,
     )
 
@@ -295,7 +367,7 @@ def _build_line_specs(
             skipped.append(_skip(figure_id, reason, chart_type="line", x=x_column, y=y_column, group_by=group_by))
             continue
 
-        valid_rows = _valid_numeric_rows(df, [x_column, y_column])
+        valid_rows = _valid_line_rows(df, x_column, y_column)
         if len(valid_rows) < 2:
             reason = f"Skipped '{y_column}' because fewer than 2 numeric points are available."
             warnings.append(reason)
@@ -325,6 +397,7 @@ def _build_bar_specs(
     warnings: list[str],
     skipped: list[dict[str, str]],
     units: dict[str, str],
+    groups: dict[str, str],
 ) -> list[FigureSpec]:
     category = _first_existing_column(df, BAR_CATEGORY_PRIORITY)
     if not category:
@@ -358,6 +431,18 @@ def _build_bar_specs(
         skipped.append(_skip("auto_bar", reason, chart_type="bar", x=category, y=metric))
         return []
 
+    group_by = _bar_group_column(df, groups, category)
+    if group_by:
+        group_count = int(df[group_by].nunique(dropna=False))
+        if group_count > MAX_BAR_GROUPS:
+            reason = (
+                f"Refused grouped bar chart because group '{group_by}' has {group_count} values; "
+                f"limit is {MAX_BAR_GROUPS}."
+            )
+            warnings.append(reason)
+            skipped.append(_skip("auto_bar", reason, chart_type="bar", x=category, y=metric, group_by=group_by))
+            return []
+
     figure_id = f"bar_{_slug(metric)}_by_{_slug(category)}"
     return [
         FigureSpec(
@@ -366,7 +451,63 @@ def _build_bar_specs(
             title=f"Mean {friendly_label(metric)} by {friendly_label(category)}",
             x=category,
             y=metric,
+            group_by=group_by,
             aggregation="mean",
+            units=_field_units([category, metric, group_by], units),
+            output=FigureOutput(
+                png=f"figures/{figure_id}.png",
+                svg=f"figures/{figure_id}.svg",
+            ),
+        )
+    ]
+
+
+def _build_box_specs(
+    df: pd.DataFrame,
+    warnings: list[str],
+    skipped: list[dict[str, str]],
+    units: dict[str, str],
+) -> list[FigureSpec]:
+    category = _first_existing_column(df, BOX_CATEGORY_PRIORITY)
+    if not category:
+        reason = "No supported category column was found for a box chart."
+        warnings.append(reason)
+        skipped.append(_skip("auto_box", reason, chart_type="box"))
+        return []
+
+    category_count = int(df[category].nunique(dropna=False))
+    if category_count > MAX_BOX_CATEGORIES:
+        reason = (
+            f"Refused box chart because category '{category}' has {category_count} values; "
+            f"limit is {MAX_BOX_CATEGORIES}."
+        )
+        warnings.append(reason)
+        skipped.append(_skip("auto_box", reason, chart_type="box", x=category))
+        return []
+
+    metric = _select_priority_column(BOX_METRIC_PRIORITY, _numeric_columns(df))
+    if not metric:
+        reason = "No supported numeric metric column was found for a box chart."
+        warnings.append(reason)
+        skipped.append(_skip("auto_box", reason, chart_type="box", x=category))
+        return []
+
+    valid_rows = _valid_numeric_rows(df, [metric])
+    if len(valid_rows) < 2:
+        reason = f"Skipped box chart because fewer than 2 numeric values are available for '{metric}'."
+        warnings.append(reason)
+        skipped.append(_skip("auto_box", reason, chart_type="box", x=category, y=metric))
+        return []
+
+    figure_id = f"box_{_slug(metric)}_by_{_slug(category)}"
+    return [
+        FigureSpec(
+            figure_id=figure_id,
+            chart_type="box",
+            title=f"{friendly_label(metric)} distribution by {friendly_label(category)}",
+            x=category,
+            y=metric,
+            aggregation="distribution",
             units=_field_units([category, metric], units),
             output=FigureOutput(
                 png=f"figures/{figure_id}.png",
@@ -381,8 +522,8 @@ def _quality_refusal_reason(df: pd.DataFrame, spec: FigureSpec) -> str | None:
         return f"Refused {spec.figure_id} because y field '{spec.y}' is not numeric."
 
     if spec.chart_type == "line":
-        if not _column_is_numeric(df[spec.x]):
-            return f"Refused {spec.figure_id} because x field '{spec.x}' is not numeric."
+        if not _column_is_numeric(df[spec.x]) and not _column_is_datetime(df[spec.x]):
+            return f"Refused {spec.figure_id} because x field '{spec.x}' is not numeric or datetime-like."
         if spec.group_by:
             group_count = int(df[spec.group_by].nunique(dropna=False))
             if group_count > MAX_COMPARISON_LINES:
@@ -390,9 +531,20 @@ def _quality_refusal_reason(df: pd.DataFrame, spec: FigureSpec) -> str | None:
                     f"Refused {spec.figure_id} because group '{spec.group_by}' has {group_count} values; "
                     f"limit is {MAX_COMPARISON_LINES}."
                 )
-        valid_rows = _valid_numeric_rows(df, [spec.x, spec.y])
+        valid_rows = _valid_line_rows(df, spec.x, spec.y)
         if len(valid_rows) < 2:
             return f"Refused {spec.figure_id} because fewer than 2 numeric points are available."
+        return None
+
+    if spec.chart_type == "box":
+        category_count = int(df[spec.x].nunique(dropna=False))
+        if category_count > MAX_BOX_CATEGORIES:
+            return (
+                f"Refused {spec.figure_id} because category '{spec.x}' has {category_count} values; "
+                f"limit is {MAX_BOX_CATEGORIES}."
+            )
+        if len(_valid_numeric_rows(df, [spec.y])) < 2:
+            return f"Refused {spec.figure_id} because fewer than 2 numeric values are available."
         return None
 
     category_count = int(df[spec.x].nunique(dropna=False))
@@ -403,6 +555,13 @@ def _quality_refusal_reason(df: pd.DataFrame, spec: FigureSpec) -> str | None:
         )
     if _valid_numeric_rows(df, [spec.y]).empty:
         return f"Refused {spec.figure_id} because y field '{spec.y}' has no numeric values."
+    if spec.group_by:
+        group_count = int(df[spec.group_by].nunique(dropna=False))
+        if group_count > MAX_BAR_GROUPS:
+            return (
+                f"Refused {spec.figure_id} because group '{spec.group_by}' has {group_count} values; "
+                f"limit is {MAX_BAR_GROUPS}."
+            )
     return None
 
 
@@ -471,6 +630,9 @@ def _process_axis(df: pd.DataFrame) -> str | None:
     for column in ["epoch", "step"]:
         if column in df.columns and _column_is_numeric(df[column]):
             return column
+    for column in TIME_AXIS_PRIORITY:
+        if column in df.columns and _column_is_datetime(df[column]):
+            return column
     return None
 
 
@@ -482,9 +644,22 @@ def _column_is_numeric(series: pd.Series) -> bool:
     return pd.to_numeric(series, errors="coerce").notna().any()
 
 
+def _column_is_datetime(series: pd.Series) -> bool:
+    return pd.to_datetime(series, errors="coerce").notna().any()
+
+
 def _valid_numeric_rows(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     converted = pd.DataFrame({column: pd.to_numeric(df[column], errors="coerce") for column in columns})
     return df.loc[converted.notna().all(axis=1)]
+
+
+def _valid_line_rows(df: pd.DataFrame, x: str, y: str) -> pd.DataFrame:
+    y_values = pd.to_numeric(df[y], errors="coerce")
+    if _column_is_numeric(df[x]):
+        x_values = pd.to_numeric(df[x], errors="coerce")
+    else:
+        x_values = pd.to_datetime(df[x], errors="coerce")
+    return df.loc[x_values.notna() & y_values.notna()]
 
 
 def _first_existing_column(df: pd.DataFrame, priority: list[str]) -> str | None:
@@ -503,6 +678,24 @@ def _configured_group_column(df: pd.DataFrame, groups: dict[str, str]) -> str | 
         if column in df.columns:
             return column
     return None
+
+
+def _bar_group_column(df: pd.DataFrame, groups: dict[str, str], category: str) -> str | None:
+    for key in ["secondary", "group_by"]:
+        column = groups.get(key)
+        if column in df.columns and column != category:
+            return column
+    for key in ["primary"]:
+        column = groups.get(key)
+        if column in df.columns and column != category:
+            return column
+    return None
+
+
+def _seed_distribution_candidate(df: pd.DataFrame) -> bool:
+    if "seed" not in df.columns:
+        return False
+    return int(df["seed"].nunique(dropna=True)) >= 2
 
 
 def _field_units(fields: list[str | None], units: dict[str, str]) -> dict[str, str]:
@@ -564,3 +757,27 @@ def _skip(
     if group_by:
         data["group_by"] = group_by
     return data
+
+
+def _unsupported_chart_diagnostic(
+    spec: FigureSpec,
+    available_fields: list[str],
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "figure_id": spec.figure_id,
+        "requested_chart_intent": {
+            "figure_id": spec.figure_id,
+            "chart_type": spec.chart_type,
+            "title": spec.title,
+            "x": spec.x,
+            "y": spec.y,
+            "group_by": spec.group_by,
+        },
+        "available_fields": [str(field) for field in available_fields],
+        "reason": reason,
+        "safe_next_action": (
+            "Rewrite the figure spec as line, bar, or box, or rerun with "
+            "`--fallback bounded` to record a bounded figure request."
+        ),
+    }

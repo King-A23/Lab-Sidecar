@@ -156,3 +156,16 @@ Common cases:
 - No CSV/JSON candidates were found.
 - CSV/JSON candidates existed, but files were empty, malformed, or did not contain recognized metric columns.
 - The command wrote output outside the workspace or in a nested directory that `collect` does not scan.
+
+If `figures` reports an unsupported chart type, deterministic figures may still
+be working as intended. Lab-Sidecar supports deterministic `line`, `bar`, and
+`box` charts first. To record a bounded fallback request for an explicit
+unsupported chart spec, run:
+
+```bash
+python -m lab_sidecar.cli.app figures "$TASK_ID" --spec figure.yaml --fallback bounded
+```
+
+Fallback is default-off. See
+`docs/alpha4-bounded-chart-fallback-operator-guide.md` for status meanings
+(`not_needed`, `unavailable`, `rejected`, `adopted`) and troubleshooting.

@@ -77,7 +77,7 @@ class FigureItem:
     source_metrics: str
 
     def full_caption(self, unknown: str) -> str:
-        chart_type = self.chart_type if self.chart_type in {"line", "bar", "table", "unknown"} else "unknown"
+        chart_type = self.chart_type if self.chart_type in {"line", "bar", "box", "table", "unknown"} else "unknown"
         parts = [
             self.figure_id or unknown,
             f"type={chart_type}",
@@ -143,19 +143,34 @@ class TextTracker:
     def __init__(self) -> None:
         self.truncations: list[dict[str, Any]] = []
 
-    def fit(self, key: str, value: Any, limit: int) -> DisplayText:
+    def fit(
+        self,
+        key: str,
+        value: Any,
+        limit: int,
+        *,
+        include_full: bool = True,
+        full_omitted_reason: str | None = None,
+        omitted_line_count: int | None = None,
+    ) -> DisplayText:
         full = _normalize_inline_text(value)
         if len(full) <= limit:
             return DisplayText(display=full, full=full, truncated=False)
         display = full[: limit - 3].rstrip() + "..."
-        self.truncations.append(
-            {
-                "key": key,
-                "display": display,
-                "full": full,
-                "limit": limit,
-            }
-        )
+        truncation = {
+            "key": key,
+            "display": display,
+            "limit": limit,
+            "truncated": True,
+        }
+        if include_full:
+            truncation["full"] = full
+        else:
+            truncation["full_omitted_reason"] = full_omitted_reason or "full text omitted from slides summary"
+            truncation["omitted_char_count"] = len(full)
+            if omitted_line_count is not None:
+                truncation["omitted_line_count"] = omitted_line_count
+        self.truncations.append(truncation)
         return DisplayText(display=display, full=full, truncated=True)
 
 
@@ -543,7 +558,7 @@ class SlidesGenerationService:
                 path = _resolve_task_or_workspace_path(path_text, self.root, task_path)
                 if path.exists() and path.suffix.lower() == ".png":
                     chart_type = str(raw_item.get("chart_type") or "unknown")
-                    if chart_type not in {"line", "bar", "table"}:
+                    if chart_type not in {"line", "bar", "box", "table"}:
                         chart_type = "unknown"
                     items.append(
                         FigureItem(
@@ -1728,14 +1743,24 @@ def _empty_source_reason(sources: list[str], purpose: str) -> str | None:
 def _bounded_log_tail(path: Path, key: str, text_tracker: TextTracker) -> list[str]:
     if not path.exists():
         return []
-    all_lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    full_text = path.read_text(encoding="utf-8", errors="replace")
+    all_lines = full_text.splitlines()
     lines = all_lines[-MAX_LOG_LINES:]
     bounded: list[str] = []
     used = 0
     line_count_truncated = len(all_lines) > MAX_LOG_LINES
     char_count_truncated = False
+    stream_name = key.removesuffix("_tail")
+    omitted_reason = f"full {stream_name} log body omitted from slides summary"
     for index, line in enumerate(lines):
-        display = text_tracker.fit(f"{key}[{index}]", line, 150)
+        display = text_tracker.fit(
+            f"{key}[{index}]",
+            line,
+            150,
+            include_full=False,
+            full_omitted_reason=f"full {stream_name} log line omitted from slides summary",
+            omitted_line_count=1,
+        )
         text = display.display
         if used + len(text) > MAX_LOG_CHARS:
             bounded.append("... truncated ...")
@@ -1750,9 +1775,12 @@ def _bounded_log_tail(path: Path, key: str, text_tracker: TextTracker) -> list[s
             {
                 "key": key,
                 "display": "\n".join(bounded),
-                "full": "\n".join(all_lines),
                 "limit": MAX_LOG_CHARS,
                 "max_lines": MAX_LOG_LINES,
+                "truncated": True,
+                "full_omitted_reason": omitted_reason,
+                "omitted_char_count": len(full_text),
+                "omitted_line_count": len(all_lines),
             }
         )
     return bounded
