@@ -140,6 +140,12 @@ artifact_count=21
 ## Known Limits
 
 - Scenario summary is descriptive only.
+- Schema version `1` has explicit hard caps for best rows, last rows, seed
+  aggregates, source files, field lists, units, selected fields, and string
+  scalar length.
+- `selected_fields` is an allowlisted scalar preview and does not copy
+  arbitrary free-text cell contents such as notes, prompts, error messages, or
+  private comments.
 - No TensorBoard, JSONL, or log collector expansion in this slice.
 - No statistical significance or autonomous scientific conclusions.
 

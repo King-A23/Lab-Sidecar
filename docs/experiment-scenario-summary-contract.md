@@ -26,7 +26,34 @@ Required top-level fields:
 - `omitted`: explicit omitted-content contract.
 - `warnings`.
 
+Stable values:
+
+- `scenario_type`: `training-run` or `algorithm-benchmark`.
+- `primary_metric.direction`: `max`, `min`, or `null` when no primary metric
+  is detected.
+
+Advisory values:
+
+- `primary_metric.selection_reason` and row-level `selection_reason` explain
+  deterministic name-hint selection. They are human-readable hints, not stable
+  enums for downstream branching.
+- `groups.configured` records user configuration metadata. It is not evidence
+  that a grouping is scientifically valid.
+
 ## Boundedness Rules
+
+Hard limits for schema version `1`:
+
+- `best_rows`: at most 4.
+- `last_rows`: at most 6.
+- `seed_aggregates.items`: at most 12.
+- row `selected_fields`: at most 12 scalar fields.
+- `evidence.source_files`: at most 20.
+- `evidence.metrics.columns`: at most 40, with `omitted_column_count`.
+- each source file's `detected_fields` and `mapped_fields`: at most 40 each,
+  with omitted counts.
+- `units`: at most 40 entries, with `omitted_unit_count`.
+- string scalar values: at most 160 characters.
 
 The summary must not include:
 
@@ -41,11 +68,18 @@ The summary must not include:
 Row evidence must use `metrics/normalized_metrics.csv`, row numbers, selected
 bounded scalar fields, and `body: omitted`.
 
+`selected_fields` is an allowlisted scalar preview of identity, checkpoint,
+status, anomaly, primary metric, and known metric fields. It must not fall back
+to arbitrary row columns. Free-text columns such as `notes`, `prompt`,
+`message`, `error_message`, and `private_comment` may appear as column names in
+bounded metadata, but their cell contents must not be copied into
+`selected_fields`.
+
 ## Interpretation Rules
 
 `seed_aggregates` are descriptive aggregates only. They do not prove statistical
-significance, research correctness, model superiority, or scientific claims.
+significance, research correctness, model superiority, causal effects,
+deployment readiness, or scientific claims.
 
 Report and slide templates may cite scenario type, primary metric, best rows,
 last rows, and aggregate summaries only as recorded artifact evidence.
-

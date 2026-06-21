@@ -72,6 +72,59 @@ def test_host_smoke_delegate_inspect_preview_and_cancel(tmp_path: Path) -> None:
     assert "ready" not in json.dumps(cancelled)
 
 
+def test_v2_compact_scenario_does_not_leak_free_text_selected_fields(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    source = tmp_path / "results" / "metrics.csv"
+    source.parent.mkdir(parents=True)
+    secret_note = "SECRET-NOTE-FOR-V2-COMPACT-RESPONSE-" + "x" * 240
+    secret_prompt = "SECRET-PROMPT-FOR-V2-COMPACT-RESPONSE-" + "y" * 240
+    with source.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(
+            fh,
+            fieldnames=["variant", "epoch", "accuracy", "notes", "prompt", "error_message", "private_comment"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "variant": "baseline",
+                "epoch": 1,
+                "accuracy": 0.70,
+                "notes": secret_note,
+                "prompt": secret_prompt,
+                "error_message": "SECRET-ERROR-FOR-V2-COMPACT-RESPONSE",
+                "private_comment": "SECRET-PRIVATE-COMMENT-FOR-V2-COMPACT-RESPONSE",
+            }
+        )
+        writer.writerow(
+            {
+                "variant": "candidate",
+                "epoch": 2,
+                "accuracy": 0.91,
+                "notes": secret_note,
+                "prompt": secret_prompt,
+                "error_message": "SECRET-ERROR-FOR-V2-COMPACT-RESPONSE",
+                "private_comment": "SECRET-PRIVATE-COMMENT-FOR-V2-COMPACT-RESPONSE",
+            }
+        )
+
+    delegated = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="Generate metrics with free-text columns.",
+        result_path=source,
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+    inspected = inspect_sidecar_task(tmp_path, delegated["task_id"])
+    serialized = json.dumps({"delegated": delegated, "inspected": inspected}, ensure_ascii=False)
+
+    assert delegated["summary"]["outputs"]["scenario"]["present"] is True
+    assert delegated["summary"]["outputs"]["scenario"]["best_rows"][0]["selected_fields"]["variant"] == "candidate"
+    assert "SECRET-NOTE-FOR-V2-COMPACT-RESPONSE" not in serialized
+    assert "SECRET-PROMPT-FOR-V2-COMPACT-RESPONSE" not in serialized
+    assert "SECRET-ERROR-FOR-V2-COMPACT-RESPONSE" not in serialized
+    assert "SECRET-PRIVATE-COMMENT-FOR-V2-COMPACT-RESPONSE" not in serialized
+
+
 def test_cancel_completed_and_missing_tasks_return_bounded_not_applicable(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     init_workspace(tmp_path)

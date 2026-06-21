@@ -17,6 +17,9 @@ MAX_LAST_ROWS = 6
 MAX_SEED_AGGREGATES = 12
 MAX_SELECTED_FIELDS = 12
 MAX_SOURCE_FILES = 20
+MAX_COLUMNS = 40
+MAX_SOURCE_FIELDS = 40
+MAX_UNITS = 40
 MAX_STRING_CHARS = 160
 
 HIGHER_IS_BETTER = (
@@ -71,6 +74,14 @@ IDENTITY_FIELDS = (
     "iteration",
     "timestamp",
 )
+SELECTED_FIELD_PRIORITY = (
+    *IDENTITY_FIELDS,
+    "checkpoint",
+    "ckpt",
+    "status",
+    "anomaly_code",
+    "artifact_present",
+)
 
 
 def build_scenario_summary(
@@ -97,7 +108,8 @@ def build_scenario_summary(
         "scenario_type": scenario_type,
         "primary_metric": primary_metric,
         "groups": groups,
-        "units": dict(units or {}),
+        "units": _bounded_mapping(units or {}, MAX_UNITS),
+        "omitted_unit_count": max(0, len(units or {}) - MAX_UNITS),
         "best_rows": best_rows,
         "last_rows": last_rows,
         "seed_aggregates": seed_aggregates,
@@ -155,7 +167,7 @@ def _primary_metric(rows: list[dict[str, object]], units: dict[str, str]) -> dic
     return {
         "name": name,
         "direction": direction,
-        "unit": units.get(name),
+        "unit": _bounded_scalar(units.get(name)),
         "selection_reason": reason,
     }
 
@@ -175,6 +187,7 @@ def _best_rows(rows: list[dict[str, object]], primary_metric: dict[str, Any]) ->
         if selected is None:
             continue
         row_number, row, value = selected
+        selected_fields = _selected_fields(row, metric)
         best.append(
             {
                 "metric": metric,
@@ -182,8 +195,8 @@ def _best_rows(rows: list[dict[str, object]], primary_metric: dict[str, Any]) ->
                 "selection_reason": reason,
                 "value": _json_number(value),
                 "row_number": row_number,
-                "selected_fields": _selected_fields(row, metric),
-                "omitted_field_count": max(0, len(row) - len(_selected_fields(row, metric))),
+                "selected_fields": selected_fields,
+                "omitted_field_count": max(0, len(row) - len(selected_fields)),
                 "evidence": _row_evidence(row_number),
             }
         )
@@ -382,11 +395,13 @@ def _evidence(collection_summary: dict[str, Any], fields: list[str], row_count: 
             continue
         processed_files.append(
             {
-                "source_file": item.get("source_file"),
-                "file_type": item.get("file_type"),
+                "source_file": _bounded_scalar(item.get("source_file")),
+                "file_type": _bounded_scalar(item.get("file_type")),
                 "row_count": item.get("row_count"),
-                "detected_fields": item.get("detected_fields") or [],
-                "mapped_fields": item.get("mapped_fields") or [],
+                "detected_fields": _bounded_list(item.get("detected_fields") or [], MAX_SOURCE_FIELDS),
+                "omitted_detected_field_count": _omitted_count(item.get("detected_fields") or [], MAX_SOURCE_FIELDS),
+                "mapped_fields": _bounded_list(item.get("mapped_fields") or [], MAX_SOURCE_FIELDS),
+                "omitted_mapped_field_count": _omitted_count(item.get("mapped_fields") or [], MAX_SOURCE_FIELDS),
             }
         )
         if len(processed_files) >= MAX_SOURCE_FILES:
@@ -396,7 +411,8 @@ def _evidence(collection_summary: dict[str, Any], fields: list[str], row_count: 
             "artifact_id": "metrics_normalized_csv",
             "path": NORMALIZED_METRICS_RELATIVE_PATH,
             "row_count": row_count,
-            "columns": fields,
+            "columns": _bounded_list(fields, MAX_COLUMNS),
+            "omitted_column_count": max(0, len(fields) - MAX_COLUMNS),
             "body": "omitted",
         },
         "collection_summary": {
@@ -458,17 +474,11 @@ def _is_later_checkpoint(
 
 def _selected_fields(row: dict[str, object], metric: str) -> dict[str, Any]:
     selected: dict[str, Any] = {}
-    for field in [*IDENTITY_FIELDS, metric, *HIGHER_IS_BETTER, *LOWER_IS_BETTER]:
+    for field in [*SELECTED_FIELD_PRIORITY, metric, *HIGHER_IS_BETTER, *LOWER_IS_BETTER]:
         if field in row and field not in selected and not _is_empty_value(row.get(field)):
             selected[field] = _bounded_scalar(row[field])
         if len(selected) >= MAX_SELECTED_FIELDS:
             return selected
-    for field, value in row.items():
-        if field in selected or _is_empty_value(value):
-            continue
-        selected[field] = _bounded_scalar(value)
-        if len(selected) >= MAX_SELECTED_FIELDS:
-            break
     return selected
 
 
@@ -516,6 +526,26 @@ def _bounded_scalar(value: object) -> object:
     if len(text) <= MAX_STRING_CHARS:
         return text
     return text[: MAX_STRING_CHARS - 3].rstrip() + "..."
+
+
+def _bounded_list(values: object, limit: int) -> list[object]:
+    if not isinstance(values, list):
+        return []
+    bounded: list[object] = []
+    for value in values[:limit]:
+        bounded.append(_bounded_scalar(value))
+    return bounded
+
+
+def _bounded_mapping(values: dict[str, str], limit: int) -> dict[str, object]:
+    return {
+        str(key)[:MAX_STRING_CHARS]: _bounded_scalar(value)
+        for key, value in list(values.items())[:limit]
+    }
+
+
+def _omitted_count(values: object, limit: int) -> int:
+    return max(0, len(values) - limit) if isinstance(values, list) else 0
 
 
 def _is_empty_value(value: object) -> bool:
