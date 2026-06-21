@@ -62,6 +62,10 @@ def test_host_smoke_delegate_inspect_preview_and_cancel(tmp_path: Path) -> None:
 
     assert delegated["status"] == "completed"
     assert inspected["status"] == "completed"
+    assert delegated["summary"]["outputs"]["scenario"]["present"] is True
+    assert delegated["summary"]["outputs"]["scenario"]["scenario_type"] == "training-run"
+    assert delegated["summary"]["outputs"]["scenario"]["primary_metric"]["name"] == "val_accuracy"
+    assert inspected["summary"]["outputs"]["scenario"]["present"] is True
     assert csv_preview["preview_type"] == "csv_rows"
     assert csv_preview["preview"]["row_count_returned"] == 2
     assert cancelled["status"] == "cancelled"

@@ -2,23 +2,23 @@
 
 ## 1. 项目定位
 
-**Lab-Sidecar** 是一个面向计算机相关专业学生、科研新手和个人开发者的本地实验辅助工具。
+**Lab-Sidecar** 是一个面向实验场景的本地 AI agent sidecar。
 
-它的目标不是做一个泛泛的 AI 聊天助手，也不是重新发明一个多 Agent 框架，而是专注解决学生和个人研究者在课程实验、科研复现、数据分析报告和演示准备中反复遇到的实际问题：
+它的主要调用者是正在本地 workspace 中工作的主 AI agent；人类用户是实验目标、取舍和最终验收的决策者，通常是计算机相关专业学生、科研新手和个人开发者。它的目标不是做一个泛泛的 AI 聊天助手，也不是重新发明一个多 Agent 框架，而是专注解决本地实验委派、artifact 隔离、场景级摘要和可复现交付中反复遇到的实际问题：
 
 - 长实验运行时需要持续看日志、记录参数、处理失败。
 - 实验结束后需要从 CSV、JSON、log、TensorBoard 等结果中提取指标。
 - 报告和论文需要规范、清晰、可复现的图表。
 - PPT 展示需要快速整理图表、结论和简易流程动画。
-- 主 AI 对话或主工作流不应该被海量日志、报错重试和中间文件污染。
+- 主 AI 对话或主工作流不应该被海量日志、报错重试、完整指标表和中间文件污染。
 
 一句话定位：
 
-> A local-first research and lab assistant for running long experiments, extracting metrics, generating figures, and producing reproducible report artifacts.
+> A local-first AI agent sidecar for experiment scenarios, producing bounded scenario summaries and reproducible artifacts from local runs or result files.
 
 中文定位：
 
-> 一个本地优先的实验与科研辅助工具，把长实验、日志分析、指标抽取、自动图表和报告素材生成放到后台执行，最后返回干净、可复现、可直接用于报告和演示的产物。
+> 一个本地优先的实验场景 AI agent sidecar，把长实验、结果导入、指标抽取、场景摘要、自动图表和报告素材生成放到隔离的 artifact 工作流中，最后只向主上下文返回 bounded summary 和可追溯产物路径。
 
 项目优先级：
 

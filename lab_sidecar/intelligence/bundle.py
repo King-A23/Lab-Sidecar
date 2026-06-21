@@ -112,6 +112,7 @@ def _build_data_previews(root: Path, task_path: Path, preview_rows: int) -> list
     previews: list[dict[str, Any]] = []
     candidates = [
         task_path / "metrics" / "collection-summary.json",
+        task_path / "metrics" / "scenario-summary.json",
         task_path / "metrics" / "normalized_metrics.csv",
         task_path / "metrics" / "normalized_metrics.json",
     ]
@@ -133,6 +134,7 @@ def _build_candidate_previews(root: Path, record: TaskRecord, preview_rows: int)
     task_path = resolve_workspace_path(record.paths.task_dir, root)
     existing_paths = {
         task_path / "metrics" / "collection-summary.json",
+        task_path / "metrics" / "scenario-summary.json",
         task_path / "metrics" / "normalized_metrics.csv",
         task_path / "metrics" / "normalized_metrics.json",
     }

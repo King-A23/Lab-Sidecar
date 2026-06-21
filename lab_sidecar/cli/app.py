@@ -56,6 +56,7 @@ class LogStream(StrEnum):
 
 METRICS_RELATIVE_PATH = Path("metrics") / "normalized_metrics.csv"
 COLLECTION_SUMMARY_RELATIVE_PATH = Path("metrics") / "collection-summary.json"
+SCENARIO_SUMMARY_RELATIVE_PATH = Path("metrics") / "scenario-summary.json"
 FIGURE_SUMMARY_RELATIVE_PATH = Path("figures") / "figure-summary.json"
 REPORT_RELATIVE_PATH = Path("reports") / "report-fragment.md"
 SLIDES_RELATIVE_PATH = Path("slides") / "presentation-draft.pptx"
@@ -129,6 +130,7 @@ def _artifact_presence(record, root: Path) -> list[tuple[str, str, bool]]:
     task_path = _task_path(record, root)
     items = [
         ("metrics", METRICS_RELATIVE_PATH.as_posix()),
+        ("scenario", SCENARIO_SUMMARY_RELATIVE_PATH.as_posix()),
         ("figures", FIGURE_SUMMARY_RELATIVE_PATH.as_posix()),
         ("report", REPORT_RELATIVE_PATH.as_posix()),
         ("slides", SLIDES_RELATIVE_PATH.as_posix()),
@@ -237,11 +239,16 @@ def _print_artifact_summary(record, root: Path) -> None:
 def _metrics_summary(record, root: Path) -> dict[str, Any]:
     task_path = _task_path(record, root)
     collection_summary_path = task_path / COLLECTION_SUMMARY_RELATIVE_PATH
+    scenario_summary_path = task_path / SCENARIO_SUMMARY_RELATIVE_PATH
     metrics_path = task_path / METRICS_RELATIVE_PATH
     data = _json_file(collection_summary_path)
+    scenario = _json_file(scenario_summary_path)
     return {
         "summary_path": COLLECTION_SUMMARY_RELATIVE_PATH.as_posix(),
         "summary_exists": collection_summary_path.exists(),
+        "scenario_summary_path": SCENARIO_SUMMARY_RELATIVE_PATH.as_posix(),
+        "scenario_summary_exists": scenario_summary_path.exists(),
+        "scenario": scenario,
         "metrics_path": METRICS_RELATIVE_PATH.as_posix(),
         "metrics_exists": metrics_path.exists(),
         "row_count": data.get("row_count"),
@@ -542,6 +549,19 @@ def summarize(task_id: str) -> None:
     else:
         typer.echo("- collection summary: (not generated)")
         typer.echo("- normalized table: (not generated)")
+    typer.echo("Scenario:")
+    if metrics["scenario_summary_exists"]:
+        scenario = metrics["scenario"]
+        primary_metric = scenario.get("primary_metric") if isinstance(scenario.get("primary_metric"), dict) else {}
+        best_rows = scenario.get("best_rows") if isinstance(scenario.get("best_rows"), list) else []
+        seed_aggregates = scenario.get("seed_aggregates") if isinstance(scenario.get("seed_aggregates"), dict) else {}
+        typer.echo(f"- type: {scenario.get('scenario_type') or '(unknown)'}")
+        typer.echo(f"- primary metric: {primary_metric.get('name') or '(none)'} ({primary_metric.get('direction') or 'unknown'})")
+        typer.echo(f"- best rows: {len(best_rows)}")
+        typer.echo(f"- seed aggregates: {'present' if seed_aggregates.get('present') else 'not available'}")
+        typer.echo(f"- summary: {metrics['scenario_summary_path']}")
+    else:
+        typer.echo("- scenario summary: (not generated)")
 
     typer.echo("Figures:")
     if figures_summary["exists"]:
@@ -809,6 +829,8 @@ def collect(
     typer.echo(f"Wrote: {result.csv_path.relative_to(root).as_posix()}")
     typer.echo(f"Wrote: {result.json_path.relative_to(root).as_posix()}")
     typer.echo(f"Summary: {result.summary_path.relative_to(root).as_posix()}")
+    if result.scenario_summary_path is not None:
+        typer.echo(f"Scenario summary: {result.scenario_summary_path.relative_to(root).as_posix()}")
     _echo_next(
         f"labsidecar figures {result.record.task_id}",
         f"labsidecar report {result.record.task_id}",

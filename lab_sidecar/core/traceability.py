@@ -61,6 +61,7 @@ def build_traceability_index(
     artifacts: list[ArtifactRecord],
 ) -> dict[str, Any]:
     collection_summary = _read_json(task_path / "metrics" / "collection-summary.json")
+    scenario_summary = _read_json(task_path / "metrics" / "scenario-summary.json")
     figure_summary = _read_json(task_path / "figures" / "figure-summary.json")
     report_summary = _read_json(task_path / "reports" / "report-summary.json")
     slides_summary = _read_json(task_path / "slides" / "slides-summary.json")
@@ -94,7 +95,7 @@ def build_traceability_index(
         },
         "sources": sources,
         "artifacts": trace_artifacts,
-        "metric_lineage": _metric_lineage(task_path, collection_summary),
+        "metric_lineage": _metric_lineage(task_path, collection_summary, scenario_summary),
         "figure_lineage": _figure_lineage(task_path, figure_summary),
         "report_lineage": _report_lineage(report_summary),
         "slide_lineage": _slide_lineage(slides_summary),
@@ -248,7 +249,7 @@ def _source_ref_item(item: dict[str, Any], role: str) -> dict[str, Any]:
     return source
 
 
-def _metric_lineage(task_path: Path, collection_summary: dict[str, Any]) -> dict[str, Any]:
+def _metric_lineage(task_path: Path, collection_summary: dict[str, Any], scenario_summary: dict[str, Any]) -> dict[str, Any]:
     metrics_path = task_path / "metrics" / "normalized_metrics.csv"
     columns, row_count = _csv_header_and_count(metrics_path)
     processed = collection_summary.get("processed_files") if isinstance(collection_summary.get("processed_files"), list) else []
@@ -265,12 +266,27 @@ def _metric_lineage(task_path: Path, collection_summary: dict[str, Any]) -> dict
         "collection_summary_path": "metrics/collection-summary.json"
         if (task_path / "metrics" / "collection-summary.json").exists()
         else None,
+        "scenario_summary_path": "metrics/scenario-summary.json"
+        if (task_path / "metrics" / "scenario-summary.json").exists()
+        else None,
+        "scenario_type": scenario_summary.get("scenario_type") if scenario_summary else None,
+        "primary_metric": scenario_summary.get("primary_metric") if scenario_summary else None,
+        "scenario_claim_limit": _scenario_claim_limit(scenario_summary),
         "row_count": row_count if row_count is not None else collection_summary.get("row_count", 0),
         "columns": columns,
         "detected_fields": collection_summary.get("detected_fields") or [],
         "source_files": source_files,
         "output_files": output_files if isinstance(output_files, list) else [],
     }
+
+
+def _scenario_claim_limit(scenario_summary: dict[str, Any]) -> str | None:
+    if not scenario_summary:
+        return None
+    seed_aggregates = scenario_summary.get("seed_aggregates")
+    if isinstance(seed_aggregates, dict) and isinstance(seed_aggregates.get("claim_limit"), str):
+        return seed_aggregates["claim_limit"]
+    return "descriptive scenario summary only; no statistical significance is inferred"
 
 
 def _figure_lineage(task_path: Path, figure_summary: dict[str, Any]) -> dict[str, Any]:
@@ -554,6 +570,7 @@ def _traceability_source_paths(task_path: Path) -> list[str]:
         "raw/source_refs.json",
         "metrics/normalized_metrics.csv",
         "metrics/collection-summary.json",
+        "metrics/scenario-summary.json",
         "figures/figure-spec.yaml",
         "figures/figure-summary.json",
         "reports/report-summary.json",

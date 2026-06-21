@@ -54,6 +54,7 @@ PACKAGE_FILE_SPECS = [
     PackageFileSpec(Path("metrics/normalized_metrics.csv"), "metrics", "Normalized metrics table."),
     PackageFileSpec(Path("metrics/normalized_metrics.json"), "metrics", "Normalized metrics JSON."),
     PackageFileSpec(Path("metrics/collection-summary.json"), "metrics", "Metrics collection summary."),
+    PackageFileSpec(Path("metrics/scenario-summary.json"), "metrics", "Bounded experiment scenario summary."),
     PackageFileSpec(Path("figures/figure-spec.yaml"), "figures", "Figure rendering specification."),
     PackageFileSpec(Path("figures/figure-summary.json"), "figures", "Figure generation summary."),
     PackageFileSpec(Path("reports/report-fragment.md"), "reports", "Generated report fragment."),

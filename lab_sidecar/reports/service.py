@@ -103,6 +103,7 @@ class ReportGenerationService:
         metrics_path: Path,
     ) -> dict[str, Any]:
         collection_summary_path = task_path / "metrics" / "collection-summary.json"
+        scenario_summary_path = task_path / "metrics" / "scenario-summary.json"
         figure_summary_path = task_path / "figures" / "figure-summary.json"
         stderr_path = resolve_workspace_path(record.paths.stderr, self.root)
         reproduce_command_path = task_path / "reproduce" / "command.txt"
@@ -110,7 +111,7 @@ class ReportGenerationService:
         stderr_tail = _tail_lines(stderr_path, STDERR_TAIL_LINES)
         source_artifacts = self._source_artifacts(task_path)
         provenance = self._build_provenance(record)
-        metrics = self._build_metrics_summary(metrics_path, collection_summary_path)
+        metrics = self._build_metrics_summary(metrics_path, collection_summary_path, scenario_summary_path)
         figures = self._build_figure_summary(record.task_id, figure_summary_path, task_path, reports_dir)
         failure = {
             "failure_summary": record.failure_summary or UNKNOWN,
@@ -165,12 +166,20 @@ class ReportGenerationService:
             "exit_code": record.exit_code if record.exit_code is not None else UNKNOWN,
         }
 
-    def _build_metrics_summary(self, metrics_path: Path, collection_summary_path: Path) -> dict[str, Any]:
+    def _build_metrics_summary(
+        self,
+        metrics_path: Path,
+        collection_summary_path: Path,
+        scenario_summary_path: Path,
+    ) -> dict[str, Any]:
+        scenario = _read_json(scenario_summary_path) if scenario_summary_path.exists() else {}
         if not metrics_path.exists():
             return {
                 "present": False,
                 "path": "metrics/normalized_metrics.csv",
                 "collection_summary_path": "metrics/collection-summary.json" if collection_summary_path.exists() else None,
+                "scenario_summary_path": "metrics/scenario-summary.json" if scenario_summary_path.exists() else None,
+                "scenario": _report_scenario_summary(scenario),
                 "row_count": 0,
                 "columns": [],
                 "displayed_columns": [],
@@ -188,6 +197,8 @@ class ReportGenerationService:
             "present": True,
             "path": "metrics/normalized_metrics.csv",
             "collection_summary_path": "metrics/collection-summary.json" if collection_summary_path.exists() else None,
+            "scenario_summary_path": "metrics/scenario-summary.json" if scenario_summary_path.exists() else None,
+            "scenario": _report_scenario_summary(scenario),
             "row_count": int(len(df)),
             "columns": columns,
             "displayed_columns": columns[:MAX_DISPLAY_COLUMNS],
@@ -254,6 +265,7 @@ class ReportGenerationService:
             task_path / "manifest.json",
             task_path / "metrics" / "normalized_metrics.csv",
             task_path / "metrics" / "collection-summary.json",
+            task_path / "metrics" / "scenario-summary.json",
             task_path / "figures" / "figure-summary.json",
             task_path / "stderr.log",
             task_path / "stdout.log",
@@ -391,6 +403,26 @@ def _build_report_claim_traces(
                         ],
                     }
                 )
+        scenario = metrics.get("scenario") if isinstance(metrics.get("scenario"), dict) else {}
+        if scenario.get("present"):
+            traces.append(
+                {
+                    "claim_id": "report.metrics.scenario_summary",
+                    "surface": "report",
+                    "claim_type": "scenario_summary",
+                    "value": {
+                        "scenario_type": scenario.get("scenario_type"),
+                        "primary_metric": scenario.get("primary_metric"),
+                    },
+                    "evidence": [
+                        {
+                            "artifact_id": "metrics_scenario_summary",
+                            "path": metrics.get("scenario_summary_path") or "metrics/scenario-summary.json",
+                            "body": "omitted",
+                        }
+                    ],
+                }
+            )
     else:
         traces.append(
             {
@@ -469,6 +501,30 @@ def _json_float(value: Any) -> float | None:
     if pd.isna(value):
         return None
     return float(value)
+
+
+def _report_scenario_summary(scenario: dict[str, Any]) -> dict[str, Any]:
+    if not scenario:
+        return {"present": False}
+    seed_aggregates = scenario.get("seed_aggregates") if isinstance(scenario.get("seed_aggregates"), dict) else {}
+    return {
+        "present": True,
+        "path": "metrics/scenario-summary.json",
+        "scenario_type": scenario.get("scenario_type"),
+        "primary_metric": scenario.get("primary_metric") if isinstance(scenario.get("primary_metric"), dict) else {},
+        "groups": scenario.get("groups") if isinstance(scenario.get("groups"), dict) else {},
+        "best_rows": (scenario.get("best_rows") or [])[:3],
+        "last_rows": (scenario.get("last_rows") or [])[:3],
+        "seed_aggregates": {
+            "present": seed_aggregates.get("present", False),
+            "metric": seed_aggregates.get("metric"),
+            "direction": seed_aggregates.get("direction"),
+            "items": (seed_aggregates.get("items") or [])[:3],
+            "claim_limit": seed_aggregates.get("claim_limit"),
+        },
+        "warnings": (scenario.get("warnings") or [])[:5],
+        "omitted": scenario.get("omitted") if isinstance(scenario.get("omitted"), dict) else {},
+    }
 
 
 def _read_json(path: Path) -> dict[str, Any]:

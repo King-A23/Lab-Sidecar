@@ -17,6 +17,10 @@ from lab_sidecar.collectors.config import (
 from lab_sidecar.collectors.csv_collector import collect_csv, read_csv_rows
 from lab_sidecar.collectors.json_collector import collect_json, read_json_rows
 from lab_sidecar.collectors.scan import SUPPORTED_SUFFIXES, CandidateFile, scan_metric_candidates
+from lab_sidecar.collectors.scenario_summary import (
+    SCENARIO_SUMMARY_RELATIVE_PATH,
+    build_scenario_summary,
+)
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
@@ -44,6 +48,7 @@ class CollectResult:
     csv_path: Path
     json_path: Path
     summary_path: Path
+    scenario_summary_path: Path | None = None
 
 
 @dataclass
@@ -70,6 +75,7 @@ class MetricsCollectionService:
         csv_path = metrics_dir / "normalized_metrics.csv"
         json_path = metrics_dir / "normalized_metrics.json"
         summary_path = metrics_dir / "collection-summary.json"
+        scenario_summary_path = metrics_dir / "scenario-summary.json"
 
         config = self._load_config(config_path) if config_path else None
         auto_candidates = scan_metric_candidates(self.root, record)
@@ -175,8 +181,16 @@ class MetricsCollectionService:
 
         _write_csv(csv_path, rows)
         _write_json(json_path, rows)
+        scenario_summary = build_scenario_summary(
+            record=record,
+            rows=rows,
+            collection_summary=summary,
+            units=dict(config.units) if config else {},
+            configured_groups=dict(config.groups) if config else {},
+        )
+        _write_json(scenario_summary_path, scenario_summary)
 
-        self._upsert_metrics_artifacts(record, csv_path, json_path, summary_path, collected_files)
+        self._upsert_metrics_artifacts(record, csv_path, json_path, summary_path, scenario_summary_path, collected_files)
         record.updated_at = _now_iso()
         record = refresh_traceability(self.root, record)
         write_manifest(manifest_path(self.root, task_id), record)
@@ -190,6 +204,7 @@ class MetricsCollectionService:
             csv_path=csv_path,
             json_path=json_path,
             summary_path=summary_path,
+            scenario_summary_path=scenario_summary_path,
         )
 
     def _load_config(self, config_path: Path) -> MetricsCollectionConfig:
@@ -356,6 +371,7 @@ class MetricsCollectionService:
         csv_path: Path,
         json_path: Path,
         summary_path: Path,
+        scenario_summary_path: Path,
         collected_files: list[_CollectedFile],
     ) -> None:
         source_paths = [item.source_file for item in collected_files]
@@ -380,6 +396,16 @@ class MetricsCollectionService:
             ),
         )
         self._upsert_summary_artifact(record, summary_path)
+        _upsert_artifact(
+            record,
+            ArtifactRecord(
+                artifact_id="metrics_scenario_summary",
+                type="config",
+                path=SCENARIO_SUMMARY_RELATIVE_PATH,
+                description="Bounded experiment scenario summary",
+                source_paths=[to_manifest_path(csv_path, self.root), to_manifest_path(summary_path, self.root)],
+            ),
+        )
 
 
 def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:

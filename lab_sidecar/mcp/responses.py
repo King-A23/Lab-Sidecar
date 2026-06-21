@@ -107,6 +107,7 @@ def read_json_if_exists(path: Path) -> dict[str, Any]:
 def compact_task_outputs(root: Path, record: TaskRecord) -> dict[str, Any]:
     task_path = resolve_workspace_path(record.paths.task_dir, root)
     collection = read_json_if_exists(task_path / "metrics" / "collection-summary.json")
+    scenario = read_json_if_exists(task_path / "metrics" / "scenario-summary.json")
     figures = read_json_if_exists(task_path / "figures" / "figure-summary.json")
     report = read_json_if_exists(task_path / "reports" / "report-summary.json")
     slides = read_json_if_exists(task_path / "slides" / "slides-summary.json")
@@ -118,7 +119,9 @@ def compact_task_outputs(root: Path, record: TaskRecord) -> dict[str, Any]:
             "detected_fields": collection.get("detected_fields", []),
             "candidate_count": collection.get("candidate_count", 0),
             "processed_files": collection.get("processed_files", [])[:MAX_WARNINGS],
+            "scenario_summary_path": "metrics/scenario-summary.json" if scenario else None,
         },
+        "scenario": _compact_scenario_summary(scenario),
         "figures": {
             "present": bool(figures),
             "figure_count": figures.get("figure_count", 0),
@@ -136,6 +139,34 @@ def compact_task_outputs(root: Path, record: TaskRecord) -> dict[str, Any]:
             "slide_count": slides.get("slide_count"),
             "qa_checks": _compact_qa(slides.get("qa_checks", {})),
         },
+    }
+
+
+def _compact_scenario_summary(scenario: dict[str, Any]) -> dict[str, Any]:
+    if not scenario:
+        return {"present": False}
+    primary_metric = scenario.get("primary_metric") if isinstance(scenario.get("primary_metric"), dict) else {}
+    seed_aggregates = scenario.get("seed_aggregates") if isinstance(scenario.get("seed_aggregates"), dict) else {}
+    return {
+        "present": True,
+        "path": "metrics/scenario-summary.json",
+        "scenario_type": scenario.get("scenario_type"),
+        "primary_metric": primary_metric,
+        "groups": scenario.get("groups") if isinstance(scenario.get("groups"), dict) else {},
+        "best_rows": (scenario.get("best_rows") or [])[:3],
+        "last_rows": (scenario.get("last_rows") or [])[:3],
+        "seed_aggregates": {
+            "present": seed_aggregates.get("present", False),
+            "metric": seed_aggregates.get("metric"),
+            "direction": seed_aggregates.get("direction"),
+            "group_by": seed_aggregates.get("group_by") or [],
+            "seed_field": seed_aggregates.get("seed_field"),
+            "items": (seed_aggregates.get("items") or [])[:3],
+            "omitted_group_count": seed_aggregates.get("omitted_group_count", 0),
+            "claim_limit": seed_aggregates.get("claim_limit"),
+        },
+        "warnings": (scenario.get("warnings") or [])[:MAX_WARNINGS],
+        "omitted": scenario.get("omitted") if isinstance(scenario.get("omitted"), dict) else {},
     }
 
 

@@ -4,9 +4,9 @@ Date: 2026-06-05
 
 ## 1. Purpose
 
-Lab-Sidecar V2 is a Codex-plugin-first intelligent sidecar for agent runtime use.
+Lab-Sidecar V2 is a Codex-plugin-first intelligent sidecar for local experiment scenario use.
 
-The primary user is not a human manually operating every CLI step. The primary caller is a main Codex agent that is already working on a user task and needs to delegate noisy, long-running, artifact-heavy work without polluting its own context.
+The primary user is not a human manually operating every CLI step. The primary caller is a main Codex agent that is already working on a user task and needs to delegate noisy, long-running, artifact-heavy experiment work without polluting its own context. The human remains the experiment owner and final decision maker.
 
 V2 extends the V1 local-first artifact pipeline with an isolated intelligent worker:
 
@@ -17,7 +17,7 @@ Codex main agent
   -> intelligent worker plans and probes
   -> deterministic validator
   -> V1 core services generate official artifacts
-  -> minimal context returns to Codex
+  -> bounded scenario summary and minimal context return to Codex
 ```
 
 The product remains a local experiment sidecar and artifact delegation layer. V2 must not become a generic multi-agent orchestration system.
@@ -40,6 +40,11 @@ The intelligent worker becomes the main planning path for non-trivial artifact g
 - report and slide structure planning from existing artifacts
 
 The worker does not directly produce trusted final outputs. Official metrics, figures, reports, and slides are still written by Lab-Sidecar core services after deterministic validation.
+
+The default result channel includes `metrics/scenario-summary.json` when
+metrics are collected. This file is a bounded experiment-scenario contract for
+training and benchmark-style tasks; it is descriptive only and does not infer
+statistical significance or scientific conclusions.
 
 ## 3. Design Principles
 

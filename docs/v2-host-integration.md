@@ -1,10 +1,11 @@
 # V2 Host Integration
 
 Lab-Sidecar V2 host integration is local-first and Codex-plugin-like first.
-It is aimed at AI-agent and research workflows that need bounded artifact
-delegation. The host contract is a small set of Python-callable tools that a
-Codex agent can delegate to while keeping large task details in
-`.lab-sidecar/tasks/`.
+It is aimed at AI agents that need to delegate local experiment scenarios while
+keeping logs, full metric rows, worker audit files, and generated artifact
+bodies out of the main context. The host contract is a small set of
+Python-callable tools that a Codex agent can delegate to while keeping large
+task details in `.lab-sidecar/tasks/`.
 
 This document covers host setup, smoke checks, common failures, safety
 boundaries, and the thin MCP mirror for the V2 host tools.
@@ -39,6 +40,7 @@ library API for reading arbitrary files. Default responses should stay small:
 - `task_id`
 - `status`
 - bounded `summary`
+- bounded `summary.outputs.scenario` when `metrics/scenario-summary.json` exists
 - artifact metadata and paths
 - `next_actions`
 - `risk_flags`
@@ -55,7 +57,7 @@ Canonical response shape:
   "schema_version": "2.1",
   "task_id": "task_...",
   "status": "completed",
-  "summary": {"headline": "...", "task": {}, "outputs": {}},
+  "summary": {"headline": "...", "task": {}, "outputs": {"scenario": {"present": true}}},
   "artifacts": [{"artifact_id": "metrics_normalized_csv", "path": "metrics/normalized_metrics.csv"}],
   "warnings": [],
   "next_actions": ["inspect_sidecar_task task_..."],
@@ -68,6 +70,12 @@ Canonical response shape:
   }
 }
 ```
+
+`summary.outputs.scenario` is descriptive. It may include the scenario type,
+primary metric, bounded best/last row references, seed aggregates, evidence
+paths, and omission notes. It must not include complete metric rows, full logs,
+report bodies, PPTX contents, worker prompts/responses, or statistical
+significance claims.
 
 ## Stage 4 Preview Contract
 

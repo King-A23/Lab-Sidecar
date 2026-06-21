@@ -221,6 +221,7 @@ class SlidesGenerationService:
     def _build_context(self, record: TaskRecord, task_path: Path, template: str) -> dict[str, Any]:
         text_tracker = TextTracker()
         metrics_path = task_path / "metrics" / "normalized_metrics.csv"
+        scenario_summary_path = task_path / "metrics" / "scenario-summary.json"
         report_path = task_path / "reports" / "report-fragment.md"
         figure_summary_path = task_path / "figures" / "figure-summary.json"
         source_refs_path = task_path / "raw" / "source_refs.json"
@@ -228,7 +229,7 @@ class SlidesGenerationService:
         stderr_path = resolve_workspace_path(record.paths.stderr, self.root)
         figure_items, figure_warnings, figure_metadata = self._find_png_figures(record, task_path, figure_summary_path)
         is_diagnostic = record.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}
-        metrics_summary = self._metrics_summary(metrics_path)
+        metrics_summary = self._metrics_summary(metrics_path, scenario_summary_path)
         unknown = UNKNOWN_ZH if template.startswith("zh") else UNKNOWN_EN
         metrics_table = self._metrics_table_preview(metrics_path, unknown)
         key_comparison = self._key_comparison(metrics_path, unknown)
@@ -241,6 +242,7 @@ class SlidesGenerationService:
         source_artifacts = self._source_artifacts(
             task_path=task_path,
             metrics_path=metrics_path,
+            scenario_summary_path=scenario_summary_path,
             report_path=report_path,
             figure_summary_path=figure_summary_path,
             source_refs_path=source_refs_path,
@@ -304,10 +306,13 @@ class SlidesGenerationService:
         }
         return {"display": display, "full": raw}
 
-    def _metrics_summary(self, metrics_path: Path) -> dict[str, Any]:
+    def _metrics_summary(self, metrics_path: Path, scenario_summary_path: Path) -> dict[str, Any]:
+        scenario = _slides_scenario_summary(_read_json(scenario_summary_path) if scenario_summary_path.exists() else {})
         base = {
             "present": False,
             "path": "metrics/normalized_metrics.csv",
+            "scenario_summary_path": "metrics/scenario-summary.json" if scenario_summary_path.exists() else None,
+            "scenario": scenario,
             "row_count": 0,
             "columns": [],
             "key_columns": [],
@@ -343,6 +348,8 @@ class SlidesGenerationService:
         return {
             "present": True,
             "path": "metrics/normalized_metrics.csv",
+            "scenario_summary_path": "metrics/scenario-summary.json" if scenario_summary_path.exists() else None,
+            "scenario": scenario,
             "row_count": int(len(df)),
             "columns": columns,
             "key_columns": columns[:MAX_KEY_COLUMNS],
@@ -596,6 +603,7 @@ class SlidesGenerationService:
         self,
         task_path: Path,
         metrics_path: Path,
+        scenario_summary_path: Path,
         report_path: Path,
         figure_summary_path: Path,
         source_refs_path: Path,
@@ -608,6 +616,7 @@ class SlidesGenerationService:
             task_path / "manifest.json",
             metrics_path,
             task_path / "metrics" / "collection-summary.json",
+            scenario_summary_path,
             figure_summary_path,
             report_path,
             source_refs_path,
@@ -636,6 +645,8 @@ class SlidesGenerationService:
         included_metrics = {
             "present": context["metrics_summary"]["present"],
             "path": context["metrics_summary"]["path"],
+            "scenario_summary_path": context["metrics_summary"].get("scenario_summary_path"),
+            "scenario": context["metrics_summary"].get("scenario", {"present": False}),
             "row_count": context["metrics_summary"]["row_count"],
             "key_columns": context["metrics_summary"]["key_columns"],
             "numeric": context["metrics_summary"]["numeric"],
@@ -929,6 +940,17 @@ class _PresentationBuilder:
         if metrics["omitted_key_column_count"]:
             key_columns += f", ... (+{metrics['omitted_key_column_count']})"
         self._caption(slide, f"key columns: {key_columns}", Inches(0.75), Inches(2.62), Inches(11.7))
+        scenario = metrics.get("scenario") or {}
+        if scenario.get("present"):
+            primary_metric = scenario.get("primary_metric") or {}
+            self._caption(
+                slide,
+                f"scenario: {scenario.get('scenario_type') or self.unknown}; primary_metric={primary_metric.get('name') or self.unknown}; no significance inferred",
+                Inches(0.75),
+                Inches(2.84),
+                Inches(11.7),
+                height=Inches(0.32),
+            )
 
         numeric = metrics.get("numeric") or []
         if not numeric:
@@ -1466,6 +1488,30 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _slides_scenario_summary(scenario: dict[str, Any]) -> dict[str, Any]:
+    if not scenario:
+        return {"present": False}
+    seed_aggregates = scenario.get("seed_aggregates") if isinstance(scenario.get("seed_aggregates"), dict) else {}
+    return {
+        "present": True,
+        "path": "metrics/scenario-summary.json",
+        "scenario_type": scenario.get("scenario_type"),
+        "primary_metric": scenario.get("primary_metric") if isinstance(scenario.get("primary_metric"), dict) else {},
+        "groups": scenario.get("groups") if isinstance(scenario.get("groups"), dict) else {},
+        "best_rows": (scenario.get("best_rows") or [])[:3],
+        "last_rows": (scenario.get("last_rows") or [])[:3],
+        "seed_aggregates": {
+            "present": seed_aggregates.get("present", False),
+            "metric": seed_aggregates.get("metric"),
+            "direction": seed_aggregates.get("direction"),
+            "items": (seed_aggregates.get("items") or [])[:3],
+            "claim_limit": seed_aggregates.get("claim_limit"),
+        },
+        "warnings": (scenario.get("warnings") or [])[:5],
+        "omitted": scenario.get("omitted") if isinstance(scenario.get("omitted"), dict) else {},
+    }
+
+
 def _evidence_for_slide(purpose: str, sources: list[str], context: dict[str, Any]) -> list[dict[str, Any]]:
     clean_sources = [source for source in sources if source]
     evidence: list[dict[str, Any]] = []
@@ -1579,6 +1625,26 @@ def _build_slide_claim_traces(context: dict[str, Any]) -> list[dict[str, Any]]:
                         ],
                     }
                 )
+        scenario = metrics.get("scenario") if isinstance(metrics.get("scenario"), dict) else {}
+        if scenario.get("present"):
+            traces.append(
+                {
+                    "claim_id": "slides.metrics.scenario_summary",
+                    "surface": "slides",
+                    "claim_type": "scenario_summary",
+                    "value": {
+                        "scenario_type": scenario.get("scenario_type"),
+                        "primary_metric": scenario.get("primary_metric"),
+                    },
+                    "evidence": [
+                        {
+                            "artifact_id": "metrics_scenario_summary",
+                            "path": metrics.get("scenario_summary_path") or "metrics/scenario-summary.json",
+                            "body": "omitted",
+                        }
+                    ],
+                }
+            )
     else:
         traces.append(
             {

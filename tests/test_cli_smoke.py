@@ -664,6 +664,10 @@ def test_summarize_before_and_after_artifacts_stays_bounded(tmp_path: Path) -> N
     assert "epoch,train_loss,val_loss" not in before.output
 
     assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    scenario_summary = json.loads((tmp_path / ".lab-sidecar" / "tasks" / task_id / "metrics" / "scenario-summary.json").read_text(encoding="utf-8"))
+    assert scenario_summary["scenario_type"] == "training-run"
+    assert scenario_summary["primary_metric"]["name"] == "val_accuracy"
+    assert scenario_summary["omitted"]["full_metric_rows"] == "omitted_by_default"
     assert invoke(tmp_path, ["figures", task_id]).exit_code == 0
     assert invoke(tmp_path, ["report", task_id]).exit_code == 0
     assert invoke(tmp_path, ["slides", task_id]).exit_code == 0
@@ -671,6 +675,10 @@ def test_summarize_before_and_after_artifacts_stays_bounded(tmp_path: Path) -> N
     after = invoke(tmp_path, ["summarize", task_id])
     assert after.exit_code == 0
     assert "rows: 5" in after.output
+    assert "Scenario:" in after.output
+    assert "type: training-run" in after.output
+    assert "primary metric: val_accuracy" in after.output
+    assert "metrics/scenario-summary.json" in after.output
     assert "metrics/normalized_metrics.csv" in after.output
     assert "figures/figure-summary.json" in after.output
     assert "reports/report-fragment.md" in after.output
@@ -732,6 +740,7 @@ def test_package_completed_task_exports_allowlisted_artifacts_only(tmp_path: Pat
         "metrics/normalized_metrics.csv",
         "metrics/normalized_metrics.json",
         "metrics/collection-summary.json",
+        "metrics/scenario-summary.json",
         "figures/figure-spec.yaml",
         "figures/figure-summary.json",
         "reports/report-fragment.md",
@@ -930,6 +939,54 @@ def test_compare_two_completed_tasks_with_shared_metrics(tmp_path: Path) -> None
     assert "metrics/normalized_metrics.csv" in result.output
     assert "a,0.82,0.42" not in result.output
     assert "b,0.86,0.37" not in result.output
+
+
+def test_algorithm_benchmark_scenario_summary_from_ingest_config(tmp_path: Path) -> None:
+    copy_examples(tmp_path)
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    config_path = tmp_path / "algorithm-benchmark.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - examples/algorithm-benchmark/results.json",
+                "fields:",
+                "  algorithm: algorithm",
+                "  seed: seed",
+                "  input_size: input_size",
+                "  runtime_ms:",
+                "    source: runtime_ms",
+                "    unit: ms",
+                "  memory_mb:",
+                "    source: memory_mb",
+                "    unit: MB",
+                "groups:",
+                "  primary: algorithm",
+                "  secondary: seed",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "examples/algorithm-benchmark"]).output)
+
+    collect_result = invoke(tmp_path, ["collect", task_id, "--config", config_path.as_posix()])
+    assert collect_result.exit_code == 0
+    assert "Scenario summary:" in collect_result.output
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    scenario = json.loads((task_path / "metrics" / "scenario-summary.json").read_text(encoding="utf-8"))
+
+    assert scenario["scenario_type"] == "algorithm-benchmark"
+    assert scenario["primary_metric"]["name"] == "runtime_ms"
+    assert scenario["primary_metric"]["direction"] == "min"
+    assert scenario["groups"]["primary"] == "algorithm"
+    assert scenario["groups"]["seed"] == "seed"
+    assert scenario["seed_aggregates"]["present"] is True
+    assert scenario["seed_aggregates"]["items"][0]["group"]["algorithm"] == "quick_sort"
+    assert scenario["seed_aggregates"]["claim_limit"] == "descriptive aggregate only; no statistical significance is inferred"
+    serialized = json.dumps(scenario, ensure_ascii=False)
+    assert "full_metric_rows" in serialized
+    assert '"runs"' not in serialized
 
 
 def test_compare_missing_metrics_no_common_numeric_and_too_many_tasks(tmp_path: Path) -> None:
