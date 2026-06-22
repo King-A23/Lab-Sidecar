@@ -149,3 +149,44 @@ Additional release limits after Stage 5:
 
 Post-Stage 5 judgment: ready for a cautious local-first alpha release cut once
 the maintainer chooses a tag and publish path.
+
+## Experiment Scenario Sidecar V1 Release Notes
+
+Date: 2026-06-22
+
+Lab-Sidecar now positions the main caller as a local AI agent that delegates
+experiment-result handling while the human remains the experiment owner and
+final decision maker. The CLI path stays unchanged:
+`run/ingest -> collect -> figures -> report -> slides`.
+
+`collect` writes a bounded `metrics/scenario-summary.json` for the canonical
+`training-run` and `algorithm-benchmark` scenarios. The summary records
+scenario type, primary metric, groups, bounded best/last row evidence,
+descriptive seed aggregates when a seed field exists, source evidence, explicit
+omissions, and warnings. It does not embed full logs, full metric rows, report
+bodies, PPTX contents, worker prompts/responses, or artifact bytes.
+
+Reports, slides, CLI `summarize`, package export, traceability, and bounded
+host/delegate responses can refer to the scenario summary. Seed aggregates are
+descriptive only; Lab-Sidecar does not infer statistical significance,
+scientific conclusions, deployment readiness, or autonomous model superiority.
+
+Pre-release canonical smoke validation ran in disposable workspace
+`/private/tmp/lab-sidecar-v1-canonical-smoke-8J83RJ`:
+
+- `training-run`: task `task_20260622_094912_b6dd4d`, generated
+  `metrics/scenario-summary.json`, figures, report, slides, and traceability.
+- `algorithm-benchmark`: task `task_20260622_095301_233f4f`, generated
+  `metrics/scenario-summary.json` with `runtime_ms` as the minimizing primary
+  metric and descriptive seed aggregates, plus figures, report, slides, and
+  traceability.
+
+Focused validation passed:
+
+- `.venv/bin/python -m pytest tests/test_scenario_summary.py -q`: 8 passed.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_summarize_before_and_after_artifacts_stays_bounded tests/test_cli_smoke.py::test_algorithm_benchmark_scenario_summary_from_ingest_config -q`:
+  2 passed.
+
+Additional limits remain unchanged: no Web UI, FastAPI, remote runner, hosted
+service, cloud sync, generic multi-agent framework, default AI analysis, or
+statistical research-claim engine.

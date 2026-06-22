@@ -15,6 +15,8 @@ All notable user-facing changes should be recorded here. This project has not pu
 - Thin MCP mirror for V2 bounded host tools:
   `delegate_experiment_artifacts`, `inspect_sidecar_task`,
   `preview_sidecar_artifact`, and `cancel_sidecar_task`.
+- Bounded `metrics/scenario-summary.json` records for canonical
+  `training-run` and `algorithm-benchmark` scenarios.
 
 ### Documentation
 
@@ -22,6 +24,8 @@ All notable user-facing changes should be recorded here. This project has not pu
 - Reworked the README into a public landing page with quickstart, artifact previews, CLI table, MCP boundary, limits, and project links.
 - Clarified that MCP remains experimental and local, including the V2 mirror.
 - Clarified that Codex supervisor agents or subagents are development coordination, not Lab-Sidecar product architecture.
+- Added Experiment Scenario Sidecar V1 release notes and canonical scenario
+  smoke evidence.
 
 ## [0.1.0] - Pending Public Alpha
 

@@ -137,6 +137,113 @@ blocked_command_status=blocked
 artifact_count=21
 ```
 
+## Pre-Release Canonical Scenario Smoke
+
+Date: 2026-06-22
+
+Workspace: `/private/tmp/lab-sidecar-v1-canonical-smoke-8J83RJ`
+
+The workspace was disposable and outside the repository. Generated
+`.lab-sidecar` artifacts were not added to the repo.
+
+### Training Run
+
+Commands:
+
+```bash
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app init
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app run "/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python examples/simple-success/train.py --output metrics.csv" --name canonical-training-run
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app collect task_20260622_094912_b6dd4d
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app summarize task_20260622_094912_b6dd4d
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app figures task_20260622_094912_b6dd4d
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app report task_20260622_094912_b6dd4d
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app slides task_20260622_094912_b6dd4d
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app artifacts task_20260622_094912_b6dd4d
+```
+
+Result:
+
+- Task id: `task_20260622_094912_b6dd4d`
+- Scenario: `training-run`
+- Primary metric: `val_accuracy` with direction `max`
+- Metrics rows: `5`
+- Bounded evidence: `best_rows=3`, `last_rows=1`
+- Key artifacts:
+  - `metrics/scenario-summary.json`
+  - `metrics/normalized_metrics.csv`
+  - `figures/figure-summary.json`
+  - `reports/report-fragment.md`
+  - `reports/report-summary.json`
+  - `slides/presentation-draft.pptx`
+  - `slides/slides-summary.json`
+  - `provenance/traceability.json`
+
+### Algorithm Benchmark
+
+Commands:
+
+```bash
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app ingest examples/algorithm-benchmark --name canonical-algorithm-benchmark
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app collect task_20260622_095301_233f4f --config algorithm-benchmark.yaml
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app summarize task_20260622_095301_233f4f
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app figures task_20260622_095301_233f4f
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app report task_20260622_095301_233f4f
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app slides task_20260622_095301_233f4f
+/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app artifacts task_20260622_095301_233f4f
+```
+
+Config used:
+
+```yaml
+sources:
+  - examples/algorithm-benchmark/results.json
+fields:
+  algorithm: algorithm
+  seed: seed
+  input_size: input_size
+  runtime_ms:
+    source: runtime_ms
+    unit: ms
+  memory_mb:
+    source: memory_mb
+    unit: MB
+groups:
+  primary: algorithm
+  secondary: seed
+```
+
+Result:
+
+- Task id: `task_20260622_095301_233f4f`
+- Scenario: `algorithm-benchmark`
+- Primary metric: `runtime_ms` with direction `min` and unit `ms`
+- Metrics rows: `18`
+- Seed aggregates: present, `6` bounded items, claim limit
+  `descriptive aggregate only; no statistical significance is inferred`
+- Bounded evidence: `best_rows=2`, `last_rows=6`
+- Key artifacts:
+  - `metrics/scenario-summary.json`
+  - `metrics/normalized_metrics.csv`
+  - `figures/bar_runtime_ms_by_algorithm.png`
+  - `figures/bar_runtime_ms_by_algorithm.svg`
+  - `reports/report-fragment.md`
+  - `reports/report-summary.json`
+  - `slides/presentation-draft.pptx`
+  - `slides/slides-summary.json`
+  - `provenance/traceability.json`
+
+Focused validation commands:
+
+```bash
+.venv/bin/python -m pytest tests/test_scenario_summary.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_summarize_before_and_after_artifacts_stays_bounded tests/test_cli_smoke.py::test_algorithm_benchmark_scenario_summary_from_ingest_config -q
+```
+
+Results:
+
+- `8 passed in 0.05s`
+- `2 passed in 8.73s`
+
 ## Known Limits
 
 - Scenario summary is descriptive only.
