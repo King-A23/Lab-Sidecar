@@ -65,6 +65,8 @@ Goal: freeze what exists before changing behavior.
   `docs/phase-2-core-stability-trust-acceptance.md`.
 - Inventory every public task-local artifact with `schema_version` or public
   integration value.
+- P0 inventory evidence is recorded in
+  `docs/phase-2-artifact-contract-inventory.md`.
 - Mark each field as required, optional, deprecated alias, bounded preview, or
   internal/unstable.
 - Confirm the existing omission contract for logs, raw sources, worker audit

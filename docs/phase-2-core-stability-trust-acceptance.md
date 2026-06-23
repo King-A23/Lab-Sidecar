@@ -44,6 +44,21 @@ complete.
 - Existing docs and tests distinguish manual CLI `run` from MCP/V2 bounded
   command paths and host-facing preview gates.
 
+## P0 Inventory Evidence
+
+- Added `docs/phase-2-artifact-contract-inventory.md` as the P0 artifact
+  contract inventory and minimal schema strategy record.
+- The inventory covers `manifest.json`,
+  `metrics/collection-summary.json`, `metrics/scenario-summary.json`,
+  `figures/figure-summary.json`, `reports/report-summary.json`,
+  `slides/slides-summary.json`, `provenance/traceability.json`,
+  `package-summary.json`, and `artifact-index.json`.
+- For each artifact, it records the current producer, `schema_version`,
+  public/stable fields, bounded or omitted fields, compatibility aliases,
+  known risks, and recommended first schema tests.
+- P0 inventory evidence does not implement JSON Schema, schema-export tests, or
+  product behavior changes. The P1 schema/test checklist below remains open.
+
 ## TODO Checklist
 
 - [ ] Add schema files or schema-export tests for `manifest.json`.
@@ -88,6 +103,15 @@ rg -n "ruff|mypy|pyright|coverage|pytest|schema|json schema|run --|shell=True|su
 git diff --check
 ```
 
+Commands run for this P0 inventory slice:
+
+```text
+git status --short --branch
+rg -n "schema_version|collection-summary|figure-summary|report-summary|slides-summary|traceability|package-summary|artifact-index|omitted|body|alias|generated_figures|figures" lab_sidecar tests docs/phase-2-core-stability-trust-plan.md docs/phase-2-core-stability-trust-acceptance.md
+.venv/bin/python -m pytest tests/test_scenario_summary.py -q
+git diff --check
+```
+
 Observed results for this planning slice:
 
 - `git status --short --branch`: modified `CHANGELOG.md` plus two new Phase 2
@@ -100,6 +124,19 @@ Observed results for this planning slice:
   configured `ruff`, `mypy`, `pyright`, or coverage gate in `pyproject.toml` or
   `.github/workflows/ci.yml`, and foreground runner execution still uses
   `shell=True`.
+- `.venv/bin/python -m pytest tests/test_scenario_summary.py -q`: passed,
+  `10 passed in 0.03s`.
+- `git diff --check`: passed with no output.
+
+Observed results for this P0 inventory slice:
+
+- `git status --short --branch`: on `main...origin/main`; this slice modifies
+  Phase 2 documentation and adds
+  `docs/phase-2-artifact-contract-inventory.md`; no product code changes.
+- `rg ...`: confirmed schema-versioned artifact producers, omission markers,
+  compatibility aliases such as `generated_figures`/`figures`, package and
+  traceability references, and existing boundedness assertions in docs, code,
+  and tests.
 - `.venv/bin/python -m pytest tests/test_scenario_summary.py -q`: passed,
   `10 passed in 0.03s`.
 - `git diff --check`: passed with no output.
