@@ -81,7 +81,7 @@ complete.
   summaries.
 - [x] Decide and document public versus internal fields in slides summaries.
 - [x] Add `ruff` configuration and CI gate.
-- [ ] Add type-check baseline and CI gate.
+- [x] Add type-check baseline and CI gate.
 - [ ] Add coverage reporting and a conservative ratcheting policy.
 - [ ] Add Windows and macOS CI smoke coverage.
 - [ ] Design the additive CLI argv/non-shell run path.
@@ -452,9 +452,65 @@ Observed results for this P2 ruff baseline slice:
   baseline produces substantial noise there. Formatting checks remain out of
   scope until a separate clean baseline or scoped formatting slice exists.
 
+Commands run for this P2 type-check baseline slice:
+
+```text
+.venv/bin/python -m pip install "mypy>=1.13" "pyright>=1.1.390"
+.venv/bin/python -m pip install "types-PyYAML>=6.0"
+.venv/bin/python -m mypy --python-version 3.11 lab_sidecar/core lab_sidecar/storage
+.venv/bin/python -m mypy --python-version 3.11 lab_sidecar/core lab_sidecar/storage lab_sidecar/runner
+.venv/bin/python -m pyright lab_sidecar/core lab_sidecar/storage --pythonversion 3.11
+.venv/bin/python -m pyright lab_sidecar/core lab_sidecar/runner lab_sidecar/storage --pythonversion 3.11
+.venv/bin/python -m pip install -e ".[dev,mcp]"
+.venv/bin/python -m mypy
+.venv/bin/python -m ruff check .
+.venv/bin/python -m pytest tests/test_scenario_summary_contract.py tests/test_manifest_contract.py tests/test_traceability_contract.py tests/test_package_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_simple_success_task_and_queries tests/test_cli_smoke.py::test_simple_failure_task tests/test_cli_smoke.py::test_background_run_status_logs_and_cancel tests/test_cli_smoke.py::test_background_completed_task_refreshes_to_completed tests/test_cli_smoke.py::test_background_failed_task_refreshes_to_failed -q
+git diff --check
+```
+
+Observed results for this P2 type-check baseline slice:
+
+- Chose `mypy` as the first type-check gate. It resolves the Python editable
+  install and Pydantic/PyYAML dependencies directly in the existing CI install
+  path, while direct `pyright` probes in this environment reported unresolved
+  installed package imports such as `pydantic` without extra environment
+  configuration.
+- Added `mypy>=2.1.0` and `types-PyYAML>=6.0` to the `dev` extra in
+  `pyproject.toml`.
+- Added a conservative `[tool.mypy]` baseline with `python_version = "3.11"`
+  and `files` limited to `lab_sidecar/core`, `lab_sidecar/runner`, and
+  `lab_sidecar/storage`.
+- Updated `.github/workflows/ci.yml` to run `python -m mypy` after Ruff and
+  before pytest.
+- Added targeted type annotations in `lab_sidecar/storage/artifact_store.py`
+  for source-reference dictionaries and lists.
+- Narrowed `processed_files` before iterating in
+  `lab_sidecar/core/traceability.py`.
+- Adjusted `lab_sidecar/runner/process.py` to use typed `dict[str, Any]`
+  Popen kwargs and `getattr(...)` for Windows-only process attributes that are
+  not visible to type checkers on non-Windows platforms.
+- No MCP product code was changed.
+- `.venv/bin/python -m pip install -e ".[dev,mcp]"`: passed, and confirmed
+  the editable dev install includes `mypy`, `ruff`, `types-PyYAML`, and the
+  optional MCP dependency set used by CI.
+- `.venv/bin/python -m mypy`: passed, `Success: no issues found in 15 source files`.
+- `.venv/bin/python -m ruff check .`: passed, `All checks passed!`.
+- `.venv/bin/python -m pytest tests/test_scenario_summary_contract.py tests/test_manifest_contract.py tests/test_traceability_contract.py tests/test_package_contract.py -q`:
+  passed, `18 passed in 2.22s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_simple_success_task_and_queries tests/test_cli_smoke.py::test_simple_failure_task tests/test_cli_smoke.py::test_background_run_status_logs_and_cancel tests/test_cli_smoke.py::test_background_completed_task_refreshes_to_completed tests/test_cli_smoke.py::test_background_failed_task_refreshes_to_failed -q`:
+  passed, `5 passed in 1.25s`.
+- `git diff --check`: passed with no output.
+- Known limitations: the first mypy gate intentionally does not cover
+  `lab_sidecar/cli`, `lab_sidecar/collectors`, `lab_sidecar/figures`,
+  `lab_sidecar/reports`, `lab_sidecar/slides`, `lab_sidecar/intelligence`,
+  `lab_sidecar/mcp`, or tests. CLI and artifact summary service modules still
+  use dynamic dictionaries and compatibility aliases that need separate,
+  scoped type-hardening slices before all-package checking would be useful.
+
 ## Current Acceptance Status
 
 Phase 2 is not accepted yet. P0 inventory, P1 schema stabilization, and the P2
-ruff lint baseline/CI gate slice are accepted for this phase, but broader P2
-quality gates, P3 run-safety design, P4 cross-platform reliability, and P5
-alpha.4 release evidence remain open.
+ruff lint and type-check baseline/CI gate slices are accepted for this phase,
+but broader P2 quality gates, P3 run-safety design, P4 cross-platform
+reliability, and P5 alpha.4 release evidence remain open.

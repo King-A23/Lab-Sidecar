@@ -252,7 +252,8 @@ def _source_ref_item(item: dict[str, Any], role: str) -> dict[str, Any]:
 def _metric_lineage(task_path: Path, collection_summary: dict[str, Any], scenario_summary: dict[str, Any]) -> dict[str, Any]:
     metrics_path = task_path / "metrics" / "normalized_metrics.csv"
     columns, row_count = _csv_header_and_count(metrics_path)
-    processed = collection_summary.get("processed_files") if isinstance(collection_summary.get("processed_files"), list) else []
+    raw_processed = collection_summary.get("processed_files")
+    processed = raw_processed if isinstance(raw_processed, list) else []
     source_files = [
         item["source_file"]
         for item in processed

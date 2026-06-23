@@ -6,9 +6,11 @@ import signal
 import subprocess
 import sys
 from dataclasses import dataclass
+from typing import Any
 
 
 STILL_ACTIVE = 259
+CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
 
 
 @dataclass(frozen=True)
@@ -18,15 +20,15 @@ class ProcessProbe:
     exists: bool | None = None
 
 
-def command_popen_kwargs() -> dict:
+def command_popen_kwargs() -> dict[str, Any]:
     if os.name == "nt":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 
-def worker_popen_kwargs() -> dict:
+def worker_popen_kwargs() -> dict[str, Any]:
     if os.name == "nt":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 
@@ -90,7 +92,7 @@ def _posix_exit_code(status: int) -> int | None:
 
 
 def _probe_process_windows(pid: int) -> ProcessProbe:
-    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32 = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)
     process_query_limited_information = 0x1000
     handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
     if not handle:

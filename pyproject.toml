@@ -37,8 +37,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "mypy>=2.1.0",
   "pytest>=8.0",
   "ruff>=0.15.18",
+  "types-PyYAML>=6.0",
 ]
 mcp = [
   "mcp==1.27.2",
@@ -72,6 +74,16 @@ select = ["E9", "F"]
 "tests/test_cli_smoke.py" = ["F841"]
 "tests/test_mcp_tools.py" = ["F401"]
 "tests/test_scenario_summary.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.11"
+files = [
+  "lab_sidecar/core",
+  "lab_sidecar/runner",
+  "lab_sidecar/storage",
+]
+show_error_codes = true
+warn_unused_configs = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["lab_sidecar"]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from lab_sidecar.core.models import ArtifactRecord
 from lab_sidecar.core.paths import to_manifest_path
@@ -101,11 +102,11 @@ def source_path_kind(source: Path, root: Path) -> str:
     return "relative"
 
 
-def build_source_refs(source: Path, root: Path) -> dict:
+def build_source_refs(source: Path, root: Path) -> dict[str, Any]:
     resolved = source.resolve()
     path_kind = source_path_kind(resolved, root)
     stat = resolved.stat()
-    data = {
+    data: dict[str, Any] = {
         "source_path": to_manifest_path(resolved, root),
         "path_kind": path_kind,
         "source_type": "directory" if resolved.is_dir() else "file",
@@ -117,11 +118,11 @@ def build_source_refs(source: Path, root: Path) -> dict:
         data["is_candidate"] = resolved.suffix.lower() in SOURCE_CANDIDATE_SUFFIXES
         return data
 
-    children = []
-    candidate_files = []
+    children: list[dict[str, Any]] = []
+    candidate_files: list[str] = []
     for child in sorted(resolved.iterdir(), key=lambda item: item.name.lower()):
         child_stat = child.stat()
-        child_summary = {
+        child_summary: dict[str, Any] = {
             "path": to_manifest_path(child.resolve(), root),
             "name": child.name,
             "type": "directory" if child.is_dir() else "file",
@@ -145,7 +146,7 @@ def build_source_refs(source: Path, root: Path) -> dict:
     return data
 
 
-def write_source_refs(path: Path, refs: dict) -> None:
+def write_source_refs(path: Path, refs: dict[str, Any]) -> None:
     path.write_text(json.dumps(refs, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -155,8 +156,8 @@ def _mtime_iso(timestamp: float) -> str:
     return datetime.fromtimestamp(timestamp, timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
-def _recursive_candidate_file_refs(source: Path, root: Path) -> tuple[list[dict], bool]:
-    refs: list[dict] = []
+def _recursive_candidate_file_refs(source: Path, root: Path) -> tuple[list[dict[str, Any]], bool]:
+    refs: list[dict[str, Any]] = []
     for child in sorted(source.rglob("*"), key=lambda item: item.as_posix().lower()):
         if not child.is_file() or child.suffix.lower() not in SOURCE_CANDIDATE_SUFFIXES:
             continue
