@@ -73,7 +73,7 @@ complete.
   `reports/report-summary.json`.
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `slides/slides-summary.json`.
-- [ ] Add schema files, schema-style tests, or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `provenance/traceability.json`.
 - [ ] Add schema files, schema-style tests, or schema-export tests for
   `package-summary.json` and `artifact-index.json`.
@@ -256,6 +256,36 @@ Observed results for this P1 figure-summary schema/test slice:
   passed, `5 passed in 0.70s`.
 - `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_figures_csv_comparison_after_collect_generates_png_svg_and_spec tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_records_bounded_diagnostics_without_fallback tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_writes_bounded_request_for_fallback_mode tests/test_cli_smoke.py::test_figures_fallback_mock_worker_adopts_validated_official_artifact tests/test_cli_smoke.py::test_figures_fallback_mock_worker_rejects_malformed_image_without_adoption -q`:
   passed, `5 passed in 0.67s`.
+- `git diff --check`: passed with no output.
+
+Commands run for this P1 traceability schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_traceability_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py -k 'traceability or package' -q
+git diff --check
+```
+
+Observed results for this P1 traceability schema/test slice:
+
+- Added `tests/test_traceability_contract.py` with a lightweight in-test
+  contract helper for `provenance/traceability.json`; no product schema module
+  was added.
+- The helper validates generated completed full-chain traceability, failed
+  diagnostic traceability, package-copy traceability parity, a representative
+  missing-artifact case with `exists: false` plus
+  `digest_omitted_reason: "artifact file is not present"`, and source
+  truncation at the 200-source limit.
+- The helper validates the public top-level shape, task/environment sections,
+  source and artifact entry shape, lineage presence and paths for metrics,
+  figures, reports, and slides, report/slide claim trace references, omitted
+  contract entries, log digest omission reasons, and reference-only boundedness
+  rules.
+- No product code was changed in this slice.
+- `.venv/bin/python -m pytest tests/test_traceability_contract.py -q`: passed,
+  `5 passed in 1.33s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py -k 'traceability or package' -q`:
+  passed, `4 passed, 95 deselected in 0.81s`.
 - `git diff --check`: passed with no output.
 
 Commands run for this P1 report-summary schema/test slice:

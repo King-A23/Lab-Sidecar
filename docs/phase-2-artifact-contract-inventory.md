@@ -583,15 +583,38 @@ Known risks:
 
 Recommended first schema tests:
 
-- Validate completed full-chain traceability.
-- Validate failed diagnostic traceability.
-- Validate traceability included in package export.
-- Validate fallback unavailable, rejected, and adopted figure lineage.
-- Validate missing optional artifacts keep lineage `present` flags and paths
-  consistent.
-- Assert sources stay capped, omitted categories are present, log digest
-  omissions are explicit, and claim evidence does not include raw rows or
-  bodies.
+- First P1 schema-style contract tests are now in
+  `tests/test_traceability_contract.py`. They use a lightweight in-test helper,
+  not a product schema module.
+- Done in the traceability contract slice: validate completed full-chain
+  traceability after `run -> collect -> figures -> report -> slides`, including
+  task/environment/sources/artifacts sections, metric/figure/report/slide
+  lineage, artifact hashes, log digest omission reasons, report/slide claim
+  trace references, and the omission contract.
+- Done in the traceability contract slice: validate failed diagnostic
+  traceability with bounded report/slide claim traces and explicit confirmation
+  that full logs, report bodies, metric rows, and slide/PPT internals are not
+  embedded.
+- Done in the traceability contract slice: validate package export preserves a
+  stable `provenance/traceability.json` shape and package-copy parity for
+  artifact hashes, lineage sections, and omitted categories.
+- Done in the traceability contract slice: validate a representative
+  missing-artifact case where lineage remains present while an artifact entry
+  reports `exists: false` with `digest_omitted_reason: "artifact file is not present"`.
+- Done in the traceability contract slice: validate source truncation at 200
+  entries, warning text, and raw-source omission behavior for an ingest task
+  with many candidate metric files.
+
+Remaining known risks:
+
+- Figure fallback lineage shape is still only covered indirectly by existing
+  CLI smoke tests; the schema-style contract test slice does not yet freeze
+  unavailable, rejected, and adopted fallback variants in one dedicated helper.
+- Omission categories and reason strings remain human-readable strings rather
+  than formal enums.
+- Traceability warning aggregation still inherits wording from report, figure,
+  and slides summaries, so warning text stability remains lower than structural
+  field stability.
 
 ## `package-summary.json`
 
