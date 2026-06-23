@@ -71,7 +71,7 @@ complete.
   `figures/figure-summary.json`.
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `reports/report-summary.json`.
-- [ ] Add schema files, schema-style tests, or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `slides/slides-summary.json`.
 - [ ] Add schema files, schema-style tests, or schema-export tests for
   `provenance/traceability.json`.
@@ -290,6 +290,45 @@ Observed results for this P1 report-summary schema/test slice:
 - `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_report_completed_ingest_after_collect_and_figures_generates_markdown tests/test_cli_smoke.py::test_report_with_metrics_but_no_figures_generates_with_hint tests/test_cli_smoke.py::test_report_failed_run_generates_failure_report_without_metrics tests/test_cli_smoke.py::test_report_cancelled_task_generates_cancelled_report -q`:
   passed, `4 passed in 0.79s`.
 - `git diff --check`: passed with no output.
+
+Commands run for this P1 slides-summary schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_slides_summary_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py -k 'slides' -q
+git diff --check
+```
+
+Observed results for this P1 slides-summary schema/test slice:
+
+- Added `tests/test_slides_summary_contract.py` with a lightweight in-test
+  contract helper for `slides/slides-summary.json`; no schema module or schema
+  dependency was added.
+- The helper validates generated completed summaries after
+  `collect -> figures -> report -> slides`, completed bounded summaries with
+  metrics/report but no figures, failed diagnostic summaries, and cancelled
+  diagnostic summaries.
+- The helper validates required top-level keys, `schema_version`, slide PPTX and
+  summary references, `generated_from`/`source_artifacts` reference-only
+  behavior, included figures and metrics shape, compact scenario-summary shape,
+  QA-check groups, per-slide evidence, claim-trace evidence, and compatibility
+  aliases.
+- The helper also freezes bounded table-preview limits, bounded report excerpt
+  limits, bounded log omission behavior, and omission of embedded full logs,
+  full report bodies, raw metric CSV bodies, and PPTX internals from the
+  summary contract. It intentionally does not bless `project_goal.full`,
+  `full_text_fields`, or arbitrary non-log `full` bodies as stable public
+  fields.
+- New contract coverage exposed two small real product bugs in
+  `lab_sidecar/slides/service.py`: a no-figures slide emitted `figures/` as a
+  pseudo-artifact reference, and the reproducibility slide always referenced
+  `reproduce/command.txt` even when that artifact was absent for ingest tasks.
+  Both were fixed with small service-layer changes so `slides` summary
+  references now point only to real source artifacts.
+- `.venv/bin/python -m pytest tests/test_slides_summary_contract.py -q`:
+  passed, `4 passed in 1.19s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py -k 'slides' -q`:
+  passed, `18 passed, 81 deselected in 3.20s`.
 
 Results should be updated at the end of each implementation slice. This initial
 planning slice intentionally does not implement quality gates, schemas, or

@@ -489,6 +489,31 @@ Known risks:
 - The alias fields are useful for compatibility but should not obscure the
   canonical public shape.
 
+Schema-style test coverage added in Phase 2 P1:
+
+- `tests/test_slides_summary_contract.py` now validates generated completed
+  `collect -> figures -> report -> slides` summaries against the current
+  public/quasi-public contract surface.
+- The same contract helper validates completed `collect -> report -> slides`
+  summaries without figures and freezes bounded behavior rather than blessing
+  any full-body display fields.
+- Failed and cancelled diagnostic summaries are covered with explicit checks
+  that `slides/slides-summary.json` keeps logs, report content, and PPTX internals
+  reference-only or bounded, not embedded.
+- The tests freeze `generated_from` and `source_artifacts` as source-artifact
+  references only, excluding slides self-references and complete artifact bytes.
+
+Still-open risks after this slice:
+
+- `project_goal.full`, `full_text_fields`, and non-log truncation `full` values
+  remain emitted but are intentionally not treated as stable public fields by
+  the contract tests.
+- Caption truncation `full` text is still present and may include user-authored
+  strings; the tests only freeze bounded caption display metadata.
+- Compatibility aliases `slide_titles`, `metrics`, `metrics_table`, and
+  `figures` remain covered as compatibility outputs, but the canonical
+  public-shape decision is still open.
+
 Recommended first schema tests:
 
 - Validate completed slide summary after collect/figures/report.

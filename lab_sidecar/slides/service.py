@@ -1109,7 +1109,8 @@ class _PresentationBuilder:
         figure_items: list[FigureItem] = self.context["figure_items"]
         title_base = "图表" if self.zh else "Figures"
         if not figure_items:
-            slide = self._blank_slide(title_base, "show generated figures", ["figures/"])
+            sources = ["figures/figure-summary.json"] if self.context["figure_summary_path"] else []
+            slide = self._blank_slide(title_base, "show generated figures", sources)
             self._add_title(slide, title_base)
             self._empty_visual(slide, self.unknown, "figures/*.png not found")
             return
@@ -1251,6 +1252,11 @@ class _PresentationBuilder:
         record: TaskRecord = self.context["record"]
         fields = self.context["fields"]["display"]
         title = "复现信息" if self.zh else "Reproducibility"
+        sources = ["manifest.json"]
+        if "reproduce/command.txt" in self.context["source_artifacts"]:
+            sources.append("reproduce/command.txt")
+        if self.context["source_refs_path"]:
+            sources.append("raw/source_refs.json")
         rows = [
             ("command", fields["command"]),
             ("source_path", fields["source_path"]),
@@ -1263,7 +1269,7 @@ class _PresentationBuilder:
             title,
             rows,
             "record reproducibility details",
-            ["manifest.json", "reproduce/command.txt"],
+            sources,
             note="SQLite 不是唯一事实来源；本草稿基于 task artifact 文件生成。" if self.zh else "SQLite is not the source of truth; this draft uses task artifact files.",
         )
 
