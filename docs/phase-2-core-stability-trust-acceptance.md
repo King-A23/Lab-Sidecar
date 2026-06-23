@@ -61,7 +61,7 @@ complete.
 
 ## TODO Checklist
 
-- [ ] Add schema files, schema-style tests, or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `manifest.json`.
 - [ ] Add schema files, schema-style tests, or schema-export tests for
   `metrics/collection-summary.json`.
@@ -163,6 +163,33 @@ Observed results for this P1 scenario-summary schema/test slice:
   passed, `15 passed in 0.07s`.
 - `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_nested_json_config_collects_algorithm_benchmark_scenario tests/test_cli_smoke.py::test_multi_source_scenario_summary_stays_bounded tests/test_cli_smoke.py::test_training_run_scenario_summary_warns_when_primary_metric_missing -q`:
   passed, `3 passed in 0.45s`.
+- `git diff --check`: passed with no output.
+
+Commands run for this P1 manifest schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_manifest_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_simple_success_task_and_queries tests/test_cli_smoke.py::test_ingest_existing_directory tests/test_cli_smoke.py::test_simple_failure_task -q
+git diff --check
+```
+
+Observed results for this P1 manifest schema/test slice:
+
+- Added `tests/test_manifest_contract.py` with a lightweight in-test contract
+  helper for `manifest.json`; no product schema module or product behavior
+  change was added.
+- The helper validates generated completed `run`, completed `ingest`, failed
+  `run`, running background, and cancelled background manifests.
+- The helper also validates required top-level fields, `schema_version`,
+  `mode`/`status` enums, required path references, artifact item shape, review-
+  required local metadata fields, path-reference-only omission rules, and
+  artifact-id uniqueness after repeated `collect`/`figures`/`report`/`slides`
+  runs.
+- No product code was changed.
+- `.venv/bin/python -m pytest tests/test_manifest_contract.py -q`: passed,
+  `5 passed in 1.15s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_simple_success_task_and_queries tests/test_cli_smoke.py::test_ingest_existing_directory tests/test_cli_smoke.py::test_simple_failure_task -q`:
+  passed, `3 passed in 0.48s`.
 - `git diff --check`: passed with no output.
 
 Results should be updated at the end of each implementation slice. This initial

@@ -93,14 +93,24 @@ Known risks:
 - Artifact `type`, `artifact_id`, and path style are not yet schema-enforced.
 - Some artifact paths are workspace-relative while others are task-relative.
 
+First schema-style tests:
+
+- First P1 schema-style contract tests are in
+  `tests/test_manifest_contract.py`. They use a lightweight in-test helper,
+  not a product schema module.
+
 Recommended first schema tests:
 
-- Validate completed `run`, completed `ingest`, failed `run`, cancelled
-  background, and running background manifests.
-- Assert status and mode enums, required path fields, and artifact item shape.
-- Assert artifact IDs are unique after repeated collect/figures/report/slides
-  runs.
-- Assert the manifest contains references, not full log/raw row/artifact bodies.
+- Done in the first P1 schema-style test slice: validate generated completed
+  `run`, completed `ingest`, failed `run`, running background, and cancelled
+  background manifests.
+- Done in the first P1 schema-style test slice: assert status and mode enums,
+  required path fields, and artifact item shape.
+- Done in the first P1 schema-style test slice: assert artifact IDs are unique
+  after repeated collect/figures/report/slides runs.
+- Done in the first P1 schema-style test slice: assert the manifest contains
+  references, not embedded full stdout/stderr bodies, raw source bodies,
+  normalized metric rows, report bodies, PPT contents, or artifact bytes.
 - Keep additional task/path properties accepted until a compatibility policy is
   explicitly tightened.
 
