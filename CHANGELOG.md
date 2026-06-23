@@ -26,6 +26,9 @@ All notable user-facing changes should be recorded here. This project has not pu
 - Clarified that Codex supervisor agents or subagents are development coordination, not Lab-Sidecar product architecture.
 - Added Experiment Scenario Sidecar V1 release notes and canonical scenario
   smoke evidence.
+- Added a capability boundary matrix and tightened agent safety wording for
+  manual CLI `run` versus MCP/V2 bounded delegation, including human-owner
+  review, redaction, interpretation, and final-decision responsibilities.
 
 ## [0.1.0] - Pending Public Alpha
 

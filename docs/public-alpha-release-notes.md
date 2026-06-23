@@ -34,13 +34,24 @@ This alpha intentionally does not include Web UI, FastAPI, remote runners, AI-ge
   CI metadata.
 - Real stdio MCP smoke completed with pinned `mcp==1.27.2`.
 
+## Capability Boundary Snapshot
+
+| Area | Supported in this alpha | Outside this alpha |
+| --- | --- | --- |
+| Metrics | CSV/JSON metric collection and normalized task-local outputs. | TensorBoard event parsing, JSONL stream parsing, full MLflow parsing, or broad recursive ingestion by default. |
+| Figures | Deterministic static `line`, `bar`, and `box` PNG/SVG charts. | Complex scientific plots, interactive figures, statistical-significance chart systems, animation, or video. |
+| Report artifacts | Deterministic Markdown report fragments and editable static PPTX drafts. | Automatic research conclusions, paper conclusions, deployment advice, or default AI analysis. |
+| Execution model | Local CLI `run`/`ingest`/`collect` and local artifact records. | Hosted services, remote runners, cloud sync, multi-tenant permissions, Web UI, or FastAPI. |
+| Agent integration | Experimental local MCP/V2 bounded delegation and artifact metadata. | A security sandbox, malware detector, shell interception layer, or general multi-agent framework. |
+| Default responses | Bounded scenario summaries, artifact paths, and bounded previews. | Full logs, full metric rows, report bodies, PPT contents, prompt/response bodies, data files, or artifact bytes by default. |
+
 ## Safety Model
 
-CLI `run` is a user-explicit local command execution path. It captures logs and artifacts, but it does not apply the MCP confirmation/blocking policy.
+Manual CLI `run` is a user-explicit local command execution path. It records the command, logs, status, and artifacts, but it is not an OS sandbox; the command can do whatever the user's environment permits.
 
 MCP-facing `run_experiment` and
 `delegate_experiment_artifacts(command=...)` apply a conservative workspace and
-command safety gate:
+command safety gate and should be treated as higher-risk agent-triggered paths:
 
 - workspace-external cwd is blocked
 - `.lab-sidecar` cwd is blocked
@@ -48,7 +59,7 @@ command safety gate:
 - shell chaining and similar higher-risk patterns require confirmation
 - workspace-external absolute output/path arguments are blocked
 
-Lab-Sidecar does not claim OS sandboxing, malware detection, container isolation, multi-user policy, or global shell interception.
+These MCP/V2 checks are guardrails, not isolation. Lab-Sidecar does not claim OS sandboxing, malware detection, container isolation, multi-user policy, or global shell interception. The human experiment owner remains responsible for interpretation, redaction, acceptance, and final decisions.
 
 ## MCP Notes
 

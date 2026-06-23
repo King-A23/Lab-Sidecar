@@ -28,7 +28,7 @@ Generic stdio host configuration shape:
 }
 ```
 
-The `cwd` is the configured workspace root. MCP-facing `run_experiment` blocks workspace-external working directories, blocks destructive command patterns, and requires confirmation for higher-risk shell patterns. The CLI `run` command is separate: it is a user-explicit local command execution path and does not use the MCP confirmation/blocking policy.
+The `cwd` is the configured workspace root. MCP-facing `run_experiment` blocks workspace-external working directories, blocks destructive command patterns, and requires confirmation for higher-risk shell patterns. Treat MCP/V2 command delegation as a higher-risk agent-triggered path that must stay behind bounded delegation, workspace boundaries, and explicit host command policy. These checks are guardrails, not OS isolation, a container runtime, or malware detection. The CLI `run` command is separate: it is a user-explicit local command execution path, records command/log/artifact evidence, and does not use the MCP confirmation/blocking policy.
 
 Run the real stdio client smoke after installing `.[mcp]`:
 
@@ -72,7 +72,8 @@ Example preview and cancellation calls through an MCP host:
 Use `package <task_id>` from the CLI when the goal is a shareable task folder,
 not a host response. Use explicit `collect --config` for nested or messy result
 directories; the MCP adapter should not be treated as broad recursive file
-discovery.
+discovery. The human experiment owner remains responsible for interpreting,
+redacting, accepting, and making final decisions from the artifacts.
 
 If the repo-scoped Codex plugin guidance changes, validate the plugin scaffold:
 

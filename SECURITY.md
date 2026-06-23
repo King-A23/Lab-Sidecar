@@ -29,14 +29,16 @@ Do not include credentials, private datasets, full `.lab-sidecar/` task director
 
 ## Security Model
 
-Lab-Sidecar is local-first and file-first. It is designed to create task records and artifacts under `.lab-sidecar/`; it is not a sandbox, container runtime, malware detector, multi-user policy engine, or hosted execution service.
+Lab-Sidecar is local-first and file-first. It is designed to create task records and artifacts under `.lab-sidecar/`; it is not a sandbox, container runtime, malware detector, multi-user policy engine, remote runner, cloud sync system, or hosted execution service.
 
 Important boundaries:
 
-- CLI `run` executes the local command the user explicitly provides. That command can read or write whatever the user's environment permits.
-- MCP-facing `run_experiment` has a conservative workspace and command safety gate, but this is not OS-level isolation.
-- The experimental MCP adapter returns bounded summaries and artifact paths by default. It should not return complete logs, full metrics rows, report bodies, PPTX contents, or arbitrary artifact bodies unless a future feature explicitly scopes and tests that behavior.
+- Manual CLI `run` executes the local command the user explicitly provides. Lab-Sidecar records the command, status, logs, and artifacts, but it is not OS-level isolation; that command can read or write whatever the user's environment permits.
+- MCP/V2 and other agent-triggered command paths are higher risk than manual CLI use. They must stay behind bounded delegation, a configured workspace boundary, the conservative command safety gate, and explicit command policies or confirmations supplied by the host.
+- The MCP/V2 workspace and command gates are guardrails, not a container, sandbox, malware detector, or proof that a delegated command is safe.
+- The experimental MCP adapter returns bounded summaries and artifact paths by default. It should not return complete logs, full metrics rows, report bodies, PPTX contents, worker prompt/response bodies, full data files, artifact bytes, or arbitrary artifact bodies unless a future feature explicitly scopes and tests that behavior.
 - Generated artifacts and logs may contain local paths, command arguments, environment details, metrics, or snippets of stdout/stderr. Review and redact artifacts before sharing them.
+- The human experiment owner remains responsible for interpretation, redaction, acceptance, and final decisions.
 - Lab-Sidecar should not modify, delete, move, or repair user source files as part of collection, figure rendering, report generation, or slide generation.
 
 ## Maintainer Response
@@ -56,4 +58,4 @@ Expected public-alpha response goals:
   details or sensitive artifacts.
 - No OS sandboxing or container isolation is provided.
 - No broad security audit has been completed.
-- MCP is experimental local integration, not a hardened remote service boundary.
+- MCP is experimental local integration, not a hardened remote service boundary, hosted service, or general multi-agent framework.

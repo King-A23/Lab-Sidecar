@@ -25,6 +25,18 @@ Reports and slides are template-generated. They do not use AI and they do not cl
 
 For AI agents, Lab-Sidecar is the experiment artifact boundary: the agent can ask for a task id, status, compact scenario summaries, artifact paths, and bounded previews instead of pulling full logs, tables, reports, or slide contents into the prompt. For the human experiment owner, the same record is useful after the agent is gone: every run has local files you can inspect, compare, redact, or share.
 
+## Capability Boundary Matrix
+
+| Area | Supported today | Not supported or not claimed |
+| --- | --- | --- |
+| Metrics input | Local CSV and JSON metric files, normalized into task-local CSV/JSON outputs. | TensorBoard event parsing, JSONL stream parsing, full MLflow tracking-store parsing, or broad recursive workspace ingestion by default. |
+| Figures | Deterministic static PNG/SVG `line`, `bar`, and `box` charts, with opt-in bounded fallback diagnostics for unsupported explicit specs. | Complex scientific plotting systems, interactive charts, statistical-significance charting, animation, video, or automatic visual interpretation. |
+| Reports and slides | Deterministic Markdown report fragments and editable static PPTX drafts from recorded artifacts. | Automatic research conclusions, paper-ready scientific claims, deployment recommendations, or default AI-authored analysis. |
+| Local execution and ingestion | User-explicit local CLI `run`, `ingest`, `collect`, and task-local artifact records under `.lab-sidecar/`. | Hosted service behavior, remote runners, cloud sync, multi-tenant authorization, Web UI, or FastAPI app. |
+| Agent delegation | Experimental local MCP/V2 bounded delegation that returns task ids, compact summaries, risk flags, next actions, and artifact metadata. | A security sandbox, container runtime, malware detector, shell interception layer, or general multi-agent framework. |
+| Agent context boundary | Bounded `metrics/scenario-summary.json`, artifact paths, and type-specific previews. | Complete logs, complete metric rows, full report bodies, PPT contents, worker prompt/response bodies, full data files, or artifact bytes by default. |
+| Human ownership | Local artifacts that a human experiment owner can inspect, redact, package, and accept or reject. | Delegated final judgment, automatic redaction, autonomous experiment interpretation, or final decision-making. |
+
 ## Demo Preview
 
 These previews are committed from a real `examples/csv-comparison` Lab-Sidecar run. They are not stock images.
@@ -246,10 +258,12 @@ Host setup is in [docs/mcp-host-config.md](docs/mcp-host-config.md). A repo-scop
 
 ## Safety And Limits
 
-- CLI `run` executes the command you provide in your local environment.
-- MCP-facing command execution has conservative workspace and command checks, but it is not operating-system isolation, a container runtime, or a malware scanner.
+- Manual CLI `run` executes the local command the user explicitly provides. Lab-Sidecar records the command, logs, status, and artifacts, but it is not an OS sandbox and the command can do whatever the user's environment permits.
+- MCP/V2 and other agent-triggered command paths are higher risk than manual CLI use. They must go through bounded delegation, configured workspace boundaries, the conservative command safety gate, and explicit command policies or confirmations supplied by the host.
+- Those MCP/V2 guardrails are not operating-system isolation, a container runtime, a malware detector, or a guarantee that a command is safe.
 - Generated logs and artifacts may contain local paths, command arguments, environment details, metrics, or snippets of output. Review and redact before sharing.
-- Reports and slides are deterministic summaries of recorded artifacts, not autonomous research conclusions.
+- The human experiment owner remains responsible for interpretation, redaction, acceptance, and final decisions.
+- Reports and slides are deterministic summaries of recorded artifacts, not autonomous research conclusions, paper conclusions, or deployment advice.
 - Bounded chart fallback is local and artifact-scoped. It is not a hosted service, remote runner, browser UI, or general multi-agent framework.
 - The current project does not include a browser app, HTTP service, remote runner, cloud sync, animation/video export, or default AI analysis.
 

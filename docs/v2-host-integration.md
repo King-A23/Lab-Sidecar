@@ -50,6 +50,11 @@ The host should not expect complete command strings, full stdout, stderr,
 datasets, report bodies, PPTX contents, prompt or response transcripts, or
 artifact bodies in default tool responses.
 
+Human experiment owners remain responsible for interpreting, redacting,
+accepting, and making final decisions from the local artifacts. V2 responses are
+bounded descriptive evidence for a host agent, not autonomous experiment
+judgments.
+
 Canonical response shape:
 
 ```json
@@ -326,8 +331,15 @@ Host integrations must preserve these boundaries:
 - MCP remains a thin adapter over the same local contracts
 - CLI remains a separate user-explicit local execution path
 
+MCP/V2 and other agent-triggered command paths are higher risk than manual CLI
+use. Route them through bounded delegation, the configured workspace boundary,
+the conservative command safety gate, and explicit host command policy or
+confirmation. These are guardrails only; they are not OS isolation, a container
+runtime, a malware detector, or proof that delegated shell work is safe.
+
 Do not treat Lab-Sidecar V2 as a general file browser, shell proxy, data export
-service, prompt transcript reader, or PPTX unpacking API.
+service, prompt transcript reader, PPTX unpacking API, or generic multi-agent
+framework.
 
 ## Suggested Phase 2.4 Acceptance Record Points
 
