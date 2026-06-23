@@ -80,7 +80,7 @@ complete.
 - [x] Decide and document canonical versus compatibility-alias fields in figure
   summaries.
 - [x] Decide and document public versus internal fields in slides summaries.
-- [ ] Add `ruff` configuration and CI gate.
+- [x] Add `ruff` configuration and CI gate.
 - [ ] Add type-check baseline and CI gate.
 - [ ] Add coverage reporting and a conservative ratcheting policy.
 - [ ] Add Windows and macOS CI smoke coverage.
@@ -418,8 +418,43 @@ Observed results for this P1 schema stabilization rollup:
   `project_goal.full`, `full_text_fields`, and arbitrary non-log `full` bodies
   are internal/unstable and excluded from the first strict public schema.
 
+Commands run for this P2 ruff baseline slice:
+
+```text
+.venv/bin/python -m ruff check .
+.venv/bin/python -m pytest tests/test_scenario_summary_contract.py tests/test_manifest_contract.py tests/test_package_contract.py -q
+git diff --check
+```
+
+Observed results for this P2 ruff baseline slice:
+
+- Added `ruff>=0.15.18` to the `dev` extra in `pyproject.toml`.
+- Added a minimal Ruff lint baseline in `pyproject.toml` with
+  `target-version = "py311"` and `select = ["E9", "F"]`.
+- Added narrow `per-file-ignores` for existing baseline violations in
+  `lab_sidecar/collectors/service.py` (`F402`),
+  `lab_sidecar/figures/specs.py` (`F601`),
+  `lab_sidecar/intelligence/schemas.py` (`F401`),
+  `lab_sidecar/slides/service.py` (`F841`),
+  `tests/test_cli_smoke.py` (`F841`),
+  `tests/test_mcp_tools.py` (`F401`), and
+  `tests/test_scenario_summary.py` (`F401`).
+- Updated `.github/workflows/ci.yml` to run `python -m ruff check .` before the
+  existing pytest and package-build steps.
+- No product behavior or MCP product code was changed.
+- `.venv/bin/python -m ruff check .`: passed, `All checks passed!`.
+- `.venv/bin/python -m pytest tests/test_scenario_summary_contract.py tests/test_manifest_contract.py tests/test_package_contract.py -q`:
+  passed, `13 passed in 1.54s`.
+- `git diff --check`: passed with no output.
+- Known limitations: this first gate intentionally excludes broader Ruff rule
+  families such as import sorting (`I`), pycodestyle style checks like
+  `E501`, pyupgrade (`UP`), and bugbear (`B`) because the current repository
+  baseline produces substantial noise there. Formatting checks remain out of
+  scope until a separate clean baseline or scoped formatting slice exists.
+
 ## Current Acceptance Status
 
-Phase 2 is not accepted yet. P0 inventory and P1 schema stabilization are
-accepted for this phase, but P2 quality gates, P3 run-safety design, P4
-cross-platform reliability, and P5 alpha.4 release evidence remain open.
+Phase 2 is not accepted yet. P0 inventory, P1 schema stabilization, and the P2
+ruff lint baseline/CI gate slice are accepted for this phase, but broader P2
+quality gates, P3 run-safety design, P4 cross-platform reliability, and P5
+alpha.4 release evidence remain open.

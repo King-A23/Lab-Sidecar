@@ -38,6 +38,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
+  "ruff>=0.15.18",
 ]
 mcp = [
   "mcp==1.27.2",
@@ -56,6 +57,21 @@ Security = "https://github.com/King-A23/Lab-Sidecar/blob/main/SECURITY.md"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E9", "F"]
+
+[tool.ruff.lint.per-file-ignores]
+"lab_sidecar/collectors/service.py" = ["F402"]
+"lab_sidecar/figures/specs.py" = ["F601"]
+"lab_sidecar/intelligence/schemas.py" = ["F401"]
+"lab_sidecar/slides/service.py" = ["F841"]
+"tests/test_cli_smoke.py" = ["F841"]
+"tests/test_mcp_tools.py" = ["F401"]
+"tests/test_scenario_summary.py" = ["F401"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["lab_sidecar"]
