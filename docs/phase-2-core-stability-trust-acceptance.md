@@ -61,21 +61,22 @@ complete.
 
 ## TODO Checklist
 
-- [ ] Add schema files or schema-export tests for `manifest.json`.
-- [ ] Add schema files or schema-export tests for
+- [ ] Add schema files, schema-style tests, or schema-export tests for
+  `manifest.json`.
+- [ ] Add schema files, schema-style tests, or schema-export tests for
   `metrics/collection-summary.json`.
-- [ ] Add schema files or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `metrics/scenario-summary.json`.
-- [ ] Add schema files or schema-export tests for
+- [ ] Add schema files, schema-style tests, or schema-export tests for
   `figures/figure-summary.json`.
-- [ ] Add schema files or schema-export tests for
+- [ ] Add schema files, schema-style tests, or schema-export tests for
   `reports/report-summary.json`.
-- [ ] Add schema files or schema-export tests for
+- [ ] Add schema files, schema-style tests, or schema-export tests for
   `slides/slides-summary.json`.
-- [ ] Add schema files or schema-export tests for
+- [ ] Add schema files, schema-style tests, or schema-export tests for
   `provenance/traceability.json`.
-- [ ] Add schema files or schema-export tests for `package-summary.json` and
-  `artifact-index.json`.
+- [ ] Add schema files, schema-style tests, or schema-export tests for
+  `package-summary.json` and `artifact-index.json`.
 - [ ] Decide and document canonical versus compatibility-alias fields in figure
   summaries.
 - [ ] Decide and document public versus internal fields in slides summaries.
@@ -139,6 +140,29 @@ Observed results for this P0 inventory slice:
   and tests.
 - `.venv/bin/python -m pytest tests/test_scenario_summary.py -q`: passed,
   `10 passed in 0.03s`.
+- `git diff --check`: passed with no output.
+
+Commands run for this P1 scenario-summary schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_scenario_summary.py tests/test_scenario_summary_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_nested_json_config_collects_algorithm_benchmark_scenario tests/test_cli_smoke.py::test_multi_source_scenario_summary_stays_bounded tests/test_cli_smoke.py::test_training_run_scenario_summary_warns_when_primary_metric_missing -q
+git diff --check
+```
+
+Observed results for this P1 scenario-summary schema/test slice:
+
+- Added `tests/test_scenario_summary_contract.py` with a lightweight in-test
+  contract helper for `metrics/scenario-summary.json`; no product schema module
+  or dependency was added.
+- The helper validates the two documented JSON examples plus generated
+  training-run, algorithm-benchmark, missing-primary, and wide/free-text
+  summaries.
+- No product code was changed.
+- `.venv/bin/python -m pytest tests/test_scenario_summary.py tests/test_scenario_summary_contract.py -q`:
+  passed, `15 passed in 0.07s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_nested_json_config_collects_algorithm_benchmark_scenario tests/test_cli_smoke.py::test_multi_source_scenario_summary_stays_bounded tests/test_cli_smoke.py::test_training_run_scenario_summary_warns_when_primary_metric_missing -q`:
+  passed, `3 passed in 0.45s`.
 - `git diff --check`: passed with no output.
 
 Results should be updated at the end of each implementation slice. This initial

@@ -180,6 +180,9 @@ Current producer:
 - Contract docs already exist in
   `docs/experiment-scenario-summary-contract.md` and
   `docs/experiment-scenario-summary-examples.md`.
+- First P1 schema-style contract tests are in
+  `tests/test_scenario_summary_contract.py`. They use a lightweight in-test
+  helper, not a product schema module.
 
 Schema version:
 
@@ -226,13 +229,20 @@ Known risks:
 
 Recommended first schema tests:
 
-- Convert existing scenario summary contract examples into checked fixtures.
-- Validate generated training-run, algorithm-benchmark, missing-primary,
-  wide-table, multi-source, and bad-input/no-summary cases.
-- Assert all hard bounds and omission fields.
-- Assert free-text fields such as `notes`, `prompt`, `message`,
-  `error_message`, and `private_comment` do not enter `selected_fields`.
-- Assert missing primary metrics do not produce ranking or superiority claims.
+- Done in the first P1 schema-style test slice: convert existing scenario
+  summary contract examples into checked fixtures.
+- Done in the first P1 schema-style test slice: validate generated
+  training-run, algorithm-benchmark, missing-primary, and wide/free-text
+  summary shapes.
+- Done in the first P1 schema-style test slice: assert hard bounds, omission
+  fields, evidence `body: "omitted"`, seed aggregate claim limits, and no
+  unsupported ranking, significance, superiority, causal, or deployment-ready
+  language.
+- Done in the first P1 schema-style test slice: assert free-text fields such as
+  `notes`, `prompt`, `message`, `error_message`, and `private_comment` do not
+  enter `selected_fields`.
+- Remaining for later if useful: add dedicated checked fixture coverage for
+  bad-input/no-summary alongside the existing CLI smoke coverage.
 
 ## `figures/figure-summary.json`
 
