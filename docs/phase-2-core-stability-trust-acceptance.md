@@ -82,7 +82,7 @@ complete.
 - [x] Decide and document public versus internal fields in slides summaries.
 - [x] Add `ruff` configuration and CI gate.
 - [x] Add type-check baseline and CI gate.
-- [ ] Add coverage reporting and a conservative ratcheting policy.
+- [x] Add coverage reporting and a conservative ratcheting policy.
 - [ ] Add Windows and macOS CI smoke coverage.
 - [ ] Design the additive CLI argv/non-shell run path.
 - [ ] Implement the argv/non-shell path without breaking `run "<command>"`.
@@ -508,9 +508,63 @@ Observed results for this P2 type-check baseline slice:
   use dynamic dictionaries and compatibility aliases that need separate,
   scoped type-hardening slices before all-package checking would be useful.
 
+Commands run for this P2 coverage baseline slice:
+
+```text
+.venv/bin/python -m pip install "pytest-cov>=7.0"
+.venv/bin/python -m pytest --cov=lab_sidecar --cov-report=term-missing:skip-covered -q
+.venv/bin/python -m pip install -e ".[dev,mcp]"
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy
+.venv/bin/python -m pip install build
+.venv/bin/python -m build
+git diff --check
+```
+
+Observed results for this P2 coverage baseline slice:
+
+- Added `pytest-cov>=7.1.0` to the `dev` extra in `pyproject.toml`.
+- Added `[tool.coverage.run]` with `source = ["lab_sidecar"]`.
+- Added `[tool.coverage.report]` with `show_missing = true`,
+  `skip_covered = true`, and `fail_under = 80`.
+- Updated `.github/workflows/ci.yml` so the existing full pytest step runs
+  `python -m pytest --cov=lab_sidecar --cov-report=term-missing:skip-covered -q`.
+- Added coverage output files to `.gitignore`: `.coverage`, `.coverage.*`,
+  `coverage.xml`, and `htmlcov/`.
+- No product behavior or MCP product code was changed.
+- Initial baseline measurement without a configured dependency or threshold:
+  `.venv/bin/python -m pytest --cov=lab_sidecar --cov-report=term-missing:skip-covered -q`
+  passed with `206 passed in 49.91s`, `TOTAL 8037 967 88%`.
+- Configured threshold validation:
+  `.venv/bin/python -m pytest --cov=lab_sidecar --cov-report=term-missing:skip-covered -q`
+  passed with `206 passed in 49.75s`, `Required test coverage of 80.0% reached`,
+  and `Total coverage: 87.97%`.
+- `.venv/bin/python -m pip install -e ".[dev,mcp]"`: passed, and confirmed
+  the editable dev install includes `pytest-cov`.
+- `.venv/bin/python -m ruff check .`: passed, `All checks passed!`.
+- `.venv/bin/python -m mypy`: passed, `Success: no issues found in 15 source files`.
+- `.venv/bin/python -m pip install build` and `.venv/bin/python -m build`:
+  passed, building both `lab_sidecar-0.1.0.tar.gz` and
+  `lab_sidecar-0.1.0-py3-none-any.whl`.
+- `git diff --check`: passed with no output.
+- Ratcheting policy: keep the first required coverage threshold at `80` while
+  the observed full-suite baseline is about `88%`; raise the threshold only in
+  later scoped quality slices after the full-suite baseline improves and passes
+  consistently in CI. The threshold is a whole-package regression guard, not a
+  claim that every module has sufficient targeted coverage.
+- Known limitations: this first coverage gate uses statement coverage only,
+  does not enable subprocess coverage, does not emit or upload XML/HTML
+  artifacts in CI, and applies only to the full CI pytest command rather than
+  every focused local pytest command. `lab_sidecar/runner/worker.py` remains
+  reported as uncovered because worker subprocess coverage is not configured in
+  this slice. `source = ["lab_sidecar"]` includes MCP modules in reporting, but
+  this slice does not change MCP product code. The recorded baseline was
+  measured locally on macOS with Python 3.12.13; CI will validate the same gate
+  on Ubuntu for Python 3.11 and 3.12.
+
 ## Current Acceptance Status
 
 Phase 2 is not accepted yet. P0 inventory, P1 schema stabilization, and the P2
-ruff lint and type-check baseline/CI gate slices are accepted for this phase,
-but broader P2 quality gates, P3 run-safety design, P4 cross-platform
-reliability, and P5 alpha.4 release evidence remain open.
+ruff lint, type-check, and coverage baseline/CI gate slices are accepted for
+this phase, but P3 run-safety design, P4 cross-platform reliability, and P5
+alpha.4 release evidence remain open.

@@ -39,6 +39,7 @@ dependencies = [
 dev = [
   "mypy>=2.1.0",
   "pytest>=8.0",
+  "pytest-cov>=7.1.0",
   "ruff>=0.15.18",
   "types-PyYAML>=6.0",
 ]
@@ -84,6 +85,14 @@ files = [
 ]
 show_error_codes = true
 warn_unused_configs = true
+
+[tool.coverage.run]
+source = ["lab_sidecar"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["lab_sidecar"]
