@@ -28,6 +28,10 @@ Expected scenario summary:
 - `best_rows` references `metrics/normalized_metrics.csv`
 - full rows and logs omitted
 
+Bounded contract example:
+
+- [Training run JSON example](experiment-scenario-summary-examples.md#training-run)
+
 ## Algorithm Benchmark
 
 Fixture:
@@ -64,6 +68,28 @@ Expected scenario summary:
 - `seed_aggregates.present: true`
 - `claim_limit` says no statistical significance is inferred
 
+Bounded contract example:
+
+- [Algorithm benchmark JSON example](experiment-scenario-summary-examples.md#algorithm-benchmark)
+
+## Messy Folder Reliability
+
+Messy local folders should still resolve to the existing `training-run` or
+`algorithm-benchmark` summaries. Use `collect --config` for nested JSON,
+nonstandard field names, include/exclude source lists, and alias lists.
+
+Reliability expectations:
+
+- wide tables and many source files are summarized with explicit omitted
+  counts;
+- empty or malformed metric files are reported through bounded collection
+  diagnostics instead of crashing;
+- missing primary metrics produce warnings and `primary_metric.name: null`;
+- mixed numeric strings are used when parseable and skipped when not parseable;
+- free-text columns such as notes, prompts, error messages, and private
+  comments are not copied into scenario row previews or V2 compact scenario
+  outputs.
+
 ## V2 Delegate Example
 
 ```text
@@ -79,4 +105,3 @@ inspect_sidecar_task(".", task_id)
 
 The default response should include `summary.outputs.scenario` when collection
 produces `metrics/scenario-summary.json`.
-

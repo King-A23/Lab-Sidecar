@@ -8,6 +8,9 @@ metrics collection.
 The file gives a main AI agent enough experiment-level structure to continue
 reasoning without reading complete metric tables or logs.
 
+Small bounded JSON examples for `training-run` and `algorithm-benchmark` are in
+[experiment-scenario-summary-examples.md](experiment-scenario-summary-examples.md).
+
 ## Shape
 
 Required top-level fields:
@@ -74,6 +77,12 @@ to arbitrary row columns. Free-text columns such as `notes`, `prompt`,
 `message`, `error_message`, and `private_comment` may appear as column names in
 bounded metadata, but their cell contents must not be copied into
 `selected_fields`.
+
+When a messy local folder contains wide tables, many files, empty files,
+malformed files, non-primary numeric measurements, or mixed parseable and
+non-parseable metric strings, the summary should stay bounded. Missing primary
+metrics are reported as warnings and `primary_metric.name: null`; they must not
+be converted into unsupported ranking, superiority, or scientific claims.
 
 ## Interpretation Rules
 

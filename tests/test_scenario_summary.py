@@ -157,6 +157,60 @@ def test_selected_fields_do_not_copy_free_text_columns(field_name: str) -> None:
     assert field_name not in summary["last_rows"][0]["selected_fields"]
 
 
+def test_missing_primary_metric_warns_without_ranking_claims() -> None:
+    secret_text = "SECRET-NON-METRIC-NOTE-" + "x" * 240
+    rows = [
+        {"method": "baseline", "seed": 1, "epoch": 1, "temperature": "21.4", "private_comment": secret_text},
+        {"method": "candidate", "seed": 2, "epoch": 2, "temperature": "22.1", "private_comment": secret_text},
+    ]
+
+    summary = build_scenario_summary(
+        record=record(),
+        rows=rows,
+        collection_summary={"processed_files": [{"source_file": "results/ambient.csv", "file_type": "csv", "row_count": 2}]},
+        units={"temperature": "celsius"},
+        configured_groups={"primary": "method", "secondary": "seed"},
+    )
+    serialized = repr(summary).lower()
+
+    assert summary["primary_metric"] == {
+        "name": None,
+        "direction": None,
+        "unit": None,
+        "selection_reason": "no priority numeric metric detected",
+    }
+    assert summary["best_rows"] == []
+    assert summary["seed_aggregates"]["present"] is False
+    assert any("primary metric was not detected" in warning for warning in summary["warnings"])
+    assert "secret-non-metric-note" not in serialized
+    assert "statistically significant" not in serialized
+    assert "superior" not in serialized
+    assert "winner" not in serialized
+
+
+def test_mixed_numeric_strings_still_select_parseable_metrics() -> None:
+    rows = [
+        {"algorithm": "baseline", "seed": "1", "input_size": "100", "runtime_ms": " 55.5 "},
+        {"algorithm": "candidate", "seed": "1", "input_size": "100", "runtime_ms": "not collected"},
+        {"algorithm": "candidate", "seed": "2", "input_size": "100", "runtime_ms": "42"},
+    ]
+
+    summary = build_scenario_summary(
+        record=record(),
+        rows=rows,
+        collection_summary={"processed_files": [{"source_file": "results/runtime.csv", "file_type": "csv", "row_count": 3}]},
+        units={"runtime_ms": "ms"},
+        configured_groups={"primary": "algorithm", "secondary": "seed"},
+    )
+
+    assert summary["scenario_type"] == "algorithm-benchmark"
+    assert summary["primary_metric"]["name"] == "runtime_ms"
+    assert summary["primary_metric"]["direction"] == "min"
+    assert summary["best_rows"][0]["row_number"] == 3
+    assert summary["best_rows"][0]["value"] == 42
+    assert summary["best_rows"][0]["selected_fields"]["runtime_ms"] == "42"
+
+
 def test_algorithm_benchmark_summary_stays_descriptive_without_significance_or_superiority_claims() -> None:
     rows = []
     for method, base in [("baseline", 0.70), ("candidate", 0.85)]:

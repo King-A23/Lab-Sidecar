@@ -989,6 +989,166 @@ def test_algorithm_benchmark_scenario_summary_from_ingest_config(tmp_path: Path)
     assert '"runs"' not in serialized
 
 
+def test_training_run_scenario_summary_warns_when_primary_metric_missing(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "measurement-run"
+    source.mkdir()
+    secret_comment = "SECRET-MEASUREMENT-COMMENT-" + "x" * 180
+    (source / "metrics.csv").write_text(
+        "\n".join(
+            [
+                "method,epoch,measurement,private_comment",
+                f"baseline,1,10.1,{secret_comment}",
+                f"baseline,2,10.3,{secret_comment}",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - measurement-run/metrics.csv",
+                "fields:",
+                "  method: method",
+                "  epoch: epoch",
+                "  measurement: measurement",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "measurement-run"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    scenario = json.loads((task_path / "metrics" / "scenario-summary.json").read_text(encoding="utf-8"))
+    serialized = json.dumps(scenario, ensure_ascii=False).lower()
+    assert scenario["scenario_type"] == "training-run"
+    assert scenario["primary_metric"]["name"] is None
+    assert scenario["primary_metric"]["direction"] is None
+    assert scenario["best_rows"] == []
+    assert any("primary metric was not detected" in warning for warning in scenario["warnings"])
+    assert "secret-measurement-comment" not in serialized
+    assert "superior" not in serialized
+    assert "winner" not in serialized
+
+
+def test_nested_json_config_collects_algorithm_benchmark_scenario(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "nested-results"
+    source.mkdir()
+    (source / "results.json").write_text(
+        json.dumps(
+            {
+                "experiment": "nested-benchmark",
+                "runs": [
+                    {
+                        "algorithm": "baseline",
+                        "seed": 1,
+                        "input": {"size": 100},
+                        "metrics": {"runtime_ms": "55.2", "memory_mb": "120"},
+                        "prompt": "SECRET-NESTED-PROMPT-BASELINE",
+                    },
+                    {
+                        "algorithm": "candidate",
+                        "seed": 1,
+                        "input": {"size": 100},
+                        "metrics": {"runtime_ms": "41.7", "memory_mb": "130"},
+                        "private_comment": "SECRET-NESTED-PRIVATE-COMMENT",
+                    },
+                    {
+                        "algorithm": "candidate",
+                        "seed": 2,
+                        "input": {"size": 100},
+                        "metrics": {"runtime_ms": "39.9", "memory_mb": "131"},
+                        "error_message": "SECRET-NESTED-ERROR-MESSAGE",
+                    },
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "metrics.yaml").write_text(
+        "\n".join(
+            [
+                "sources:",
+                "  - nested-results/results.json",
+                "fields:",
+                "  algorithm: algorithm",
+                "  seed: seed",
+                "  input_size: input_size",
+                "  runtime_ms:",
+                "    source: metrics_runtime_ms",
+                "    unit: ms",
+                "  memory_mb:",
+                "    source: metrics_memory_mb",
+                "    unit: MB",
+                "groups:",
+                "  primary: algorithm",
+                "  secondary: seed",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "nested-results"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id, "--config", "metrics.yaml"])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    rows = read_csv_rows(task_path / "metrics" / "normalized_metrics.csv")
+    scenario = json.loads((task_path / "metrics" / "scenario-summary.json").read_text(encoding="utf-8"))
+    serialized = json.dumps(scenario, ensure_ascii=False)
+    assert len(rows) == 3
+    assert {"source_file", "algorithm", "seed", "input_size", "runtime_ms", "memory_mb"}.issubset(rows[0])
+    assert scenario["scenario_type"] == "algorithm-benchmark"
+    assert scenario["primary_metric"]["name"] == "runtime_ms"
+    assert scenario["primary_metric"]["direction"] == "min"
+    assert scenario["best_rows"][0]["value"] == 39.9
+    assert scenario["seed_aggregates"]["present"] is True
+    assert "SECRET-NESTED" not in serialized
+    assert '"runs"' not in serialized
+
+
+def test_multi_source_scenario_summary_stays_bounded(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "many-results"
+    source.mkdir()
+    secret_note = "SECRET-MULTI-SOURCE-NOTE-" + "x" * 180
+    for index in range(45):
+        (source / f"run_{index:02d}.csv").write_text(
+            "\n".join(
+                [
+                    "algorithm,seed,runtime_ms,notes",
+                    f"algo_{index % 3},{index},{100 - index},{secret_note}",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "many-results"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    scenario = json.loads((task_path / "metrics" / "scenario-summary.json").read_text(encoding="utf-8"))
+    serialized = json.dumps(scenario, ensure_ascii=False)
+    assert scenario["primary_metric"]["name"] == "runtime_ms"
+    assert scenario["primary_metric"]["direction"] == "min"
+    assert len(scenario["evidence"]["source_files"]) == 20
+    assert scenario["evidence"]["omitted_source_file_count"] == 25
+    assert len(scenario["last_rows"]) <= 6
+    assert len(scenario["best_rows"]) <= 4
+    assert "SECRET-MULTI-SOURCE-NOTE" not in serialized
+
+
 def test_compare_missing_metrics_no_common_numeric_and_too_many_tasks(tmp_path: Path) -> None:
     assert invoke(tmp_path, ["init"]).exit_code == 0
     metric_tasks: list[str] = []
@@ -1494,11 +1654,17 @@ def test_collect_bad_and_empty_inputs_record_diagnostics_without_outputs(tmp_pat
     assert summary["candidate_count"] == 3
     assert summary["row_count"] == 0
     assert not summary["output_files"]
+    assert not (task_path / "metrics" / "scenario-summary.json").exists()
     skipped = {(Path(item["source_file"]).name, item["reason"]) for item in summary["skipped_files"]}
     assert ("bad.json", "parse_failed") in skipped
     assert ("empty.csv", "no_detected_metrics") in skipped
     assert ("missing_metric_columns.csv", "no_detected_metrics") in skipped
+    diagnostic_reasons = {item["reason"] for item in summary["diagnostics"]}
+    assert "parse_failed" in diagnostic_reasons
     assert any("Failed to parse bad-inputs/bad.json" in warning for warning in summary["warnings"])
+    serialized = json.dumps(summary, ensure_ascii=False)
+    assert '{"epoch": 1, "accuracy":' not in serialized
+    assert "alpha,no metric columns" not in serialized
     assert not (task_path / "metrics" / "normalized_metrics.csv").exists()
     assert not (task_path / "metrics" / "normalized_metrics.json").exists()
 

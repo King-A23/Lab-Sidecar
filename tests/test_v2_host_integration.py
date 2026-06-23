@@ -116,9 +116,18 @@ def test_v2_compact_scenario_does_not_leak_free_text_selected_fields(tmp_path: P
     )
     inspected = inspect_sidecar_task(tmp_path, delegated["task_id"])
     serialized = json.dumps({"delegated": delegated, "inspected": inspected}, ensure_ascii=False)
+    scenario = delegated["summary"]["outputs"]["scenario"]
+    compact_selected = [
+        row.get("selected_fields", {})
+        for row in [*scenario.get("best_rows", []), *scenario.get("last_rows", [])]
+    ]
 
-    assert delegated["summary"]["outputs"]["scenario"]["present"] is True
-    assert delegated["summary"]["outputs"]["scenario"]["best_rows"][0]["selected_fields"]["variant"] == "candidate"
+    assert scenario["present"] is True
+    assert scenario["best_rows"][0]["selected_fields"]["variant"] == "candidate"
+    assert all("notes" not in fields for fields in compact_selected)
+    assert all("prompt" not in fields for fields in compact_selected)
+    assert all("error_message" not in fields for fields in compact_selected)
+    assert all("private_comment" not in fields for fields in compact_selected)
     assert "SECRET-NOTE-FOR-V2-COMPACT-RESPONSE" not in serialized
     assert "SECRET-PROMPT-FOR-V2-COMPACT-RESPONSE" not in serialized
     assert "SECRET-ERROR-FOR-V2-COMPACT-RESPONSE" not in serialized
