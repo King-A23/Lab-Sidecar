@@ -63,7 +63,7 @@ complete.
 
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `manifest.json`.
-- [ ] Add schema files, schema-style tests, or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `metrics/collection-summary.json`.
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `metrics/scenario-summary.json`.
@@ -190,6 +190,40 @@ Observed results for this P1 manifest schema/test slice:
   `5 passed in 1.15s`.
 - `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_simple_success_task_and_queries tests/test_cli_smoke.py::test_ingest_existing_directory tests/test_cli_smoke.py::test_simple_failure_task -q`:
   passed, `3 passed in 0.48s`.
+- `git diff --check`: passed with no output.
+
+Commands run for this P1 collection-summary schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_collection_summary_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_collect_csv_comparison_ingest_generates_normalized_metrics tests/test_cli_smoke.py::test_collect_bad_and_empty_inputs_record_diagnostics_without_outputs tests/test_cli_smoke.py::test_algorithm_benchmark_scenario_summary_from_ingest_config -q
+git diff --check
+```
+
+Observed results for this P1 collection-summary schema/test slice:
+
+- Added `tests/test_collection_summary_contract.py` with a lightweight in-test
+  contract helper for `metrics/collection-summary.json`; no product schema
+  module or product behavior change was added.
+- The helper validates generated successful CSV and JSON collection summaries,
+  explicit config summaries with units/groups/`matched_source_fields`,
+  no-candidate and bad/empty-input diagnostics without normalized outputs,
+  missing-configured-field diagnostics, mixed-unit diagnostics, and bounded
+  analysis row-evidence omission.
+- The helper validates required top-level keys, `schema_version`,
+  `candidate_count`, `candidates`, `processed_files`, `skipped_files`,
+  `warnings`, `diagnostics`, `unit_diagnostics`, `row_count`,
+  `detected_fields`, `bounded_analysis`, and `output_files` shape.
+- The helper also validates bounded metadata-only skipped/diagnostic entries,
+  normalized output references only when rows exist, bounded-analysis
+  `schema_version`, and `body: "omitted"` row evidence. It intentionally does
+  not freeze a `bounded_analysis.selected_fields` allowlist while that known
+  bounded arbitrary-field risk remains in product behavior.
+- No product code was changed.
+- `.venv/bin/python -m pytest tests/test_collection_summary_contract.py -q`:
+  passed, `8 passed in 0.50s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_collect_csv_comparison_ingest_generates_normalized_metrics tests/test_cli_smoke.py::test_collect_bad_and_empty_inputs_record_diagnostics_without_outputs tests/test_cli_smoke.py::test_algorithm_benchmark_scenario_summary_from_ingest_config -q`:
+  passed, `3 passed in 0.42s`.
 - `git diff --check`: passed with no output.
 
 Results should be updated at the end of each implementation slice. This initial

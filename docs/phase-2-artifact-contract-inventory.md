@@ -169,16 +169,28 @@ Known risks:
 - `config` shape depends on metrics config parsing and is not independently
   versioned.
 
+First schema-style tests:
+
+- First P1 schema-style contract tests are in
+  `tests/test_collection_summary_contract.py`. They use a lightweight in-test
+  helper, not a product schema module.
+
 Recommended first schema tests:
 
-- Validate successful CSV/JSON collection with normalized CSV/JSON outputs.
-- Validate no-candidate, bad JSON, empty CSV, and missing-configured-field
-  diagnostics without normalized outputs.
-- Validate configured include/exclude, `matched_source_fields`, units, groups,
-  and mixed-unit diagnostics.
-- Validate `bounded_analysis` limits and `body: "omitted"` row evidence.
-- Decide whether arbitrary fallback selected fields are public before making
-  them stable.
+- Done in the first P1 schema-style test slice: validate successful CSV/JSON
+  collection with normalized CSV/JSON outputs.
+- Done in the first P1 schema-style test slice: validate no-candidate, bad
+  JSON, empty CSV, and missing-configured-field diagnostics without normalized
+  outputs.
+- Done in the first P1 schema-style test slice: validate configured
+  include/exclude, `matched_source_fields`, units, groups, and mixed-unit
+  diagnostics.
+- Done in the first P1 schema-style test slice: validate `bounded_analysis`
+  limits and `body: "omitted"` row evidence.
+- Remaining known risk: `bounded_analysis.selected_fields` may still include
+  bounded arbitrary row fields; current tests validate hard bounds and no full
+  rows/log bodies, but do not freeze an allowlist until product behavior is
+  intentionally narrowed.
 
 ## `metrics/scenario-summary.json`
 
