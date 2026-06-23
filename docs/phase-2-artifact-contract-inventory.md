@@ -307,9 +307,12 @@ Bounded/omitted fields:
 
 Alias/compat fields:
 
-- `figures` is a compatibility alias list using `png` and `svg`.
-- `generated_figures` is the richer current list using `png_path` and
+- Canonical public figure list for new integrations and docs:
+  `generated_figures`. It is the richer current list and uses `png_path` and
   `svg_path`.
+- Compatibility alias retained for alpha readers: `figures`. It uses `png` and
+  `svg`, should continue to be accepted by readers, and should not be the
+  preferred field for new docs or host-facing examples.
 - `metrics_path` and `source_metrics` duplicate the metrics reference.
 - `spec_path` and `spec_input_path` duplicate the input spec reference.
 - Report, slide, and traceability readers currently accept
@@ -317,7 +320,8 @@ Alias/compat fields:
 
 Known risks:
 
-- Canonical versus alias policy is not yet explicitly documented in a schema.
+- The canonical versus alias policy is documented here and covered by
+  schema-style tests, but not yet exported as a standalone JSON Schema.
 - Fallback status-specific fields vary across `not_needed`, `unavailable`,
   `rejected`, and `adopted`.
 - Validation check and diagnostic messages are human-readable and may change.
@@ -339,9 +343,9 @@ Recommended first schema tests:
 - Done in the first P1 schema-style test slice: assert raw rows, log bodies,
   worker prompts/responses, and artifact bytes are absent from the summary
   contract and fallback metadata records.
-- Remaining known decision: keep alias reads accepted while steering new tests
-  and docs toward `generated_figures` as the current richer canonical list
-  until schema-level alias policy is explicitly frozen.
+- P1 field-policy decision: `generated_figures` is canonical; `figures` remains
+  a compatibility alias for alpha readers and should not be used as the
+  preferred field in new integrations.
 
 ## `reports/report-summary.json`
 
@@ -468,26 +472,38 @@ Bounded/omitted fields:
 
 Alias/compat fields:
 
-- Backward-compatible aliases are still emitted: `slide_titles`, `metrics`,
-  `metrics_table`, and `figures`.
-- `generated_from` and `source_artifacts` duplicate the source artifact list.
+- Canonical public fields for new integrations and docs:
+  `included_figures`, `included_metrics`, `slides`, `slide_evidence`,
+  `claim_traces`, `qa_checks`, `text_truncations`, `table_truncations`,
+  `caption_truncations`, `key_comparisons`, `generated_from`, and
+  `source_artifacts`.
+- Backward-compatible aliases are still emitted for alpha readers:
+  `slide_titles`, `metrics`, `metrics_table`, and `figures`. Readers may accept
+  them, but new integrations should prefer the canonical public fields above.
+- `generated_from` and `source_artifacts` intentionally duplicate the source
+  artifact list for now. Both are public/stable and must stay reference-only.
 
 Internal/unstable fields:
 
-- `project_goal.full`, `full_text_fields`, and non-log truncation `full` values
-  are current outputs but should not be included in the first strict public
-  schema until their disclosure policy is decided.
+- `project_goal.full`, `full_text_fields`, and arbitrary non-log truncation
+  `full` values are internal/unstable current outputs. They may be useful for
+  local review, but they are excluded from the first strict public schema and
+  should not be consumed by host-facing integrations.
+- Public consumers should use bounded display/excerpt fields and source
+  artifact references instead of any `full` body fields.
 
 Known risks:
 
 - `full_text_fields` currently includes full command, source path, working
-  directory, failure summary, and artifact directory. This needs a public versus
-  internal decision before schema stabilization.
+  directory, failure summary, and artifact directory. It is explicitly
+  internal/unstable for P1 and may be removed, bounded further, or moved behind
+  a debug/internal summary later.
 - `project_goal.full`, non-log text truncation `full` fields, and full caption
-  truncations may contain user-authored text.
+  truncations may contain user-authored text and remain excluded from the first
+  strict public schema.
 - Key comparisons are deterministic display aids, not statistical claims.
-- The alias fields are useful for compatibility but should not obscure the
-  canonical public shape.
+- The alias fields are useful for compatibility, but new docs and
+  integrations should prefer the canonical public fields.
 
 Schema-style test coverage added in Phase 2 P1:
 
@@ -510,9 +526,11 @@ Still-open risks after this slice:
   the contract tests.
 - Caption truncation `full` text is still present and may include user-authored
   strings; the tests only freeze bounded caption display metadata.
-- Compatibility aliases `slide_titles`, `metrics`, `metrics_table`, and
-  `figures` remain covered as compatibility outputs, but the canonical
-  public-shape decision is still open.
+- P1 field-policy decision: `included_figures`, `included_metrics`, `slides`,
+  `slide_evidence`, `claim_traces`, `qa_checks`, truncation records, and
+  source-artifact references are the canonical public surface; `slide_titles`,
+  `metrics`, `metrics_table`, and `figures` remain compatibility aliases; full
+  body fields remain internal/unstable.
 
 Recommended first schema tests:
 

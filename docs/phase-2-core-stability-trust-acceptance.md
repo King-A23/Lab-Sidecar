@@ -77,9 +77,9 @@ complete.
   `provenance/traceability.json`.
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `package-summary.json` and `artifact-index.json`.
-- [ ] Decide and document canonical versus compatibility-alias fields in figure
+- [x] Decide and document canonical versus compatibility-alias fields in figure
   summaries.
-- [ ] Decide and document public versus internal fields in slides summaries.
+- [x] Decide and document public versus internal fields in slides summaries.
 - [ ] Add `ruff` configuration and CI gate.
 - [ ] Add type-check baseline and CI gate.
 - [ ] Add coverage reporting and a conservative ratcheting policy.
@@ -397,7 +397,29 @@ Results should be updated at the end of each implementation slice. This initial
 planning slice intentionally does not implement quality gates, schemas, or
 safe-run behavior.
 
+Commands run for this P1 schema stabilization rollup:
+
+```text
+.venv/bin/python -m pytest tests/test_scenario_summary_contract.py tests/test_manifest_contract.py tests/test_collection_summary_contract.py tests/test_figure_summary_contract.py tests/test_report_summary_contract.py tests/test_slides_summary_contract.py tests/test_traceability_contract.py tests/test_package_contract.py -q
+git diff --check
+```
+
+Observed results for this P1 schema stabilization rollup:
+
+- All tracked P1 schema-style contract tests passed together:
+  `39 passed in 3.78s`.
+- The figure-summary field policy is documented in
+  `docs/phase-2-artifact-contract-inventory.md`: `generated_figures` is the
+  canonical public figure list for new integrations and docs; `figures` remains
+  an alpha compatibility alias while current readers continue to accept it.
+- The slides-summary field policy is documented in
+  `docs/phase-2-artifact-contract-inventory.md`: bounded structural summary
+  fields are public/stable, compatibility aliases remain emitted, and
+  `project_goal.full`, `full_text_fields`, and arbitrary non-log `full` bodies
+  are internal/unstable and excluded from the first strict public schema.
+
 ## Current Acceptance Status
 
-Phase 2 is not accepted yet. This scaffold is complete only as the first-layer
-planning and baseline record.
+Phase 2 is not accepted yet. P0 inventory and P1 schema stabilization are
+accepted for this phase, but P2 quality gates, P3 run-safety design, P4
+cross-platform reliability, and P5 alpha.4 release evidence remain open.
