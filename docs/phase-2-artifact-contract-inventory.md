@@ -326,14 +326,22 @@ Known risks:
 
 Recommended first schema tests:
 
-- Validate deterministic success with both `generated_figures` and alias
+- First P1 schema-style contract tests are in
+  `tests/test_figure_summary_contract.py`. They use a lightweight in-test
+  helper, not a product schema module.
+- Done in the first P1 schema-style test slice: validate deterministic success
+  with both richer canonical `generated_figures` and compatibility alias
   `figures`.
-- Validate unsupported explicit chart with fallback off.
-- Validate bounded fallback unavailable, rejected, and adopted shapes.
-- Assert raw rows, log bodies, worker prompts/responses, and artifact bytes are
-  absent from summary, request, validator, and adoption records.
-- Keep alias reads accepted while steering new code and docs toward the chosen
-  canonical figure list.
+- Done in the first P1 schema-style test slice: validate unsupported explicit
+  chart with fallback off.
+- Done in the first P1 schema-style test slice: validate bounded fallback
+  unavailable, rejected, and adopted shapes.
+- Done in the first P1 schema-style test slice: assert raw rows, log bodies,
+  worker prompts/responses, and artifact bytes are absent from the summary
+  contract and fallback metadata records.
+- Remaining known decision: keep alias reads accepted while steering new tests
+  and docs toward `generated_figures` as the current richer canonical list
+  until schema-level alias policy is explicitly frozen.
 
 ## `reports/report-summary.json`
 

@@ -67,7 +67,7 @@ complete.
   `metrics/collection-summary.json`.
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `metrics/scenario-summary.json`.
-- [ ] Add schema files, schema-style tests, or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `figures/figure-summary.json`.
 - [ ] Add schema files, schema-style tests, or schema-export tests for
   `reports/report-summary.json`.
@@ -224,6 +224,38 @@ Observed results for this P1 collection-summary schema/test slice:
   passed, `8 passed in 0.50s`.
 - `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_collect_csv_comparison_ingest_generates_normalized_metrics tests/test_cli_smoke.py::test_collect_bad_and_empty_inputs_record_diagnostics_without_outputs tests/test_cli_smoke.py::test_algorithm_benchmark_scenario_summary_from_ingest_config -q`:
   passed, `3 passed in 0.42s`.
+- `git diff --check`: passed with no output.
+
+Commands run for this P1 figure-summary schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_figure_summary_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_figures_csv_comparison_after_collect_generates_png_svg_and_spec tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_records_bounded_diagnostics_without_fallback tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_writes_bounded_request_for_fallback_mode tests/test_cli_smoke.py::test_figures_fallback_mock_worker_adopts_validated_official_artifact tests/test_cli_smoke.py::test_figures_fallback_mock_worker_rejects_malformed_image_without_adoption -q
+git diff --check
+```
+
+Observed results for this P1 figure-summary schema/test slice:
+
+- Added `tests/test_figure_summary_contract.py` with a lightweight in-test
+  contract helper for `figures/figure-summary.json`; no product schema module
+  or product behavior change was added.
+- The helper validates generated deterministic success, unsupported explicit
+  chart without fallback, bounded fallback unavailable, bounded fallback
+  adopted, and bounded fallback rejected summaries.
+- The helper validates required top-level keys, `schema_version`,
+  `metrics_path`/`source_metrics`, `figure_count`, richer canonical
+  `generated_figures`, compatibility alias `figures`, bounded
+  `unsupported_chart_diagnostics`, metadata-only `skipped_candidates`, and
+  status-specific `fallback` shape.
+- The helper also asserts optional `spec_path`/`spec_input_path`, `units`,
+  `groups`, and `field_sources` shape; generated figure fallback lineage when
+  present; and omission of raw metric rows, log bodies, worker
+  prompt/response bodies, and artifact bytes from the summary contract.
+- No product code was changed.
+- `.venv/bin/python -m pytest tests/test_figure_summary_contract.py -q`:
+  passed, `5 passed in 0.70s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_figures_csv_comparison_after_collect_generates_png_svg_and_spec tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_records_bounded_diagnostics_without_fallback tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_writes_bounded_request_for_fallback_mode tests/test_cli_smoke.py::test_figures_fallback_mock_worker_adopts_validated_official_artifact tests/test_cli_smoke.py::test_figures_fallback_mock_worker_rejects_malformed_image_without_adoption -q`:
+  passed, `5 passed in 0.67s`.
 - `git diff --check`: passed with no output.
 
 Results should be updated at the end of each implementation slice. This initial
