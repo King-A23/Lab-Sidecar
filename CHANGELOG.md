@@ -29,6 +29,8 @@ All notable user-facing changes should be recorded here. This project has not pu
 - Added a capability boundary matrix and tightened agent safety wording for
   manual CLI `run` versus MCP/V2 bounded delegation, including human-owner
   review, redaction, interpretation, and final-decision responsibilities.
+- Added the Phase 2 Core Stability and Trust source-of-truth plan and baseline
+  acceptance scaffold.
 
 ## [0.1.0] - Pending Public Alpha
 
