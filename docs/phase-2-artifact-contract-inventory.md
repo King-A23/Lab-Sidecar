@@ -662,12 +662,35 @@ Known risks:
 
 Recommended first schema tests:
 
-- Validate completed result package summary.
-- Validate failed diagnostic package summary.
-- Validate ingested task package summary.
-- Assert package type, counts, command preview, failure summary bounds, and
-  omission policy.
-- Cross-check counts against `artifact-index.json`.
+- First P1 schema-style contract tests are now in
+  `tests/test_package_contract.py`. They use a lightweight in-test helper, not
+  a product schema module.
+- Done in the package contract slice: validate a completed result package
+  summary after `run -> collect -> figures -> report -> slides`, including
+  `package_type`, task fields, counts, `included_artifacts`, omission policy,
+  figure-image inclusion, and traceability inclusion.
+- Done in the package contract slice: validate a failed diagnostic package
+  summary with `package_type: "diagnostic"`, bounded `failure_summary`,
+  unavailable metrics/figures/report/slides artifacts, and traceability still
+  present.
+- Done in the package contract slice: validate an ingested package summary with
+  `command_preview: "(none)"`, `source_path`, raw-source omission behavior, and
+  counts synchronized with `artifact-index.json`.
+- Done in the package contract slice: assert `package-summary.json` stays
+  metadata-only and does not embed hashes, sizes, full logs, worker
+  prompt/response bodies, sandbox scratch content, raw source CSV bodies, PPTX
+  internals, or artifact bytes.
+
+Remaining known risks:
+
+- `manifest.json`, `README.md`, and included artifacts can still contain local
+  commands, paths, bounded diagnostic prose, or user-generated content, so
+  package sharing still requires review.
+- `command_preview` and `failure_summary` bounds are covered, but README and
+  redaction-note prose remain intentionally unfrozen beyond current allowlist
+  wording.
+- Counts are frozen for representative generated scenarios, not for every
+  future scenario-specific included-artifact combination.
 
 ## `artifact-index.json`
 
@@ -718,14 +741,38 @@ Known risks:
 
 Recommended first schema tests:
 
-- Validate completed result package index with included hashes and metadata.
-- Validate failed diagnostic index with unavailable metrics/figures/slides and
-  included traceability.
-- Validate ingested package index omits `raw/source_refs.json` and source
-  files.
-- Assert omitted files are not copied into the package.
-- Assert self-referential artifact-index digest fields are `null` with an
-  explicit reason.
+- First P1 schema-style contract tests are now in
+  `tests/test_package_contract.py`. They use a lightweight in-test helper, not
+  a product schema module.
+- Done in the package contract slice: validate a completed result package index
+  with stable top-level fields, included artifact hashes and sizes, package
+  metadata entries, included-path parity with `package-summary.json`, and
+  traceability inclusion.
+- Done in the package contract slice: validate a failed diagnostic index with
+  unavailable metrics/figures/report/slides artifacts, omitted log/index/workspace
+  entries, and included traceability.
+- Done in the package contract slice: validate an ingested package index omits
+  `raw/source_refs.json` and raw source directories, does not copy source
+  bodies into the package, and marks reproduce artifacts unavailable for ingest
+  tasks.
+- Done in the package contract slice: assert omitted files are not copied into
+  the package and that `artifact-index.json` package metadata is
+  self-referential with `sha256: null`, `size_bytes: null`, and an explicit
+  `digest_omitted_reason`.
+- Done in the package contract slice: assert `artifact-index.json` remains
+  reference-only and does not embed raw logs, worker prompt/response bodies,
+  sandbox scratch files, SQLite bytes, raw source CSV bodies, PPTX internals,
+  or artifact bytes.
+
+Remaining known risks:
+
+- Omitted and unavailable reason strings are still human-readable strings, not
+  formal enums.
+- Included artifact rows validate hash/size presence and path parity, but they
+  do not freeze every description string or every future task-specific figure
+  file set beyond the representative scenarios covered here.
+- `artifact-index.json` does not hash itself by design; callers that need an
+  external package digest still have to compute it after package creation.
 
 ## Minimal Schema Strategy
 

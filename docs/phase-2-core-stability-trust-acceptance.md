@@ -75,7 +75,7 @@ complete.
   `slides/slides-summary.json`.
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `provenance/traceability.json`.
-- [ ] Add schema files, schema-style tests, or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `package-summary.json` and `artifact-index.json`.
 - [ ] Decide and document canonical versus compatibility-alias fields in figure
   summaries.
@@ -359,6 +359,39 @@ Observed results for this P1 slides-summary schema/test slice:
   passed, `4 passed in 1.19s`.
 - `.venv/bin/python -m pytest tests/test_cli_smoke.py -k 'slides' -q`:
   passed, `18 passed, 81 deselected in 3.20s`.
+- `git diff --check`: passed with no output.
+
+Commands run for this P1 package-summary/artifact-index schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_package_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py -k 'package' -q
+git diff --check
+```
+
+Observed results for this P1 package-summary/artifact-index schema/test slice:
+
+- Added `tests/test_package_contract.py` with a lightweight in-test contract
+  helper for `package-summary.json` and `artifact-index.json`; no product
+  schema module or product behavior change was added.
+- The helper validates generated completed result, failed diagnostic, and
+  completed ingest packages.
+- The helper validates required top-level fields, task/count sections,
+  `included_artifacts`, omitted/unavailable entry shape, package metadata
+  entries, included artifact hash/size fields, count parity between
+  `package-summary.json` and `artifact-index.json`, and the self-referential
+  `artifact-index.json` digest omission contract.
+- The helper also asserts traceability inclusion and reference-only boundedness
+  for package JSON: no embedded raw stdout/stderr logs, worker transcripts,
+  worker prompt/response bodies, sandbox scratch files, SQLite bytes, raw
+  source CSV bodies, PPTX internals, or artifact bytes in
+  `package-summary.json` or `artifact-index.json`.
+- No product code was changed.
+- `.venv/bin/python -m pytest tests/test_package_contract.py -q`: passed,
+  `3 passed in 0.77s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py -k 'package' -q`:
+  passed, `4 passed, 95 deselected in 0.92s`.
+- `git diff --check`: passed with no output.
 
 Results should be updated at the end of each implementation slice. This initial
 planning slice intentionally does not implement quality gates, schemas, or
