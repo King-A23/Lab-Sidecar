@@ -69,7 +69,7 @@ complete.
   `metrics/scenario-summary.json`.
 - [x] Add schema files, schema-style tests, or schema-export tests for
   `figures/figure-summary.json`.
-- [ ] Add schema files, schema-style tests, or schema-export tests for
+- [x] Add schema files, schema-style tests, or schema-export tests for
   `reports/report-summary.json`.
 - [ ] Add schema files, schema-style tests, or schema-export tests for
   `slides/slides-summary.json`.
@@ -256,6 +256,39 @@ Observed results for this P1 figure-summary schema/test slice:
   passed, `5 passed in 0.70s`.
 - `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_figures_csv_comparison_after_collect_generates_png_svg_and_spec tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_records_bounded_diagnostics_without_fallback tests/test_cli_smoke.py::test_figures_unsupported_explicit_chart_writes_bounded_request_for_fallback_mode tests/test_cli_smoke.py::test_figures_fallback_mock_worker_adopts_validated_official_artifact tests/test_cli_smoke.py::test_figures_fallback_mock_worker_rejects_malformed_image_without_adoption -q`:
   passed, `5 passed in 0.67s`.
+- `git diff --check`: passed with no output.
+
+Commands run for this P1 report-summary schema/test slice:
+
+```text
+.venv/bin/python -m pytest tests/test_report_summary_contract.py -q
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_report_completed_ingest_after_collect_and_figures_generates_markdown tests/test_cli_smoke.py::test_report_with_metrics_but_no_figures_generates_with_hint tests/test_cli_smoke.py::test_report_failed_run_generates_failure_report_without_metrics tests/test_cli_smoke.py::test_report_cancelled_task_generates_cancelled_report -q
+git diff --check
+```
+
+Observed results for this P1 report-summary schema/test slice:
+
+- Added `tests/test_report_summary_contract.py` with a lightweight in-test
+  contract helper for `reports/report-summary.json`; no product schema module
+  or product behavior change was added.
+- The helper validates generated completed reports with metrics and figures,
+  completed reports with metrics but no figures, failed diagnostic reports, and
+  cancelled background diagnostic reports.
+- The helper validates required top-level keys, `schema_version`, duplicate
+  source-artifact references, provenance shape, metrics summary shape, compact
+  scenario-summary reference shape, bounded figure metadata, failure and
+  cancellation context shape, reproduce references, and claim-trace evidence
+  shape.
+- The helper also asserts the 20-column display limit, 8-entry numeric-summary
+  limit, compact scenario caps, bounded 20-line stderr-tail policy, `body:
+  "omitted"` for scenario/log evidence, and omission of embedded report
+  Markdown bodies, raw metric rows, log bodies, worker prompts/responses, and
+  artifact bytes from the summary contract.
+- No product code was changed.
+- `.venv/bin/python -m pytest tests/test_report_summary_contract.py -q`:
+  passed, `4 passed in 0.68s`.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_report_completed_ingest_after_collect_and_figures_generates_markdown tests/test_cli_smoke.py::test_report_with_metrics_but_no_figures_generates_with_hint tests/test_cli_smoke.py::test_report_failed_run_generates_failure_report_without_metrics tests/test_cli_smoke.py::test_report_cancelled_task_generates_cancelled_report -q`:
+  passed, `4 passed in 0.79s`.
 - `git diff --check`: passed with no output.
 
 Results should be updated at the end of each implementation slice. This initial

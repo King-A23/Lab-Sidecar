@@ -402,13 +402,25 @@ Known risks:
 
 Recommended first schema tests:
 
-- Validate completed report with metrics and figures.
-- Validate completed report with metrics but no figures.
-- Validate failed and cancelled diagnostic reports without metrics.
-- Assert claim traces have evidence and log/scenario evidence bodies are
-  omitted.
-- Assert numeric/display column and stderr-tail bounds.
-- Assert report body text is not embedded in the summary.
+- First P1 schema-style contract tests are in
+  `tests/test_report_summary_contract.py`. They use a lightweight in-test
+  helper, not a product schema module.
+- Done in the first P1 schema-style test slice: validate completed reports with
+  metrics and figures.
+- Done in the first P1 schema-style test slice: validate completed reports with
+  metrics but no figures, including display-column and numeric-summary caps.
+- Done in the first P1 schema-style test slice: validate failed and cancelled
+  diagnostic reports without metrics.
+- Done in the first P1 schema-style test slice: assert claim traces have
+  evidence and log/scenario evidence bodies are omitted.
+- Done in the first P1 schema-style test slice: assert numeric/display-column,
+  compact-scenario, and stderr-tail bounds.
+- Done in the first P1 schema-style test slice: assert report body text is not
+  embedded in the summary.
+- Remaining known risk: `metrics.columns`, `metrics.processed_files`, and
+  review-required provenance/failure text still copy broad user-local metadata
+  into the report summary; current tests freeze boundedness and omission rules
+  without narrowing that product surface.
 
 ## `slides/slides-summary.json`
 
