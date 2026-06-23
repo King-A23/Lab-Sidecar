@@ -83,7 +83,7 @@ complete.
 - [x] Add `ruff` configuration and CI gate.
 - [x] Add type-check baseline and CI gate.
 - [x] Add coverage reporting and a conservative ratcheting policy.
-- [ ] Add Windows and macOS CI smoke coverage.
+- [x] Add Windows and macOS CI smoke coverage.
 - [ ] Design the additive CLI argv/non-shell run path.
 - [ ] Implement the argv/non-shell path without breaking `run "<command>"`.
 - [ ] Add reproduce metadata that distinguishes shell and argv run modes.
@@ -562,9 +562,46 @@ Observed results for this P2 coverage baseline slice:
   measured locally on macOS with Python 3.12.13; CI will validate the same gate
   on Ubuntu for Python 3.11 and 3.12.
 
+Commands run for this P4 cross-platform CI smoke slice:
+
+```text
+.venv/bin/python -m pytest tests/test_cli_smoke.py::test_init_creates_workspace tests/test_cli_smoke.py::test_doctor_reports_workspace_health tests/test_cli_smoke.py::test_simple_success_task_and_queries tests/test_cli_smoke.py::test_background_completed_task_refreshes_to_completed tests/test_cli_smoke.py::test_background_run_status_logs_and_cancel tests/test_cli_smoke.py::test_slides_after_collect_figures_report_generates_pptx_and_summary tests/test_cli_smoke.py::test_package_completed_task_exports_allowlisted_artifacts_only -q
+.venv/bin/python -m ruff check .
+.venv/bin/python -m mypy
+git diff --check
+```
+
+Observed results for this P4 cross-platform CI smoke slice:
+
+- Added a separate `platform-smoke` job to `.github/workflows/ci.yml`.
+- The smoke matrix runs on `macos-latest` and `windows-latest` for Python
+  `3.11` and `3.12`.
+- The platform job installs `python -m pip install -e ".[dev]"` and does not
+  install the optional MCP extra.
+- The focused pytest subset covers workspace init, doctor diagnostics,
+  foreground run/status/log/artifact inspection, background completion refresh,
+  background run/status/logs/cancellation, deterministic collect/figures/report/
+  slides generation, PPTX readability, traceability refresh through report/
+  slides paths, and package export.
+- The existing Ubuntu job remains the full matrix for Ruff, mypy, coverage
+  pytest, and package build.
+- No product behavior or MCP product code was changed.
+- `.venv/bin/python -m pytest tests/test_cli_smoke.py::test_init_creates_workspace tests/test_cli_smoke.py::test_doctor_reports_workspace_health tests/test_cli_smoke.py::test_simple_success_task_and_queries tests/test_cli_smoke.py::test_background_completed_task_refreshes_to_completed tests/test_cli_smoke.py::test_background_run_status_logs_and_cancel tests/test_cli_smoke.py::test_slides_after_collect_figures_report_generates_pptx_and_summary tests/test_cli_smoke.py::test_package_completed_task_exports_allowlisted_artifacts_only -q`:
+  passed, `7 passed in 1.75s`.
+- `.venv/bin/python -m ruff check .`: passed, `All checks passed!`.
+- `.venv/bin/python -m mypy`: passed, `Success: no issues found in 15 source files`.
+- `git diff --check`: passed with no output.
+- Known limitations: local validation ran on macOS only; actual Windows and
+  GitHub-hosted macOS evidence will come from CI after this workflow change is
+  pushed. This first platform job is intentionally a focused smoke, not full
+  cross-platform coverage, and it does not run optional MCP stdio smoke,
+  coverage reporting, package build, stale-worker recovery, background failure
+  refresh, or future argv/non-shell run safety cases on Windows/macOS.
+
 ## Current Acceptance Status
 
 Phase 2 is not accepted yet. P0 inventory, P1 schema stabilization, and the P2
 ruff lint, type-check, and coverage baseline/CI gate slices are accepted for
-this phase, but P3 run-safety design, P4 cross-platform reliability, and P5
+this phase. The first P4 Windows/macOS focused CI smoke slice is also accepted,
+but P3 run-safety design, broader P4 cross-platform reliability, and P5
 alpha.4 release evidence remain open.

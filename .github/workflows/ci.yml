@@ -28,3 +28,27 @@ jobs:
         run: |
           python -m pip install build
           python -m build
+  platform-smoke:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Run platform smoke tests
+        run: >-
+          python -m pytest -q
+          tests/test_cli_smoke.py::test_init_creates_workspace
+          tests/test_cli_smoke.py::test_doctor_reports_workspace_health
+          tests/test_cli_smoke.py::test_simple_success_task_and_queries
+          tests/test_cli_smoke.py::test_background_completed_task_refreshes_to_completed
+          tests/test_cli_smoke.py::test_background_run_status_logs_and_cancel
+          tests/test_cli_smoke.py::test_slides_after_collect_figures_report_generates_pptx_and_summary
+          tests/test_cli_smoke.py::test_package_completed_task_exports_allowlisted_artifacts_only
