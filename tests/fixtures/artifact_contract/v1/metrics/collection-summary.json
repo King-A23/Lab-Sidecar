@@ -1,0 +1,133 @@
+{
+  "schema_version": "1",
+  "task_id": "task_fixture_20260625_000000",
+  "task_status": "completed",
+  "collected_at": "2026-06-25T00:00:02+00:00",
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "source_file": "metrics.csv",
+      "origin": "workspace",
+      "suffix": ".csv",
+      "source_provenance": {
+        "size_bytes": 72,
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      }
+    }
+  ],
+  "processed_files": [
+    {
+      "source_file": "metrics.csv",
+      "file_type": "csv",
+      "row_count": 2,
+      "source_provenance": {
+        "size_bytes": 72,
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "detected_fields": [
+        "epoch",
+        "train_loss",
+        "val_accuracy"
+      ],
+      "mapped_fields": [
+        "epoch",
+        "train_loss",
+        "val_accuracy"
+      ],
+      "matched_source_fields": {
+        "epoch": [
+          "epoch"
+        ],
+        "train_loss": [
+          "train_loss"
+        ],
+        "val_accuracy": [
+          "val_accuracy"
+        ]
+      }
+    }
+  ],
+  "skipped_files": [],
+  "warnings": [],
+  "diagnostics": [],
+  "unit_diagnostics": [],
+  "row_count": 2,
+  "detected_fields": [
+    "epoch",
+    "train_loss",
+    "val_accuracy"
+  ],
+  "config_path": null,
+  "config": null,
+  "units": {},
+  "groups": {},
+  "matched_source_fields": {
+    "epoch": [
+      "epoch"
+    ],
+    "train_loss": [
+      "train_loss"
+    ],
+    "val_accuracy": [
+      "val_accuracy"
+    ]
+  },
+  "source_selection": {
+    "explicit_sources": false,
+    "selected_count": 1,
+    "selected_files": [
+      "metrics.csv"
+    ],
+    "omitted_selected_file_count": 0,
+    "skipped_counts_by_reason": [],
+    "skipped_files": [],
+    "omitted_skipped_file_count": 0
+  },
+  "bounded_analysis": {
+    "schema_version": "1",
+    "row_count": 2,
+    "limits": {
+      "best_rows": 5,
+      "selected_fields_per_row": 8,
+      "anomaly_groups": 5,
+      "string_chars": 80
+    },
+    "best_rows": [
+      {
+        "metric": "val_accuracy",
+        "direction": "max",
+        "value": 0.86,
+        "row_number": 2,
+        "selected_fields": {
+          "epoch": 2,
+          "val_accuracy": 0.86
+        },
+        "omitted_field_count": 1,
+        "evidence": {
+          "path": "metrics/normalized_metrics.csv",
+          "row_number": 2,
+          "body": "omitted"
+        }
+      }
+    ],
+    "checkpoint_summary": {
+      "rows": 2,
+      "last_row_number": 2,
+      "selected_fields": {
+        "epoch": 2,
+        "val_accuracy": 0.86
+      },
+      "omitted_field_count": 1,
+      "evidence": {
+        "path": "metrics/normalized_metrics.csv",
+        "row_number": 2,
+        "body": "omitted"
+      }
+    },
+    "anomaly_summary": []
+  },
+  "output_files": [
+    ".lab-sidecar/tasks/task_fixture_20260625_000000/metrics/normalized_metrics.csv",
+    ".lab-sidecar/tasks/task_fixture_20260625_000000/metrics/normalized_metrics.json"
+  ]
+}

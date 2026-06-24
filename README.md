@@ -53,7 +53,24 @@ The full demo recipe is in [docs/demo-public-alpha.md](docs/demo-public-alpha.md
 
 ## 10-Minute Quickstart
 
-Install from a clone:
+For released v0.1.x artifacts, download the wheel or sdist from the GitHub
+release page and install it locally:
+
+```bash
+python -m pip install lab_sidecar-<version>-py3-none-any.whl
+labsidecar --help
+labsidecar doctor
+```
+
+The sdist can be installed the same way:
+
+```bash
+python -m pip install lab_sidecar-<version>.tar.gz
+```
+
+PyPI is not the default install promise for this public-alpha line unless a
+maintainer publishes and announces it separately. For development from a clone,
+use an editable install:
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -412,9 +429,14 @@ python -m build
 Run release-oriented smokes from a repository checkout:
 
 ```bash
+python scripts/release_check.py --version 0.1.5
 python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-cli-full-smoke --repo "$(pwd)"
 python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"
+python scripts/release_asset_smoke.py --wheel dist/lab_sidecar-0.1.5-py3-none-any.whl --version 0.1.5 --workspace /tmp/lab-sidecar-release-asset-smoke --repo "$(pwd)"
 ```
+
+`release_check.py` and the smoke scripts are verification tools only. They do
+not create tags, GitHub releases, uploads, or PyPI publications.
 
 ## Project Docs
 

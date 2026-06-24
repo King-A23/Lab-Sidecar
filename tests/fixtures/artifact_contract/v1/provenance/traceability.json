@@ -1,0 +1,171 @@
+{
+  "schema_version": "1",
+  "task_id": "task_fixture_20260625_000000",
+  "generated_at": "2026-06-25T00:00:03+00:00",
+  "task": {
+    "mode": "run",
+    "status": "completed",
+    "working_dir": ".",
+    "manifest_path": "manifest.json",
+    "command_path": "reproduce/command.txt",
+    "run_spec_path": "reproduce/run.json",
+    "run_mode": "argv",
+    "argv": [
+      "python",
+      "examples/simple-success/train.py",
+      "--output",
+      "metrics.csv"
+    ],
+    "safe_profile": null,
+    "source_path": null
+  },
+  "environment": {
+    "python_executable": "python",
+    "env_path": "reproduce/env.json",
+    "git_path": "reproduce/git.json",
+    "dependencies_path": "reproduce/dependencies.json"
+  },
+  "sources": [
+    {
+      "path": "metrics.csv",
+      "role": "metric_source",
+      "size_bytes": 72,
+      "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "file_type": "csv",
+      "row_count": 2,
+      "detected_fields": [
+        "epoch",
+        "train_loss",
+        "val_accuracy"
+      ]
+    }
+  ],
+  "artifacts": [
+    {
+      "artifact_id": "metrics_collection_summary",
+      "type": "summary",
+      "path": "metrics/collection-summary.json",
+      "description": "Metrics collection summary.",
+      "source_paths": [
+        "metrics/normalized_metrics.csv"
+      ],
+      "exists": true,
+      "size_bytes": 512,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "artifact_id": "log_stdout",
+      "type": "log",
+      "path": "stdout.log",
+      "description": "Captured stdout log.",
+      "source_paths": [],
+      "exists": true,
+      "size_bytes": 128,
+      "sha256": null,
+      "digest_omitted_reason": "full log digest omitted from public traceability fixture"
+    }
+  ],
+  "metric_lineage": {
+    "present": true,
+    "path": "metrics/normalized_metrics.csv",
+    "json_path": "metrics/normalized_metrics.json",
+    "collection_summary_path": "metrics/collection-summary.json",
+    "scenario_summary_path": "metrics/scenario-summary.json",
+    "scenario_type": "training-run",
+    "primary_metric": "val_accuracy",
+    "scenario_claim_limit": "descriptive",
+    "row_count": 2,
+    "columns": [
+      "epoch",
+      "train_loss",
+      "val_accuracy"
+    ],
+    "detected_fields": [
+      "epoch",
+      "train_loss",
+      "val_accuracy"
+    ],
+    "source_files": [
+      "metrics.csv"
+    ],
+    "output_files": [
+      "metrics/normalized_metrics.csv",
+      "metrics/normalized_metrics.json"
+    ]
+  },
+  "figure_lineage": {
+    "present": false,
+    "summary_path": null,
+    "spec_path": null,
+    "figure_count": 0,
+    "figures": [],
+    "unsupported_chart_diagnostics": [],
+    "fallback": null,
+    "warnings": [],
+    "errors": []
+  },
+  "report_lineage": {
+    "present": false,
+    "path": null,
+    "summary_path": null,
+    "template": null,
+    "source_artifacts": [],
+    "claim_trace_count": 0,
+    "claim_ids": []
+  },
+  "slide_lineage": {
+    "present": false,
+    "pptx_path": null,
+    "summary_path": null,
+    "template": null,
+    "slide_count": 0,
+    "slides": [],
+    "included_figures": [],
+    "metrics": {
+      "present": true,
+      "path": "metrics/normalized_metrics.csv",
+      "row_count": 2,
+      "key_columns": [
+        "epoch"
+      ],
+      "numeric_columns": [
+        "train_loss",
+        "val_accuracy"
+      ]
+    }
+  },
+  "claim_traces": [],
+  "omitted": [
+    {
+      "path": "stdout.log",
+      "category": "log",
+      "reason": "full stdout log body omitted by default"
+    },
+    {
+      "path": "stderr.log",
+      "category": "log",
+      "reason": "full stderr log body omitted by default"
+    },
+    {
+      "path": "raw/source_refs.json",
+      "category": "raw_source",
+      "reason": "full raw source reference body omitted; distilled source hashes are recorded separately"
+    },
+    {
+      "path": "intelligence",
+      "category": "worker",
+      "reason": "worker prompt and response bodies are omitted by default"
+    },
+    {
+      "path": ".lab-sidecar/index.sqlite",
+      "category": "index",
+      "reason": "local SQLite indexes are omitted by default"
+    }
+  ],
+  "traceability_artifact": {
+    "artifact_id": "provenance_traceability_json",
+    "path": "provenance/traceability.json",
+    "self_digest_note": "self digest omitted because this file describes itself"
+  },
+  "warnings": []
+}

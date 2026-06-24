@@ -69,6 +69,8 @@ def test_release_hardening_docs_name_current_commands() -> None:
         "package-verify <package_dir>",
         "scripts/cli_full_smoke.py",
         "scripts/wheel_smoke.py",
+        "scripts/release_check.py",
+        "scripts/release_asset_smoke.py",
         "artifact-index.sha256",
         "figures:",
     ]:

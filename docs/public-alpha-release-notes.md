@@ -2,6 +2,17 @@
 
 Date: 2026-06-08
 
+## Current v0.1.x Release Line
+
+These notes include historical public-alpha checkpoints. For the current
+package version and release-line changes, prefer [CHANGELOG.md](../CHANGELOG.md)
+and the version-specific acceptance records.
+
+The v0.1.5 release-trust slice documents GitHub release wheel/sdist
+installation and adds local release verification scripts. The implementation
+slice does not create a v0.1.5 tag, create a GitHub release, or publish to
+PyPI; those remain maintainer-operated release steps.
+
 ## Summary
 
 Lab-Sidecar public alpha is a local-first, CLI-first research sidecar for AI agents and experiment workflows. It can run or ingest local experiment results, collect CSV/JSON metrics, generate static figures, write deterministic Markdown report fragments, and create editable static PPTX drafts.
@@ -107,8 +118,9 @@ setup validation, policy configuration, and broader malformed fixture coverage.
 
 Date: 2026-06-19
 
-Current package version remains `0.1.0` in `pyproject.toml`. No release tag or
-PyPI publish step has been performed in this repository state.
+At the time of this 2026-06-19 audit, the package version remained `0.1.0` in
+`pyproject.toml`. No release tag or PyPI publish step had been performed in
+that repository state.
 
 Stage 1 through Stage 5 are now committed on `main`:
 

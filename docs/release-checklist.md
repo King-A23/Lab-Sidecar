@@ -29,9 +29,12 @@ python -m pytest -q
 python -m ruff check .
 python -m pip install build
 python -m build
+python scripts/release_check.py --version <version>
+python scripts/release_check.py --version <version> --tag v<version> --require-clean-git
 python -m lab_sidecar.cli.app --help
 python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-cli-full-smoke --repo "$(pwd)"
 python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"
+python scripts/release_asset_smoke.py --wheel dist/lab_sidecar-<version>-py3-none-any.whl --version <version> --workspace /tmp/lab-sidecar-release-asset-smoke --repo "$(pwd)"
 git diff --check
 test ! -e .lab-sidecar
 ```
@@ -40,6 +43,22 @@ The smoke scripts are intended to run from a repository checkout. `scripts/`
 is packaged in sdists for release validation from source, but the wheel smoke
 installs the built wheel into an isolated venv before exercising the installed
 CLI.
+
+`scripts/release_check.py` is a pre-tag local verifier. It checks version
+consistency across `pyproject.toml`, `lab_sidecar/__init__.py`, and
+`CHANGELOG.md`, confirms unstaged, staged, and committed whitespace checks,
+rejects root `.lab-sidecar/` state, verifies target-version wheel/sdist names
+and distribution metadata under `dist/`, rejects stale Lab-Sidecar artifacts
+from older versions, and reports SHA-256 digests. It does not create tags,
+releases, uploads, or publishes. Use `--require-clean-git` after committing
+release-candidate changes and before creating a tag.
+
+`scripts/release_asset_smoke.py` verifies a supplied wheel artifact, such as a
+wheel downloaded from a GitHub release or a local `dist/` wheel. Local wheel
+paths are the normal release check; HTTP(S) wheel URLs are manual release
+verification inputs and should not be required by the default test suite. Pass
+`--version <version>` so the smoke confirms the installed package metadata is
+the expected release version.
 
 Release smoke can run in either online or offline dependency mode:
 
@@ -125,6 +144,23 @@ python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-mcp-stdio-smoke
 python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"
 ```
 
+- Verify the pre-release metadata and dist artifact gate:
+
+```bash
+python scripts/release_check.py --version <version>
+python scripts/release_check.py --version <version> --tag v<version> --require-clean-git
+```
+
+- Verify the exact wheel artifact users will install:
+
+```bash
+python scripts/release_asset_smoke.py \
+  --wheel dist/lab_sidecar-<version>-py3-none-any.whl \
+  --version <version> \
+  --workspace /tmp/lab-sidecar-release-asset-smoke \
+  --repo "$(pwd)"
+```
+
 - Verify the console script works after install:
 
 ```bash
@@ -148,6 +184,7 @@ Release notes should include:
 
 - Version and date.
 - Supported install command.
+- GitHub release wheel/sdist install verification path.
 - Main workflow summary.
 - Validation commands and results.
 - Known limitations.
@@ -156,8 +193,9 @@ Release notes should include:
 - Upgrade notes, if any.
 
 The current release hardening acceptance record is
-[release-hardening-acceptance.md](release-hardening-acceptance.md). Keep it in
-sync with the actual commands run for the release candidate.
+[v0.1.5-install-release-trust-acceptance.md](v0.1.5-install-release-trust-acceptance.md)
+for the v0.1.5 line. Older release hardening evidence remains in
+[release-hardening-acceptance.md](release-hardening-acceptance.md).
 
 ## Post-Release
 
