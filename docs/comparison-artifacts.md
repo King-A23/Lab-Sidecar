@@ -66,8 +66,7 @@ The first implementation compares shared numeric fields only. Metadata and
 identity fields such as `source_file`, `source_path`, `file`, `path`, `epoch`,
 `step`, `iter`, `iteration`, `checkpoint`, `ckpt`, `timestamp`, `seed`,
 `trial`, `run_id`, and `config_id` are not treated as comparison metrics. Row
-selection is `final_row`. Future work may add a descriptive `best_row` option,
-but it must remain bounded and non-interpretive.
+selection is `final_row`.
 
 ## Outputs
 
@@ -90,10 +89,8 @@ A saved comparison writes:
     traceability.json
 ```
 
-Static PPTX comparison decks are deferred. They can be added later as
-`slides/comparison-presentation-draft.pptx` and `slides/slides-summary.json`
-if they can reuse the same bounded evidence contract without broadening the
-active scope.
+Static PPTX comparison decks are deferred and are not part of the current
+comparison artifact contract.
 
 ## Bounded Contract
 

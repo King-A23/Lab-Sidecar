@@ -90,7 +90,7 @@ def test_wheel_smoke_summary_includes_comparison_contract(tmp_path: Path, monkey
         if "-m build" in " ".join(map(str, command)):
             dist_dir = Path(command[-1])
             dist_dir.mkdir(parents=True, exist_ok=True)
-            (dist_dir / "lab_sidecar-0.1.0-py3-none-any.whl").write_text("wheel\n", encoding="utf-8")
+            (dist_dir / "lab_sidecar-0.1.1-py3-none-any.whl").write_text("wheel\n", encoding="utf-8")
         if command[:3] and command[-3:] == ["-m", "pip", "install"]:
             return subprocess.CompletedProcess(command, 0, "", "")
         return subprocess.CompletedProcess(command, 0, "", "")

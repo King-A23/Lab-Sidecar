@@ -4,8 +4,8 @@ Date: 2026-06-24
 
 ## Goal
 
-Harden the saved comparison artifact workflow for a cautious local-first alpha
-release candidate without adding a new product surface.
+Finalize the saved comparison artifact workflow for v0.1.1 without adding a
+new product surface.
 
 ## Scope
 
@@ -79,18 +79,14 @@ with the system Python failed during collection because that interpreter did not
 have `PyYAML` installed. The repository virtual environment passed the focused
 suite.
 
-Final release re-baseline commands must still be recorded here after they are
-run:
+Final release re-baseline commands:
 
 | Command | Result |
 | --- | --- |
-| `.venv/bin/python -m pytest -q` | Passed; 252 tests passed. |
+| `.venv/bin/python -m pytest -q` | Passed; 272 tests passed. |
 | `.venv/bin/python -m ruff check .` | Passed. |
-| `.venv/bin/python -m build` | Passed; built `lab_sidecar-0.1.0.tar.gz` and `lab_sidecar-0.1.0-py3-none-any.whl`. |
-| `.venv/bin/python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-cli-full-smoke --repo "$(pwd)"` | Passed; covered success, failed-task diagnostic, ingest, saved comparison, comparison validation, comparison packaging, and package verification flows. |
-| `.venv/bin/python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"` | Passed; built a wheel, installed it into an isolated venv, ran installed `labsidecar`, validated artifacts, packaged the task and saved comparison, and verified both packages. |
-| `.venv/bin/python -m pytest tests/test_mcp_tools.py tests/test_v2_host_integration.py -q` | Passed; 32 tests passed. |
-| `.venv/bin/python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-mcp-smoke` | Passed. |
+| `.venv/bin/python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-final-smoke --repo "$(pwd)"` | Passed; covered success, failed-task diagnostic, ingest, saved comparison, comparison validation, comparison packaging, and package verification flows. |
+| `.venv/bin/python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-final-wheel-smoke --repo "$(pwd)"` | Passed; built `lab_sidecar-0.1.1-py3-none-any.whl`, installed it into an isolated venv, ran installed `labsidecar`, validated artifacts, packaged the task and saved comparison, and verified both packages. |
 | `git diff --check` | Passed. |
 | `test ! -e .lab-sidecar` | Passed; the repository root did not contain `.lab-sidecar`. |
 
@@ -98,7 +94,7 @@ run:
 
 Focused comparison artifact suite: 12 tests passed.
 
-Full repository test suite: 252 tests passed.
+Full repository test suite: 272 tests passed.
 
 ## Known Limits
 
@@ -112,12 +108,11 @@ Full repository test suite: 252 tests passed.
 
 ## Release Judgment
 
-Ready for cautious local-first alpha RC.
+Ready for v0.1.1 final release PR review.
 
 ## Follow-Up Candidates
 
-- List/open saved comparison UX.
 - Optional comparison slides.
-- Richer deterministic comparison report formatting.
+- Additional bounded comparison report formatting refinements.
 
-These follow-ups are not part of the current hardening task.
+These follow-ups are not part of v0.1.1 finalization.

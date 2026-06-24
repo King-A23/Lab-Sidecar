@@ -2,7 +2,7 @@
 
 All notable user-facing changes should be recorded here. This project has not published a stable release yet; entries describe the current public-alpha baseline and pending changes.
 
-## [Unreleased]
+## [0.1.1] - 2026-06-24
 
 ### Added
 
@@ -76,14 +76,14 @@ All notable user-facing changes should be recorded here. This project has not pu
   coverage, stricter comparison validation/package consistency checks, smoke
   summary re-baselining, and a dedicated comparison acceptance record.
 - Closed the build and installed-wheel smoke blocker in a venv-backed release
-  validation environment: `python -m build` produced the `0.1.0` sdist and wheel,
-  and `scripts/wheel_smoke.py` installed the wheel into an isolated venv before
-  running the installed `labsidecar` workflow through `package-verify`.
+  validation environment: `scripts/wheel_smoke.py` builds the release wheel,
+  installs it into an isolated venv, and runs the installed `labsidecar`
+  workflow through `package-verify`.
 - Aligned MCP/V2 omitted-content metadata keys with the public bounded-response
   contract without expanding the tool surface or returning additional artifact
   bodies.
-- Kept version `0.1.0` for the pending public alpha; no tag, push, release, or
-  PyPI publish was performed.
+- Prepared the package metadata for v0.1.1 release finalization; no tag, main
+  push, release, or PyPI publish was performed during finalization.
 
 ## [0.1.0] - Pending Public Alpha
 
