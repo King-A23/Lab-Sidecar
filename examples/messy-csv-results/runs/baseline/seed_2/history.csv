@@ -1,0 +1,4 @@
+step,method,seed,acc,loss,latency_ms,status,warning_flag,checkpoint
+1,baseline,2,0.718,0.598,54,ok,0,ckpt/baseline-s2-e1.pt
+2,baseline,2,0.751,0.536,50,ok,0,ckpt/baseline-s2-e2.pt
+3,baseline,2,0.765,0.515,48,ok,0,ckpt/baseline-s2-e3.pt

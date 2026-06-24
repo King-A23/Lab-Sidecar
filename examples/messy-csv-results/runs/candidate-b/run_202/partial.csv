@@ -1,0 +1,2 @@
+epoch,variant,val_loss,runtime_ms,status,warning_flag,checkpoint
+1,candidate_b,0.490,47,missing_accuracy_and_seed,1,ckpt/candidate-b-202-e1.pt

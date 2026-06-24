@@ -1,0 +1,4 @@
+iter,algo,run_id,score_pct,loss,time_ms,status,warning_flag,checkpoint
+1,candidate_a,101,0.792,0.481,44,ok,0,ckpt/candidate-a-101-e1.pt
+2,candidate_a,101,0.831,0.432,39,ok,0,ckpt/candidate-a-101-e2.pt
+3,candidate_a,101,0.846,0.410,37,ok,0,ckpt/candidate-a-101-e3.pt

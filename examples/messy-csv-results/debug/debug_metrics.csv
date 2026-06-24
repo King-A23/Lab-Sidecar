@@ -1,0 +1,2 @@
+epoch,method,seed,accuracy,loss,latency_ms,status,warning_flag,checkpoint
+1,debug,0,0.010,9.990,999,debug_only,1,debug.pt

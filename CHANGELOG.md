@@ -2,6 +2,39 @@
 
 All notable user-facing changes should be recorded here. This project has not published a stable release yet; entries describe the current public-alpha baseline and pending changes.
 
+## [0.1.3] - Pending
+
+### Added
+
+- Added small checked-in real-ish fixtures for messy CSV collection and JSON
+  benchmark collection, each with explicit `collect --config` examples.
+- Added focused regression coverage for messy CSV and JSON benchmark ingest
+  paths through deterministic figures, reports, slides, validation, and
+  packaging where applicable.
+
+### Changed
+
+- `metrics/collection-summary.json` now includes bounded `source_selection`
+  evidence for configured source include/exclude handling, selected files,
+  skipped configured sources, and next-action guidance.
+- Collector diagnostics keep existing reason strings while adding bounded
+  messages for empty/header-only CSV inputs and files with no detected metric
+  fields.
+- Automatic figure planning now tries deterministic box/bar defaults when a
+  detected line-chart axis cannot produce any usable line figure.
+
+### Documentation
+
+- Documented the v0.1.3 real sample robustness plan and acceptance record.
+- Updated public docs to point users at explicit config for representative
+  messy local CSV/JSON samples without expanding the supported product scope.
+
+### Validation
+
+- No Web UI, FastAPI/HTTP service, hosted service, remote runner, cloud sync,
+  advanced analytics, statistical significance, AI-authored conclusions, DAG
+  scheduler, or MCP/V2 product-surface expansion was added.
+
 ## [0.1.2] - 2026-06-24
 
 ### Changed

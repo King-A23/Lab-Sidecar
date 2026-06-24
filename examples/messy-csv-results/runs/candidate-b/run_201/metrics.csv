@@ -1,0 +1,4 @@
+epoch,variant,seed,val_accuracy,val_loss,runtime_s,status,warning_flag,checkpoint
+1,candidate_b,201,0.805,0.470,0.046,ok,0,ckpt/candidate-b-201-e1.pt
+2,candidate_b,201,0.842,0.421,0.041,retry_completed,1,ckpt/candidate-b-201-e2.pt
+3,candidate_b,201,0.857,0.398,0.038,ok,0,ckpt/candidate-b-201-e3.pt

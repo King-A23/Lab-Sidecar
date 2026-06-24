@@ -123,7 +123,17 @@ class MetricsCollectionService:
             source_file = to_manifest_path(candidate.path, self.root)
             warnings.extend(file_warnings)
             if not file_rows:
-                skipped_files.append({"source_file": source_file, "reason": "no_detected_metrics"})
+                skip = _no_detected_metrics_skip(candidate, self.root)
+                skipped_files.append(skip)
+                if skip.get("message"):
+                    warnings.append(skip["message"])
+                    diagnostics.append(
+                        {
+                            "source_file": skip["source_file"],
+                            "reason": skip["reason"],
+                            "message": skip["message"],
+                        }
+                    )
                 continue
 
             for row in file_rows:
@@ -348,6 +358,12 @@ class MetricsCollectionService:
             "diagnostics": diagnostics,
             "unit_diagnostics": unit_diagnostics,
             "matched_source_fields": _merge_matched_source_fields(collected_files),
+            "source_selection": _source_selection_summary(
+                self.root,
+                config,
+                candidates,
+                skipped_files,
+            ),
             "row_count": row_count,
             "detected_fields": detected_fields,
             "bounded_analysis": _bounded_analysis_summary(rows),
@@ -422,6 +438,9 @@ MAX_BOUNDED_BEST_ROWS = 6
 MAX_BOUNDED_SELECTED_FIELDS = 14
 MAX_BOUNDED_ANOMALY_GROUPS = 20
 MAX_BOUNDED_STRING_CHARS = 180
+MAX_SOURCE_SELECTION_FILES = 50
+MAX_DIAGNOSTIC_FIELD_NAMES = 12
+MAX_DIAGNOSTIC_FIELD_NAME_CHARS = 80
 
 HIGHER_IS_BETTER_METRICS = (
     "val_accuracy",
@@ -969,8 +988,19 @@ def _configured_candidates(
 
         for path in matches:
             source_file = to_manifest_path(path, root)
-            if _matches_any_source_pattern(root, path, exclude_patterns):
-                skipped_files.append({"source_file": source_file, "reason": "configured_source_excluded"})
+            matched_exclude = _matched_source_pattern(root, path, exclude_patterns)
+            if matched_exclude:
+                message = (
+                    f"Configured source was excluded by sources.exclude pattern "
+                    f"'{matched_exclude}': {source_file}"
+                )
+                skipped_files.append(
+                    {
+                        "source_file": source_file,
+                        "reason": "configured_source_excluded",
+                        "message": message,
+                    }
+                )
                 continue
             if not _is_within(path, root):
                 message = f"Configured source is outside the workspace: {source_file}"
@@ -1096,8 +1126,12 @@ def _static_pattern_prefix(root: Path, pattern: str) -> Path:
 
 
 def _matches_any_source_pattern(root: Path, path: Path, patterns: tuple[str, ...]) -> bool:
+    return _matched_source_pattern(root, path, patterns) is not None
+
+
+def _matched_source_pattern(root: Path, path: Path, patterns: tuple[str, ...]) -> str | None:
     if not patterns:
-        return False
+        return None
     resolved = path.resolve()
     try:
         relative = resolved.relative_to(root.resolve()).as_posix()
@@ -1109,11 +1143,11 @@ def _matches_any_source_pattern(root: Path, path: Path, patterns: tuple[str, ...
         if pattern_path.is_absolute():
             base_pattern = pattern_path.as_posix()
             if fnmatch.fnmatch(resolved.as_posix(), base_pattern):
-                return True
+                return pattern
             continue
         if fnmatch.fnmatch(relative, normalized):
-            return True
-    return False
+            return pattern
+    return None
 
 
 def _read_candidate_rows(candidate: CandidateFile) -> tuple[list[dict[str, object]], list[str]]:
@@ -1183,6 +1217,129 @@ def _diagnostics_from_skipped_files(skipped_files: list[dict[str, str]]) -> list
                 }
             )
     return diagnostics
+
+
+def _no_detected_metrics_skip(candidate: CandidateFile, root: Path) -> dict[str, str]:
+    source_file = to_manifest_path(candidate.path, root)
+    message = _no_detected_metrics_message(candidate, source_file)
+    return {
+        "source_file": source_file,
+        "reason": "no_detected_metrics",
+        "message": message,
+    }
+
+
+def _no_detected_metrics_message(candidate: CandidateFile, source_file: str) -> str:
+    suffix = candidate.path.suffix.lower()
+    if suffix == ".csv":
+        fields, has_data_row = _csv_schema_details(candidate.path)
+        field_summary = _field_name_summary(fields)
+        if fields and not has_data_row:
+            return (
+                f"CSV source has headers but no data rows: {source_file}; "
+                f"{field_summary}."
+            )
+        if fields:
+            return (
+                f"No metric-like CSV fields were detected in {source_file}; "
+                f"{field_summary}. Use collect --config fields to map aliases when these columns are metrics."
+            )
+        return f"CSV source is empty or has no readable header: {source_file}."
+
+    if suffix == ".json":
+        fields, has_rows = _json_schema_details(candidate.path)
+        field_summary = _field_name_summary(fields)
+        if fields:
+            return (
+                f"No metric-like JSON fields were detected in {source_file}; "
+                f"{field_summary}. Use collect --config fields to map aliases when these fields are metrics."
+            )
+        if has_rows:
+            return f"JSON source had object rows but no scalar metric fields: {source_file}."
+        return f"JSON source did not contain object metric rows: {source_file}."
+
+    return f"No supported metric rows were detected in {source_file}."
+
+
+def _csv_schema_details(path: Path) -> tuple[list[str], bool]:
+    try:
+        with path.open("r", newline="", encoding="utf-8-sig") as fh:
+            reader = csv.DictReader(fh, strict=True)
+            fields = [field for field in (reader.fieldnames or []) if field]
+            has_data_row = next(reader, None) is not None
+            return fields, has_data_row
+    except (OSError, csv.Error, UnicodeDecodeError):
+        return [], False
+
+
+def _json_schema_details(path: Path) -> tuple[list[str], bool]:
+    try:
+        rows, _warnings = read_json_rows(path)
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return [], False
+    fields: list[str] = []
+    for row in rows:
+        for field_name in row:
+            if field_name not in fields:
+                fields.append(field_name)
+    return fields, bool(rows)
+
+
+def _field_name_summary(fields: list[str]) -> str:
+    if not fields:
+        return "no scalar field names were detected"
+    displayed = [_bounded_field_name(field) for field in fields[:MAX_DIAGNOSTIC_FIELD_NAMES]]
+    omitted_count = max(0, len(fields) - MAX_DIAGNOSTIC_FIELD_NAMES)
+    message = f"fields seen: {', '.join(displayed)}"
+    if omitted_count:
+        message += f"; omitted {omitted_count} additional field name(s)"
+    return message
+
+
+def _bounded_field_name(field_name: str) -> str:
+    if len(field_name) <= MAX_DIAGNOSTIC_FIELD_NAME_CHARS:
+        return field_name
+    return field_name[: MAX_DIAGNOSTIC_FIELD_NAME_CHARS - 3].rstrip() + "..."
+
+
+def _source_selection_summary(
+    root: Path,
+    config: MetricsCollectionConfig | None,
+    candidates: list[CandidateFile],
+    skipped_files: list[dict[str, str]],
+) -> dict[str, Any]:
+    mode = "config" if config is not None and config.has_explicit_sources else "auto"
+    selected_files = [to_manifest_path(candidate.path, root) for candidate in candidates]
+    configured_skips = [
+        item
+        for item in skipped_files
+        if item.get("reason", "").startswith("configured_")
+        or item.get("reason") in {"outside_workspace", "not_in_source_refs", "unsupported_configured_source"}
+    ]
+    skipped_counts: dict[str, int] = {}
+    for item in configured_skips:
+        reason = item.get("reason") or "unknown"
+        skipped_counts[reason] = skipped_counts.get(reason, 0) + 1
+
+    summary: dict[str, Any] = {
+        "mode": mode,
+        "explicit_sources": bool(config and config.has_explicit_sources),
+        "selected_count": len(selected_files),
+        "selected_files": selected_files[:MAX_SOURCE_SELECTION_FILES],
+        "omitted_selected_file_count": max(0, len(selected_files) - MAX_SOURCE_SELECTION_FILES),
+        "skipped_counts_by_reason": [
+            {"reason": reason, "count": count}
+            for reason, count in sorted(skipped_counts.items(), key=lambda item: item[0])
+        ],
+        "skipped_files": configured_skips[:MAX_SOURCE_SELECTION_FILES],
+        "omitted_skipped_file_count": max(0, len(configured_skips) - MAX_SOURCE_SELECTION_FILES),
+    }
+    if config is not None:
+        summary["include_patterns"] = list(config.sources)
+        summary["exclude_patterns"] = list(config.exclude_sources)
+    if configured_skips:
+        summary["next_action"] = "Review sources.include, sources.exclude, and fields in the collect config."
+    return summary
 
 
 def _append_unique(items: list[str], item: str) -> None:

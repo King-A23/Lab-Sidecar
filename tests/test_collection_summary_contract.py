@@ -42,6 +42,7 @@ OPTIONAL_TOP_LEVEL_KEYS = {
     "units",
     "groups",
     "matched_source_fields",
+    "source_selection",
 }
 TASK_STATUS_VALUES = {"pending", "running", "completed", "failed", "cancelled"}
 ALLOWED_SKIPPED_KEYS = {"source_file", "reason", "message"}
@@ -227,6 +228,8 @@ def _assert_optional_fields(
     _assert_matched_source_fields(matched_source_fields)
     assert matched_source_fields == _merge_matched_source_fields(processed_files)
 
+    _assert_source_selection(summary["source_selection"], summary=summary)
+
 
 def _assert_matched_source_fields(value: dict[str, list[str]]) -> None:
     assert isinstance(value, dict)
@@ -235,6 +238,44 @@ def _assert_matched_source_fields(value: dict[str, list[str]]) -> None:
         assert isinstance(source_fields, list)
         assert all(isinstance(source_field, str) and source_field for source_field in source_fields)
         assert len(source_fields) == len(set(source_fields))
+
+
+def _assert_source_selection(value: dict[str, Any], *, summary: dict[str, Any]) -> None:
+    assert isinstance(value, dict)
+    assert {
+        "mode",
+        "explicit_sources",
+        "selected_count",
+        "selected_files",
+        "omitted_selected_file_count",
+        "skipped_counts_by_reason",
+        "skipped_files",
+        "omitted_skipped_file_count",
+    } <= set(value)
+    assert value["mode"] in {"auto", "config"}
+    assert isinstance(value["explicit_sources"], bool)
+    assert value["explicit_sources"] == (summary["config"] is not None and bool(summary["config"]["sources"]))
+    assert value["selected_count"] == summary["candidate_count"]
+    assert isinstance(value["selected_files"], list)
+    assert len(value["selected_files"]) <= value["selected_count"]
+    assert all(isinstance(path, str) and path for path in value["selected_files"])
+    assert isinstance(value["omitted_selected_file_count"], int)
+    assert value["omitted_selected_file_count"] >= 0
+    assert isinstance(value["skipped_counts_by_reason"], list)
+    for item in value["skipped_counts_by_reason"]:
+        assert set(item) == {"reason", "count"}
+        assert isinstance(item["reason"], str) and item["reason"]
+        assert isinstance(item["count"], int) and item["count"] >= 1
+    assert isinstance(value["skipped_files"], list)
+    for item in value["skipped_files"]:
+        _assert_skipped_file_entry(item)
+    assert isinstance(value["omitted_skipped_file_count"], int)
+    assert value["omitted_skipped_file_count"] >= 0
+    if value["explicit_sources"]:
+        assert isinstance(value["include_patterns"], list)
+        assert isinstance(value["exclude_patterns"], list)
+    if value["skipped_files"]:
+        assert isinstance(value["next_action"], str) and "collect config" in value["next_action"]
 
 
 def _merge_matched_source_fields(processed_files: list[dict[str, Any]]) -> dict[str, list[str]]:

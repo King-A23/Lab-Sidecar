@@ -1,0 +1,14 @@
+[
+  {
+    "algorithm": "linear_baseline",
+    "input_size": "stress",
+    "seed": 3,
+    "accuracy": 0.781,
+    "runtime_ms": 63,
+    "error_rate": 0.219,
+    "status": "recovered_after_retry",
+    "warning_flag": 1,
+    "artifact_present": true
+  },
+  "non-object benchmark note intentionally skipped"
+]

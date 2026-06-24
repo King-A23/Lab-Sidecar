@@ -44,6 +44,15 @@ def test_bad_csv_json_empty_csv_and_missing_metric_columns_are_diagnostic_only(t
     assert ("missing_metric_columns.csv", "no_detected_metrics") in skipped
     diagnostic_reasons = {item["reason"] for item in summary["diagnostics"]}
     assert "parse_failed" in diagnostic_reasons
+    assert "no_detected_metrics" in diagnostic_reasons
+    no_metric_messages = [
+        item["message"]
+        for item in summary["diagnostics"]
+        if item["reason"] == "no_detected_metrics"
+    ]
+    assert any("empty or has no readable header" in message for message in no_metric_messages)
+    assert any("fields seen: name, notes" in message for message in no_metric_messages)
+    assert any("collect --config fields" in message for message in no_metric_messages)
     serialized = json.dumps(summary, ensure_ascii=False)
     assert '1,"unterminated' not in serialized
     assert '{"epoch": 1, "accuracy":' not in serialized
@@ -89,6 +98,29 @@ def test_missing_configured_field_records_diagnostic_without_outputs(tmp_path: P
     task_path = _task_path(tmp_path, task_id)
     assert not (task_path / "metrics" / "normalized_metrics.csv").exists()
     assert not (task_path / "metrics" / "scenario-summary.json").exists()
+
+
+def test_no_detected_metrics_diagnostic_bounds_long_field_names(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "long-field-results"
+    source.mkdir()
+    long_field = "private_column_" + "x" * 240
+    (source / "notes.csv").write_text(
+        f"{long_field},label\nsecret value,baseline\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "long-field-results"]).output)
+
+    result = invoke(tmp_path, ["collect", task_id])
+
+    assert result.exit_code == 5
+    summary = _summary(tmp_path, task_id)
+    serialized = json.dumps(summary, ensure_ascii=False)
+    assert long_field not in serialized
+    diagnostic = next(item for item in summary["diagnostics"] if item["reason"] == "no_detected_metrics")
+    assert "private_column_" in diagnostic["message"]
+    assert "..." in diagnostic["message"]
+    assert "secret value" not in serialized
 
 
 def test_include_exclude_globs_record_skips_and_unit_conflict_without_conversion(tmp_path: Path) -> None:

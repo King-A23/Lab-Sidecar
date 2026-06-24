@@ -1,0 +1,2 @@
+epoch,method,seed,accuracy,loss,latency_ms,status,warning_flag,checkpoint
+1,scratch,0,0.020,9.990,999,scratch_only,1,scratch.pt
