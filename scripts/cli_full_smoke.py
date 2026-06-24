@@ -134,11 +134,14 @@ def _success_flow(workspace: Path, env: dict[str, str], cli_python: str) -> dict
             "package-ready",
         ],
     ]:
-        _run_cli(workspace, env, cli_python, args)
+        result = _run_cli(workspace, env, cli_python, args)
+        if args[0] == "validate":
+            _assert_contains(result.stdout, ["Result: ok", "[ok] package-ready:", "[ok] traceability:"])
 
     package_path = workspace / "packages" / f"success-{task_id}"
     _run_cli(workspace, env, cli_python, ["package", task_id, "--output", package_path.as_posix()])
-    _run_cli(workspace, env, cli_python, ["package-verify", package_path.as_posix()])
+    verify = _run_cli(workspace, env, cli_python, ["package-verify", package_path.as_posix()])
+    _assert_contains(verify.stdout, ["Package verified:", "Checked files:"])
     task_path = _task_path(workspace, task_id)
     artifacts = _common_completed_artifacts(task_path)
     artifacts["package"] = package_path.as_posix()
@@ -163,11 +166,14 @@ def _failure_flow(workspace: Path, env: dict[str, str], cli_python: str) -> dict
         ["slides", task_id],
         ["validate", task_id],
     ]:
-        _run_cli(workspace, env, cli_python, args)
+        result = _run_cli(workspace, env, cli_python, args)
+        if args[0] == "validate":
+            _assert_contains(result.stdout, ["Result: warn", "Diagnostic mode: yes", "[ok] traceability:"])
 
     package_path = workspace / "packages" / f"failure-{task_id}"
     _run_cli(workspace, env, cli_python, ["package", task_id, "--output", package_path.as_posix()])
-    _run_cli(workspace, env, cli_python, ["package-verify", package_path.as_posix()])
+    verify = _run_cli(workspace, env, cli_python, ["package-verify", package_path.as_posix()])
+    _assert_contains(verify.stdout, ["Package verified:", "Checked files:"])
     task_path = _task_path(workspace, task_id)
     artifacts = {
         "manifest": (task_path / "manifest.json").as_posix(),
@@ -215,7 +221,9 @@ def _ingest_flow(workspace: Path, env: dict[str, str], cli_python: str) -> dict[
         ],
         ["artifacts", task_id],
     ]:
-        _run_cli(workspace, env, cli_python, args)
+        result = _run_cli(workspace, env, cli_python, args)
+        if args[0] == "validate":
+            _assert_contains(result.stdout, ["Result: ok", "[ok] package-ready:", "[ok] traceability:"])
 
     task_path = _task_path(workspace, task_id)
     artifacts = _common_completed_artifacts(task_path)
@@ -253,10 +261,22 @@ def _comparison_flow(
         ],
     ).stdout
     comparison_id = _extract_comparison_id(output)
-    _run_cli(workspace, env, cli_python, ["list-comparisons"])
-    _run_cli(workspace, env, cli_python, ["comparison-artifacts", comparison_id])
-    _run_cli(workspace, env, cli_python, ["open-comparison", comparison_id])
-    _run_cli(
+    listing = _run_cli(workspace, env, cli_python, ["list-comparisons"])
+    _assert_contains(listing.stdout, [comparison_id, "smoke-comparison", "source_tasks", "figures", "report"])
+    artifact_listing = _run_cli(workspace, env, cli_python, ["comparison-artifacts", comparison_id])
+    _assert_contains(
+        artifact_listing.stdout,
+        [
+            "comparison-manifest.json",
+            "comparison-summary.json",
+            "comparison-table.csv",
+            "reports/comparison-report-fragment.md",
+            "provenance/traceability.json",
+        ],
+    )
+    opened = _run_cli(workspace, env, cli_python, ["open-comparison", comparison_id])
+    _assert_contains(opened.stdout, [(workspace / ".lab-sidecar" / "comparisons" / comparison_id).resolve().as_posix()])
+    validation = _run_cli(
         workspace,
         env,
         cli_python,
@@ -271,9 +291,11 @@ def _comparison_flow(
             "package-ready",
         ],
     )
+    _assert_contains(validation.stdout, ["Result: ok", "[ok] package-ready:", "[ok] traceability:"])
     package_path = workspace / "packages" / f"comparison-{comparison_id}"
     _run_cli(workspace, env, cli_python, ["package-comparison", comparison_id, "--output", package_path.as_posix()])
-    _run_cli(workspace, env, cli_python, ["package-verify", package_path.as_posix()])
+    verify = _run_cli(workspace, env, cli_python, ["package-verify", package_path.as_posix()])
+    _assert_contains(verify.stdout, ["Package verified:", "Checked files:"])
     comparison_path = workspace / ".lab-sidecar" / "comparisons" / comparison_id
     artifacts = _comparison_artifacts(comparison_path)
     artifacts["package"] = package_path.as_posix()
@@ -350,6 +372,12 @@ def _assert_non_empty_path(path: Path, key: str) -> None:
         return
     if not path.is_file() or path.stat().st_size <= 0:
         raise RuntimeError(f"artifact is missing or empty for {key}: {path}")
+
+
+def _assert_contains(output: str, needles: list[str]) -> None:
+    missing = [needle for needle in needles if needle not in output]
+    if missing:
+        raise RuntimeError(f"missing expected CLI output {missing!r} in:\n{output}")
 
 
 def _run_cli(workspace: Path, env: dict[str, str], cli_python: str, args: list[str]) -> subprocess.CompletedProcess[str]:

@@ -93,7 +93,10 @@ def _run_smoke(workspace: Path, repo: Path) -> dict[str, Any]:
             "package-ready",
         ],
     ]:
-        commands.append(_run_json([str(installed_labsidecar), *args], cwd=smoke_workspace, env=env))
+        result = _run_json([str(installed_labsidecar), *args], cwd=smoke_workspace, env=env)
+        commands.append(result)
+        if args[0] == "validate":
+            _assert_contains(result["stdout"], ["Result: ok", "[ok] package-ready:", "[ok] traceability:"])
 
     package_path = smoke_workspace / "packages" / f"success-{task_id}"
     commands.append(
@@ -103,7 +106,9 @@ def _run_smoke(workspace: Path, repo: Path) -> dict[str, Any]:
             env=env,
         )
     )
-    commands.append(_run_json([str(installed_labsidecar), "package-verify", package_path.as_posix()], cwd=smoke_workspace, env=env))
+    verify = _run_json([str(installed_labsidecar), "package-verify", package_path.as_posix()], cwd=smoke_workspace, env=env)
+    commands.append(verify)
+    _assert_contains(verify["stdout"], ["Package verified:", "Checked files:"])
 
     task_path = smoke_workspace / ".lab-sidecar" / "tasks" / task_id
     second_task_id = _create_installed_comparison_task(
@@ -195,29 +200,41 @@ def _run_installed_comparison_flow(
     )
     commands.append(compare)
     comparison_id = _extract_comparison_id(compare["stdout"])
-    for args in [
-        ["list-comparisons"],
-        ["comparison-artifacts", comparison_id],
-        ["open-comparison", comparison_id],
-    ]:
-        commands.append(_run_json([str(installed_labsidecar), *args], cwd=smoke_workspace, env=env))
-    commands.append(
-        _run_json(
-            [
-                str(installed_labsidecar),
-                "validate-comparison",
-                comparison_id,
-                "--require",
-                "figures",
-                "--require",
-                "report",
-                "--require",
-                "package-ready",
-            ],
-            cwd=smoke_workspace,
-            env=env,
-        )
+    listing = _run_json([str(installed_labsidecar), "list-comparisons"], cwd=smoke_workspace, env=env)
+    commands.append(listing)
+    _assert_contains(listing["stdout"], [comparison_id, "wheel-smoke-comparison", "source_tasks", "figures", "report"])
+    artifact_listing = _run_json([str(installed_labsidecar), "comparison-artifacts", comparison_id], cwd=smoke_workspace, env=env)
+    commands.append(artifact_listing)
+    _assert_contains(
+        artifact_listing["stdout"],
+        [
+            "comparison-manifest.json",
+            "comparison-summary.json",
+            "comparison-table.csv",
+            "reports/comparison-report-fragment.md",
+            "provenance/traceability.json",
+        ],
     )
+    opened = _run_json([str(installed_labsidecar), "open-comparison", comparison_id], cwd=smoke_workspace, env=env)
+    commands.append(opened)
+    _assert_contains(opened["stdout"], [(smoke_workspace / ".lab-sidecar" / "comparisons" / comparison_id).resolve().as_posix()])
+    validation = _run_json(
+        [
+            str(installed_labsidecar),
+            "validate-comparison",
+            comparison_id,
+            "--require",
+            "figures",
+            "--require",
+            "report",
+            "--require",
+            "package-ready",
+        ],
+        cwd=smoke_workspace,
+        env=env,
+    )
+    commands.append(validation)
+    _assert_contains(validation["stdout"], ["Result: ok", "[ok] package-ready:", "[ok] traceability:"])
     package_path = smoke_workspace / "packages" / f"comparison-{comparison_id}"
     commands.append(
         _run_json(
@@ -226,7 +243,9 @@ def _run_installed_comparison_flow(
             env=env,
         )
     )
-    commands.append(_run_json([str(installed_labsidecar), "package-verify", package_path.as_posix()], cwd=smoke_workspace, env=env))
+    verify = _run_json([str(installed_labsidecar), "package-verify", package_path.as_posix()], cwd=smoke_workspace, env=env)
+    commands.append(verify)
+    _assert_contains(verify["stdout"], ["Package verified:", "Checked files:"])
     return comparison_id, package_path
 
 
@@ -445,6 +464,12 @@ def _assert_non_empty_path(path: Path, key: str) -> None:
         return
     if not path.is_file() or path.stat().st_size <= 0:
         raise RuntimeError(f"artifact is missing or empty for {key}: {path}")
+
+
+def _assert_contains(output: str, needles: list[str]) -> None:
+    missing = [needle for needle in needles if needle not in output]
+    if missing:
+        raise RuntimeError(f"missing expected CLI output {missing!r} in:\n{output}")
 
 
 def _manifest(task_path: Path) -> dict[str, Any]:

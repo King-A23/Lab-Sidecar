@@ -104,8 +104,31 @@ def test_wheel_smoke_summary_includes_comparison_contract(tmp_path: Path, monkey
             stdout = "Imported as task: task_comparison\n"
         elif " compare " in f" {text} ":
             stdout = "Comparison created: comparison_20260624_120000_abcdef\n"
+        elif " list-comparisons" in f" {text} ":
+            stdout = (
+                "comparison_id name created_at source_tasks artifacts figures report\n"
+                "comparison_20260624_120000_abcdef wheel-smoke-comparison 2026 "
+                "task_success,task_comparison 8 2 yes\n"
+            )
+        elif " comparison-artifacts " in f" {text} ":
+            stdout = "\n".join(
+                [
+                    "Artifacts for comparison_20260624_120000_abcdef",
+                    "comparison-manifest.json",
+                    "comparison-summary.json",
+                    "comparison-table.csv",
+                    "comparison-table.json",
+                    "reports/comparison-report-fragment.md",
+                    "provenance/traceability.json",
+                ]
+            )
+            stdout += "\n"
         elif " open-comparison " in f" {text} ":
             stdout = str(cwd / ".lab-sidecar" / "comparisons" / "comparison_20260624_120000_abcdef") + "\n"
+        elif " validate" in f" {text} " or " validate-comparison " in f" {text} ":
+            stdout = "Result: ok\n[ok] traceability: present\n[ok] package-ready: ready\n"
+        elif " package-verify " in f" {text} ":
+            stdout = "Package verified: package\nChecked files: 12\n"
         else:
             stdout = ""
         return {
