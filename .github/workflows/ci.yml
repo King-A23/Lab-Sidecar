@@ -17,7 +17,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install package
-        run: python -m pip install -e ".[dev,mcp]"
+        run: python -m pip install -e ".[dev]"
+      - name: Check CLI help
+        run: python -m lab_sidecar.cli.app --help
       - name: Run ruff
         run: python -m ruff check .
       - name: Run mypy
@@ -28,6 +30,14 @@ jobs:
         run: |
           python -m pip install build
           python -m build
+      - name: Smoke built wheel CLI help
+        shell: bash
+        run: |
+          python -m venv /tmp/lab-sidecar-wheel-ci
+          /tmp/lab-sidecar-wheel-ci/bin/python -m pip install dist/*.whl
+          /tmp/lab-sidecar-wheel-ci/bin/labsidecar --help
+          /tmp/lab-sidecar-wheel-ci/bin/labsidecar validate --help
+          /tmp/lab-sidecar-wheel-ci/bin/labsidecar package-verify --help
   platform-smoke:
     runs-on: ${{ matrix.os }}
     strategy:

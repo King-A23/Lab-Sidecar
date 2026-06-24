@@ -32,7 +32,7 @@ Failed tasks are exported as diagnostic packages. The README title and body labe
 
 Environment:
 
-- Repository: `/Users/anyuchen/Projects/personal/Lab-Sidecar`
+- Repository: `<repo>`
 - Python: repo `.venv`, Python 3.12.13
 
 Commands:

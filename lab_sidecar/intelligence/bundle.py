@@ -83,11 +83,10 @@ def omitted_contract() -> dict[str, str]:
         "full_stdout": "omitted_by_default",
         "full_stderr": "omitted_by_default",
         "metrics_rows": "omitted_by_default",
-        "report_body": "omitted_by_default",
-        "ppt_content": "omitted_by_default",
+        "report_markdown": "omitted_by_default",
+        "ppt_contents": "omitted_by_default",
         "worker_prompt_response": "omitted_by_default",
         "artifact_bodies": "omitted_by_default",
-        "full_data_files": "omitted_by_default",
     }
 
 

@@ -198,7 +198,6 @@ class LabSidecarMCPTools:
                     "report_markdown": "omitted_by_default",
                     "ppt_contents": "omitted_by_default",
                     "worker_prompt_response": "omitted_by_default",
-                    "full_data_files": "omitted_by_default",
                 },
             }
 
@@ -231,7 +230,6 @@ class LabSidecarMCPTools:
                     "report_markdown": "omitted_by_default",
                     "ppt_contents": "omitted_by_default",
                     "worker_prompt_response": "omitted_by_default",
-                    "full_data_files": "omitted_by_default",
                 },
             }
 

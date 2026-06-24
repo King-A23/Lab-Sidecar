@@ -278,7 +278,7 @@ python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-stage-4-mcp-smoke
 If plugin files are touched:
 
 ```bash
-python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
+python <plugin-creator>/scripts/validate_plugin.py plugins/lab-sidecar
 ```
 
 Manual host smoke:

@@ -14,5 +14,6 @@ htmlcov/
 venv/
 build/
 dist/
+wheelhouse/
 *.egg-info/
 .lab-sidecar/

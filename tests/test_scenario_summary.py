@@ -134,7 +134,7 @@ def test_wide_scenario_summary_records_omitted_counts_instead_of_dumping_fields(
     assert all(len(item["selected_fields"]) <= MAX_SELECTED_FIELDS for item in summary["last_rows"])
 
 
-@pytest.mark.parametrize("field_name", ["notes", "prompt", "error_message", "private_comment"])
+@pytest.mark.parametrize("field_name", ["notes", "prompt", "message", "error_message", "private_comment"])
 def test_selected_fields_do_not_copy_free_text_columns(field_name: str) -> None:
     secret_text = f"SECRET-FREE-TEXT-{field_name}-" + "z" * 240
     rows = [
@@ -153,8 +153,65 @@ def test_selected_fields_do_not_copy_free_text_columns(field_name: str) -> None:
 
     assert secret_text not in serialized
     assert f"SECRET-FREE-TEXT-{field_name}" not in serialized
-    assert field_name not in summary["best_rows"][0]["selected_fields"]
-    assert field_name not in summary["last_rows"][0]["selected_fields"]
+    assert all(field_name not in item["selected_fields"] for item in summary["best_rows"])
+    assert all(field_name not in item["selected_fields"] for item in summary["last_rows"])
+
+
+def test_metric_named_free_text_fields_do_not_enter_selected_fields() -> None:
+    secret_text = "SECRET-ERRORS token=abc123 should stay out of selected fields"
+    rows = [
+        {"variant": "baseline", "epoch": 1, "accuracy": 0.70, "errors": secret_text},
+        {"variant": "candidate", "epoch": 2, "accuracy": 0.91, "errors": secret_text},
+    ]
+
+    summary = build_scenario_summary(
+        record=record(),
+        rows=rows,
+        collection_summary={"processed_files": [{"source_file": "results/metrics.csv", "file_type": "csv", "row_count": 2}]},
+        units={"accuracy": "ratio"},
+        configured_groups={"primary": "variant"},
+    )
+    serialized = repr(summary).lower()
+
+    assert "secret-errors" not in serialized
+    assert "token=abc123" not in serialized
+    assert all("errors" not in item["selected_fields"] for item in summary["best_rows"])
+    assert all("errors" not in item["selected_fields"] for item in summary["last_rows"])
+
+
+def test_wide_allowlisted_rows_preserve_selected_metric() -> None:
+    rows = [
+        {
+            "source_file": "results/wide.csv",
+            "method": "candidate",
+            "model": "model-a",
+            "algorithm": "algo-a",
+            "variant": "v1",
+            "service": "svc",
+            "config_id": "cfg",
+            "seed": 1,
+            "trial": 1,
+            "run_id": "run-1",
+            "input_size": "small",
+            "dataset": "demo",
+            "split": "test",
+            "epoch": 2,
+            "accuracy": 0.91,
+        }
+    ]
+
+    summary = build_scenario_summary(
+        record=record(),
+        rows=rows,
+        collection_summary={"processed_files": [{"source_file": "results/wide.csv", "file_type": "csv", "row_count": 1}]},
+        units={"accuracy": "ratio"},
+        configured_groups={"primary": "method"},
+    )
+
+    selected_fields = summary["best_rows"][0]["selected_fields"]
+    assert len(selected_fields) == MAX_SELECTED_FIELDS
+    assert selected_fields["accuracy"] == 0.91
+    assert "accuracy" in selected_fields
 
 
 def test_missing_primary_metric_warns_without_ranking_claims() -> None:

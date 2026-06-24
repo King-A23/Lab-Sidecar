@@ -15,8 +15,37 @@ import typer
 from lab_sidecar.core.config import init_workspace
 from lab_sidecar.core.manifest import load_task
 from lab_sidecar.core.paths import config_path, resolve_workspace_path, sqlite_path, state_dir
+from lab_sidecar.core.validation import (
+    TaskValidationService,
+    ValidationRequirement,
+    ValidationResult,
+    ValidationTaskNotFound,
+)
 from lab_sidecar.core.models import TaskStatus
 from lab_sidecar.collectors.service import MetricsCollectionService, MetricsConfigLoadError, NoMetricsFoundError
+from lab_sidecar.comparisons.models import (
+    ComparisonDuplicateTaskIds,
+    ComparisonInvalidId,
+    ComparisonMetricsMissing,
+    ComparisonNotFound,
+    ComparisonOutputError,
+    ComparisonTaskNotFound,
+    ComparisonValidationRequirement,
+    ComparisonValidationResult,
+    NoCommonComparisonMetrics,
+)
+from lab_sidecar.comparisons.package_export import (
+    ComparisonPackageExportError,
+    export_comparison_package,
+)
+from lab_sidecar.comparisons.service import (
+    ComparisonService,
+    comparison_artifact_dir,
+    comparison_artifact_presence,
+    list_comparison_ids,
+    load_comparison_manifest,
+)
+from lab_sidecar.comparisons.validation import ComparisonValidationService
 from lab_sidecar.figures.fallback_worker import FallbackWorkerMode
 from lab_sidecar.figures.service import (
     FallbackMode,
@@ -41,7 +70,9 @@ from lab_sidecar.slides.service import (
 from lab_sidecar.storage.package_export import (
     PackageExportError,
     PackageOutputError,
+    PackageVerifyError,
     export_task_package,
+    verify_task_package,
 )
 
 
@@ -65,6 +96,17 @@ COMPARISON_METADATA_COLUMNS = {
     "source_path",
     "file",
     "path",
+    "epoch",
+    "step",
+    "iter",
+    "iteration",
+    "checkpoint",
+    "ckpt",
+    "timestamp",
+    "seed",
+    "trial",
+    "run_id",
+    "config_id",
 }
 COMMAND_PREVIEW_CHARS = 120
 FAILURE_SUMMARY_LINES = 8
@@ -175,6 +217,47 @@ def _print_key_artifacts(record, root: Path, include_missing: bool = False) -> N
             typer.echo(f"- {label}: {relative}")
         elif include_missing:
             typer.echo(f"- {label}: (not generated)")
+
+
+def _print_validation_result(result: ValidationResult) -> None:
+    typer.echo(f"Validation for {result.task_id}")
+    typer.echo(f"Result: {result.status.value}")
+    typer.echo(f"Task status: {result.task_status or '(unknown)'}")
+    typer.echo(f"Mode: {result.mode or '(unknown)'}")
+    typer.echo(f"Diagnostic mode: {'yes' if result.diagnostic_mode else 'no'}")
+    typer.echo("Checks:")
+    for check in result.checks:
+        suffix = f" ({check.path})" if check.path else ""
+        typer.echo(f"[{check.status.value}] {check.name}: {check.message}{suffix}")
+        if check.next_action:
+            typer.echo(f"  next: {check.next_action}")
+
+
+def _print_comparison_validation_result(result: ComparisonValidationResult) -> None:
+    typer.echo(f"Validation for {result.comparison_id}")
+    typer.echo(f"Result: {result.status.value}")
+    typer.echo("Checks:")
+    for check in result.checks:
+        suffix = f" ({check.path})" if check.path else ""
+        typer.echo(f"[{check.status.value}] {check.name}: {check.message}{suffix}")
+        if check.next_action:
+            typer.echo(f"  next: {check.next_action}")
+
+
+def _comparison_artifact_error(comparison_id: str, exc: Exception) -> None:
+    if isinstance(exc, ComparisonInvalidId):
+        _fail(
+            f"Error: {exc}.\n"
+            "Hint: use a saved comparison id such as comparison_YYYYMMDD_HHMMSS_xxxxxx.",
+            code=2,
+        )
+    if isinstance(exc, ComparisonNotFound):
+        _fail(
+            f"Error: comparison '{comparison_id}' was not found.\n"
+            "Hint: run 'labsidecar list-comparisons' to find saved comparison ids.",
+            code=3,
+        )
+    raise exc
 
 
 def _next_commands_for(record) -> list[str]:
@@ -590,6 +673,31 @@ def summarize(task_id: str) -> None:
     _echo_next(*_next_commands_for(record))
 
 
+@app.command()
+def validate(
+    task_id: str = typer.Argument(..., help="Task id to validate."),
+    require: list[ValidationRequirement] | None = typer.Option(
+        None,
+        "--require",
+        help="Require an artifact group: metrics, figures, report, slides, or package-ready.",
+    ),
+) -> None:
+    """Check task artifact health without generating new artifacts."""
+    root = _root()
+    try:
+        result = TaskValidationService(root).validate(task_id, requirements=require)
+    except ValidationTaskNotFound:
+        _fail(
+            f"Error: task '{task_id}' was not found.\n"
+            "Hint: check whether the task directory still exists under .lab-sidecar/tasks/.",
+            code=3,
+        )
+
+    _print_validation_result(result)
+    if result.has_failures:
+        raise typer.Exit(code=5)
+
+
 @app.command("package")
 def package_task(
     task_id: str = typer.Argument(..., help="Task id to package."),
@@ -624,11 +732,37 @@ def package_task(
     typer.echo(f"Included files: {result.included_count}")
     typer.echo(f"Omitted by default: {result.omitted_count}")
     typer.echo(f"Unavailable optional files: {result.unavailable_count}")
+    typer.echo(f"Digest: {result.digest_path}")
+
+
+@app.command("package-verify")
+def package_verify(
+    package_dir: Path = typer.Argument(..., help="Package directory to verify."),
+) -> None:
+    """Verify a Lab-Sidecar package against its artifact index and digest."""
+    try:
+        result = verify_task_package(package_dir)
+    except PackageVerifyError as exc:
+        _fail(f"Error: package could not be verified.\nReason: {exc}", code=2)
+
+    if result.ok:
+        typer.echo(f"Package verified: {result.path}")
+        typer.echo(f"Checked files: {result.checked_count}")
+        return
+
+    typer.echo(f"Package verification failed: {result.path}")
+    for error in result.errors:
+        typer.echo(f"[fail] {error}")
+    raise typer.Exit(code=5)
 
 
 @app.command()
 def compare(
     task_ids: list[str] = typer.Argument(..., help="Two to five task ids to compare."),
+    save: bool = typer.Option(False, "--save", help="Write a durable local comparison artifact record."),
+    name: str | None = typer.Option(None, "--name", help="Optional saved comparison name."),
+    figures: bool = typer.Option(False, "--figures", help="Generate deterministic comparison figures when saving."),
+    report: bool = typer.Option(False, "--report", help="Generate a deterministic comparison report when saving."),
 ) -> None:
     """Compare final rows for shared numeric metrics across 2-5 tasks."""
     root = _root()
@@ -636,6 +770,51 @@ def compare(
         _fail("Error: compare requires at least 2 task ids.", code=2)
     if len(task_ids) > 5:
         _fail("Error: compare supports at most 5 task ids.", code=2)
+    if len(set(task_ids)) != len(task_ids):
+        _fail("Error: compare requires unique task ids; duplicate task ids are not allowed.", code=2)
+    if (figures or report or name) and not save:
+        _fail("Error: --figures, --report, and --name require --save.", code=2)
+    if save:
+        service = ComparisonService(root)
+        try:
+            result = service.create(
+                task_ids,
+                name=name,
+                generate_figures=figures,
+                generate_report=report,
+            )
+        except ComparisonDuplicateTaskIds as exc:
+            _fail(f"Error: {exc}.", code=2)
+        except ComparisonTaskNotFound as exc:
+            _fail(f"Error: {exc}.\nHint: run 'labsidecar list' to find available task ids.", code=3)
+        except ComparisonMetricsMissing as exc:
+            _fail(
+                f"Error: {exc}.\nHint: run 'labsidecar collect <task_id>' before saving a comparison.",
+                code=5,
+            )
+        except NoCommonComparisonMetrics:
+            _fail(
+                "Error: no common numeric metric fields were found across the selected tasks.\n"
+                "Hint: compare tasks after collecting metrics with shared numeric columns.",
+                code=5,
+            )
+        except ComparisonOutputError as exc:
+            _fail(f"Error: comparison artifacts could not be written.\nReason: {exc}", code=1)
+        typer.echo(f"Comparison created: {result.manifest.comparison_id}")
+        typer.echo(f"Artifacts: {result.comparison_dir.relative_to(root).as_posix()}")
+        typer.echo(f"Summary: {result.summary_path.relative_to(root).as_posix()}")
+        typer.echo(f"Table: {result.table_csv_path.relative_to(root).as_posix()}")
+        if result.figure_summary_path is not None:
+            typer.echo(f"Figures: {result.figure_summary_path.relative_to(root).as_posix()}")
+        if result.report_path is not None:
+            typer.echo(f"Report: {result.report_path.relative_to(root).as_posix()}")
+        typer.echo(f"Traceability: {result.traceability_path.relative_to(root).as_posix()}")
+        _echo_next(
+            f"labsidecar validate-comparison {result.manifest.comparison_id}",
+            f"labsidecar package-comparison {result.manifest.comparison_id} --output lab-sidecar-comparison-{result.manifest.comparison_id}",
+            "labsidecar package-verify <package_dir>",
+        )
+        return
 
     records = []
     metrics_by_task: dict[str, tuple[list[str], list[dict[str, str]]]] = {}
@@ -736,6 +915,146 @@ def compare(
                 ]
             )
     _table(rows)
+
+
+@app.command("validate-comparison")
+def validate_comparison(
+    comparison_id: str = typer.Argument(..., help="Saved comparison id to validate."),
+    require: list[ComparisonValidationRequirement] | None = typer.Option(
+        None,
+        "--require",
+        help="Require an artifact group: figures, report, or package-ready.",
+    ),
+) -> None:
+    """Check saved comparison artifact health without generating artifacts."""
+    root = _root()
+    try:
+        result = ComparisonValidationService(root).validate(comparison_id, requirements=require)
+    except ComparisonInvalidId as exc:
+        _fail(f"Error: {exc}.\nHint: use a saved comparison id such as comparison_YYYYMMDD_HHMMSS_xxxxxx.", code=2)
+    except ComparisonNotFound:
+        _fail(
+            f"Error: comparison '{comparison_id}' was not found.\n"
+            "Hint: run 'labsidecar list-comparisons' to find saved comparison ids.",
+            code=3,
+        )
+
+    _print_comparison_validation_result(result)
+    if result.has_failures:
+        raise typer.Exit(code=5)
+
+
+@app.command("package-comparison")
+def package_comparison(
+    comparison_id: str = typer.Argument(..., help="Saved comparison id to package."),
+    output: Path = typer.Option(..., "--output", "-o", help="Destination package directory."),
+) -> None:
+    """Create a shareable saved-comparison package."""
+    root = _root()
+    service = ComparisonService(root)
+    try:
+        manifest = service.load(comparison_id)
+    except ComparisonInvalidId as exc:
+        _fail(f"Error: {exc}.\nHint: use a saved comparison id such as comparison_YYYYMMDD_HHMMSS_xxxxxx.", code=2)
+    except ComparisonNotFound:
+        _fail(
+            f"Error: comparison '{comparison_id}' was not found.\n"
+            "Hint: run 'labsidecar list-comparisons' to find saved comparison ids.",
+            code=3,
+        )
+
+    try:
+        result = export_comparison_package(root, manifest, output)
+    except PackageOutputError as exc:
+        _fail(
+            f"Error: package output path is not usable.\nReason: {exc}",
+            code=2,
+        )
+    except ComparisonPackageExportError as exc:
+        _fail(
+            f"Error: package could not be created for comparison '{comparison_id}'.\nReason: {exc}",
+            code=1,
+        )
+
+    typer.echo(f"Package created: {result.path}")
+    typer.echo(f"Type: {result.package_type}")
+    typer.echo(f"Included files: {result.included_count}")
+    typer.echo(f"Omitted by default: {result.omitted_count}")
+    typer.echo(f"Unavailable optional files: {result.unavailable_count}")
+    typer.echo(f"Digest: {result.digest_path}")
+
+
+@app.command("list-comparisons")
+def list_comparisons(
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of saved comparison records to show."),
+) -> None:
+    """List recent saved comparison records without reading artifact bodies."""
+    root = _root()
+    comparison_ids = list_comparison_ids(root)
+    if not comparison_ids:
+        typer.echo("No comparisons found.")
+        return
+
+    rows: list[list[str]] = [
+        ["comparison_id", "name", "created_at", "source_tasks", "artifacts", "figures", "report"]
+    ]
+    warnings: list[str] = []
+    for comparison_id in comparison_ids[:limit]:
+        try:
+            manifest = load_comparison_manifest(root, comparison_id)
+            presence = comparison_artifact_presence(root, comparison_id)
+        except Exception as exc:
+            warnings.append(
+                f"skipped damaged comparison manifest {comparison_id}: {_preview_text(str(exc), 180)}"
+            )
+            continue
+        rows.append(
+            [
+                manifest.comparison_id,
+                _preview_text(manifest.name or "", 120),
+                manifest.created_at,
+                _preview_text(", ".join(manifest.task_ids), 160),
+                str(presence.artifact_count),
+                str(presence.figure_count),
+                "yes" if presence.report_present else "no",
+            ]
+        )
+    if len(rows) == 1:
+        typer.echo("No comparisons found.")
+    else:
+        _table(rows)
+    for warning in warnings[:5]:
+        typer.echo(f"Warning: {warning}", err=True)
+    if len(warnings) > 5:
+        typer.echo(f"Warning: omitted {len(warnings) - 5} additional damaged comparison manifest(s).", err=True)
+
+
+@app.command("open-comparison")
+def open_comparison(comparison_id: str) -> None:
+    """Print the saved comparison artifact directory path."""
+    root = _root()
+    try:
+        path = comparison_artifact_dir(root, comparison_id)
+    except (ComparisonInvalidId, ComparisonNotFound) as exc:
+        _comparison_artifact_error(comparison_id, exc)
+    typer.echo(path)
+
+
+@app.command("comparison-artifacts")
+def comparison_artifacts(comparison_id: str) -> None:
+    """List saved comparison artifacts without printing artifact bodies."""
+    root = _root()
+    try:
+        presence = comparison_artifact_presence(root, comparison_id)
+    except (ComparisonInvalidId, ComparisonNotFound) as exc:
+        _comparison_artifact_error(comparison_id, exc)
+
+    typer.echo(f"Artifacts for {presence.comparison_id}")
+    if not presence.paths:
+        typer.echo("(none)")
+        return
+    for path in presence.paths:
+        typer.echo(path)
 
 
 @app.command("open")

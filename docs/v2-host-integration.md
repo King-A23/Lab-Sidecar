@@ -68,8 +68,12 @@ Canonical response shape:
   "next_actions": ["inspect_sidecar_task task_..."],
   "risk_flags": [],
   "omitted": {
+    "full_command": "omitted_by_default",
     "full_stdout": "omitted_by_default",
+    "full_stderr": "omitted_by_default",
     "metrics_rows": "omitted_by_default",
+    "report_markdown": "omitted_by_default",
+    "ppt_contents": "omitted_by_default",
     "worker_prompt_response": "omitted_by_default",
     "artifact_bodies": "omitted_by_default"
   }
@@ -332,10 +336,12 @@ Host integrations must preserve these boundaries:
 - CLI remains a separate user-explicit local execution path
 
 MCP/V2 and other agent-triggered command paths are higher risk than manual CLI
-use. Route them through bounded delegation, the configured workspace boundary,
-the conservative command safety gate, and explicit host command policy or
-confirmation. These are guardrails only; they are not OS isolation, a container
-runtime, a malware detector, or proof that delegated shell work is safe.
+use. MCP-hosted command delegation must pass through the configured workspace
+boundary and conservative command safety gate before it calls V2. Direct Python
+host integrations around `delegate_experiment_artifacts(command=...)` must keep
+their own explicit host command policy or confirmation in front of that call.
+These are guardrails only; they are not OS isolation, a container runtime, a
+malware detector, or proof that delegated shell work is safe.
 
 Do not treat Lab-Sidecar V2 as a general file browser, shell proxy, data export
 service, prompt transcript reader, PPTX unpacking API, or generic multi-agent

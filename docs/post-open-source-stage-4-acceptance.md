@@ -239,8 +239,8 @@ Updated docs and plugin guidance now cover:
 Plugin validation:
 
 ```text
-.venv/bin/python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
-Plugin validation passed: /Users/anyuchen/Projects/personal/Lab-Sidecar/plugins/lab-sidecar
+.venv/bin/python <plugin-creator>/scripts/validate_plugin.py plugins/lab-sidecar
+Plugin validation passed: <repo>/plugins/lab-sidecar
 ```
 
 Note: running the same validator with the system `python` failed because that

@@ -51,7 +51,7 @@ Manual commands run:
 
 ```bash
 python -m lab_sidecar.cli.app init
-python -m lab_sidecar.cli.app run "/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python examples/simple-success/train.py --output metrics.csv" --name "stage1 simple"
+python -m lab_sidecar.cli.app run ".venv/bin/python examples/simple-success/train.py --output metrics.csv" --name "stage1 simple"
 python -m lab_sidecar.cli.app ingest examples/csv-comparison --name "stage1 csv comparison"
 python -m lab_sidecar.cli.app list
 python -m lab_sidecar.cli.app collect task_20260617_212517_c1962f

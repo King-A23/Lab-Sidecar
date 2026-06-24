@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from lab_sidecar.core.artifacts import upsert_artifact
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord, TaskStatus
 from lab_sidecar.core.paths import resolve_workspace_path
@@ -279,7 +280,7 @@ class ReportGenerationService:
 
     def _upsert_artifacts(self, record: TaskRecord, task_path: Path) -> None:
         source_paths = self._source_artifacts(task_path)
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="report_fragment_md",
@@ -289,7 +290,7 @@ class ReportGenerationService:
                 source_paths=source_paths,
             ),
         )
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="report_summary_json",
@@ -563,10 +564,6 @@ def _resolve_task_or_workspace_path(path_text: str, root: Path, task_path: Path)
 def _task_relative(path: Path, task_path: Path) -> str:
     return path.resolve().relative_to(task_path.resolve()).as_posix()
 
-
-def _upsert_artifact(record: TaskRecord, artifact: ArtifactRecord) -> None:
-    record.artifacts = [item for item in record.artifacts if item.artifact_id != artifact.artifact_id]
-    record.artifacts.append(artifact)
 
 
 def _now_iso() -> str:

@@ -7,7 +7,7 @@ from typing import Any
 from lab_sidecar.collectors.service import MetricsCollectionService, NoMetricsFoundError
 from lab_sidecar.core.manifest import load_task
 from lab_sidecar.core.models import TaskRecord, TaskStatus
-from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
+from lab_sidecar.core.paths import resolve_workspace_path, state_dir, to_manifest_path
 from lab_sidecar.figures.service import FigureGenerationService, MetricsNotReadyError, NoFiguresGeneratedError
 from lab_sidecar.intelligence.adoption import adopt_proposal
 from lab_sidecar.intelligence.ai_policy import AIProviderPolicy, load_ai_provider_policy, provider_availability
@@ -16,6 +16,7 @@ from lab_sidecar.intelligence.bundle import build_input_bundle, omitted_contract
 from lab_sidecar.intelligence.heuristic_worker import HeuristicWorker
 from lab_sidecar.intelligence.paths import create_worker_run_dirs, generate_worker_run_id, sandbox_dir, worker_run_dir
 from lab_sidecar.intelligence.preview import ArtifactPreviewError, preview_artifact
+from lab_sidecar.intelligence.sandbox import is_path_within
 from lab_sidecar.intelligence.validator import unavailable_worker_result, validate_proposal
 from lab_sidecar.intelligence.worker_invocation import (
     SidecarWorker,
@@ -50,6 +51,10 @@ def delegate_experiment_artifacts(
         raise ValueError("command or result_path is required")
     if intelligent_mode not in {"auto", "off"}:
         raise ValueError("intelligent_mode must be 'auto' or 'off'")
+    if result_path is not None:
+        path_error = _validate_result_path(root, result_path)
+        if path_error is not None:
+            return _rejected_delegate_response(path_error)
 
     record, warnings = _run_v1_fallback(root, command, result_path, desired)
     risk_flags: list[str] = []
@@ -208,6 +213,32 @@ def _run_v1_fallback(
         record, output_warnings = _generate_requested_outputs(root, record.task_id, desired_outputs)
         warnings.extend(output_warnings)
     return record, warnings
+
+
+def _validate_result_path(root: Path, path: str | Path) -> str | None:
+    try:
+        resolved = resolve_workspace_path(str(path), root).resolve()
+    except (OSError, RuntimeError) as exc:
+        return str(exc)
+    if not is_path_within(resolved, root):
+        return "result_path is outside the configured workspace"
+    if is_path_within(resolved, state_dir(root).resolve()):
+        return "result_path is inside .lab-sidecar"
+    return None
+
+
+def _rejected_delegate_response(reason: str) -> dict[str, Any]:
+    return {
+        "schema_version": "2.1",
+        "task_id": None,
+        "status": "rejected",
+        "summary": {"headline": reason},
+        "artifacts": [],
+        "warnings": [reason],
+        "next_actions": ["Choose a result_path inside the workspace and outside .lab-sidecar."],
+        "risk_flags": ["delegate_experiment_artifacts_rejected"],
+        "omitted": omitted_contract(),
+    }
 
 
 def _generate_requested_outputs(root: Path, task_id: str, desired_outputs: list[str]) -> tuple[TaskRecord, list[str]]:

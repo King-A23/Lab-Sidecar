@@ -46,6 +46,15 @@ tools:
 - `generate_report_fragment`
 - `generate_slides`
 
+The CLI remains the primary artifact path and keeps phase boundaries explicit:
+`run / ingest -> collect -> figures -> report -> slides`. Some MCP convenience
+wrappers expose host-facing `collect_if_missing` or `ensure_*` parameters so an
+agent host can request prerequisite artifacts before a tool call. Treat those
+as adapter conveniences over the same local services, not as a new scheduler,
+hosted workflow, or product-level orchestration layer. Hosts that need strict
+phase-by-phase behavior should disable those parameters and call the CLI-shaped
+steps explicitly.
+
 The same smoke also lists and exercises the V2 bounded delegation mirror:
 
 - `delegate_experiment_artifacts`
@@ -78,7 +87,7 @@ redacting, accepting, and making final decisions from the artifacts.
 If the repo-scoped Codex plugin guidance changes, validate the plugin scaffold:
 
 ```bash
-python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
+python <plugin-creator>/scripts/validate_plugin.py plugins/lab-sidecar
 ```
 
 For V2 Codex-plugin-like host setup, smoke guidance, safety boundaries, and MCP

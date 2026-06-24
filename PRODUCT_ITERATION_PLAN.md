@@ -1,5 +1,15 @@
 # Lab-Sidecar 产品迭代计划书
 
+> Historical roadmap note: this document records earlier product exploration
+> and staged roadmap thinking. It is not the sole source of truth for the
+> current alpha scope. For current development boundaries, follow
+> [docs/current-scope.md](docs/current-scope.md), which keeps Lab-Sidecar
+> CLI-first, file-first, local-first, and focused on the
+> `run / ingest -> collect -> figures -> report -> slides` artifact path.
+> Do not use this historical roadmap to expand the active scope into Web UI,
+> FastAPI/HTTP services, hosted services, remote runners, cloud sync, or a
+> general multi-agent framework.
+
 ## 1. 项目定位
 
 **Lab-Sidecar** 是一个面向实验场景的本地 AI agent sidecar。

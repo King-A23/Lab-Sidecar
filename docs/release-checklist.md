@@ -19,16 +19,58 @@ Use this checklist for cautious public-alpha releases. It is intentionally biase
 - Confirm `pyproject.toml` version, dependencies, optional extras, classifiers, and README metadata are accurate.
 - Confirm no generated caches, `.lab-sidecar/` task output, build artifacts, local virtualenvs, or private data are staged.
 
-## Quality Gate
+## Required Local Checks
 
 From a clean environment or disposable workspace:
 
 ```bash
 python -m pip install -e ".[dev]"
-python -m pytest
+python -m pytest -q
+python -m ruff check .
+python -m pip install build
+python -m build
+python -m lab_sidecar.cli.app --help
+python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-cli-full-smoke --repo "$(pwd)"
+python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"
+git diff --check
+test ! -e .lab-sidecar
 ```
 
-Run a CLI smoke path:
+The smoke scripts are intended to run from a repository checkout. `scripts/`
+is packaged in sdists for release validation from source, but the wheel smoke
+installs the built wheel into an isolated venv before exercising the installed
+CLI.
+
+Release smoke can run in either online or offline dependency mode:
+
+- Online mode uses normal pip index access to install the build backend and
+  runtime dependencies.
+- Offline mode uses a maintainer-prepared wheelhouse and pip environment
+  variables. Do not vendor third-party wheels into this repository or commit a
+  wheelhouse.
+
+Prepare a wheelhouse from an online environment:
+
+```bash
+python -m pip download -d /tmp/lab-sidecar-wheelhouse \
+  build hatchling \
+  matplotlib pandas Pillow pydantic python-pptx pyyaml typer
+```
+
+Use the wheelhouse in an offline release-smoke environment:
+
+```bash
+PIP_NO_INDEX=1 PIP_FIND_LINKS=/tmp/lab-sidecar-wheelhouse \
+python -m pip install build
+
+PIP_NO_INDEX=1 PIP_FIND_LINKS=/tmp/lab-sidecar-wheelhouse \
+python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"
+```
+
+See [offline-release-smoke.md](offline-release-smoke.md) for the concise
+offline release-smoke operator notes.
+
+Manual quick CLI path when debugging a failure:
 
 ```bash
 python -m lab_sidecar.cli.app init
@@ -37,10 +79,13 @@ python -m lab_sidecar.cli.app collect <task_id>
 python -m lab_sidecar.cli.app figures <task_id>
 python -m lab_sidecar.cli.app report <task_id>
 python -m lab_sidecar.cli.app slides <task_id>
+python -m lab_sidecar.cli.app validate <task_id>
+python -m lab_sidecar.cli.app package <task_id> --output /tmp/lab-sidecar-package-<task_id>
+python -m lab_sidecar.cli.app package-verify /tmp/lab-sidecar-package-<task_id>
 python -m lab_sidecar.cli.app artifacts <task_id>
 ```
 
-For public alpha, also validate an ingest path:
+Manual ingest path when debugging collector or figure regressions:
 
 ```bash
 python -m lab_sidecar.cli.app ingest examples/csv-comparison
@@ -48,12 +93,17 @@ python -m lab_sidecar.cli.app collect <task_id>
 python -m lab_sidecar.cli.app figures <task_id>
 python -m lab_sidecar.cli.app report <task_id>
 python -m lab_sidecar.cli.app slides <task_id>
+python -m lab_sidecar.cli.app validate <task_id>
 ```
 
-If MCP packaging or MCP behavior changed:
+## Optional MCP Checks
+
+Run these only when MCP behavior, MCP packaging, or an explicit release gate is
+in scope:
 
 ```bash
 python -m pip install -e ".[dev,mcp]"
+python -m pytest tests/test_mcp_tools.py tests/test_v2_host_integration.py -q
 python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-mcp-stdio-smoke
 ```
 
@@ -67,12 +117,20 @@ python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-mcp-stdio-smoke
 
 ## Packaging Gate
 
-- Build the distribution in a clean checkout if publishing packages is in scope.
-- Inspect package contents for missing docs or accidental local files.
+- Build the distribution in a clean checkout.
+- Inspect package contents for missing docs, scripts, or accidental local files.
+- Verify the wheel smoke passed from an isolated venv:
+
+```bash
+python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"
+```
+
 - Verify the console script works after install:
 
 ```bash
 labsidecar --help
+labsidecar validate --help
+labsidecar package-verify --help
 ```
 
 - Verify the module entrypoint works:
@@ -80,6 +138,9 @@ labsidecar --help
 ```bash
 python -m lab_sidecar.cli.app --help
 ```
+
+- Confirm packages include `artifact-index.json` and `artifact-index.sha256`,
+  and that `package-verify` passes.
 
 ## Release Notes
 
@@ -93,6 +154,10 @@ Release notes should include:
 - Security model notes.
 - Breaking changes, if any.
 - Upgrade notes, if any.
+
+The current release hardening acceptance record is
+[release-hardening-acceptance.md](release-hardening-acceptance.md). Keep it in
+sync with the actual commands run for the release candidate.
 
 ## Post-Release
 

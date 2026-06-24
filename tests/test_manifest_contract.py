@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 from pathlib import Path
 from typing import Any
@@ -303,3 +304,42 @@ def test_manifest_artifacts_remain_unique_and_shaped_after_collect_figures_repor
         assert artifact["size_bytes"] is not None, artifact_id
         assert artifact["size_bytes"] > 0, artifact_id
         assert isinstance(artifact["sha256"], str) and artifact["sha256"], artifact_id
+
+    index_path = workspace / ".lab-sidecar" / "index.sqlite"
+    with sqlite3.connect(index_path) as conn:
+        task_row = conn.execute(
+            """
+            SELECT task_id, mode, status, created_at, updated_at, working_dir, command, source_path, exit_code
+            FROM tasks WHERE task_id = ?
+            """,
+            (task_id,),
+        ).fetchone()
+        indexed_artifacts = conn.execute(
+            """
+            SELECT artifact_id, type, path, description
+            FROM artifacts WHERE task_id = ?
+            ORDER BY artifact_id
+            """,
+            (task_id,),
+        ).fetchall()
+
+    assert task_row == (
+        manifest["task_id"],
+        manifest["mode"],
+        manifest["status"],
+        manifest["created_at"],
+        manifest["updated_at"],
+        manifest["working_dir"],
+        manifest["command"],
+        manifest["source_path"],
+        manifest["exit_code"],
+    )
+    assert indexed_artifacts == sorted(
+        (
+            artifact["artifact_id"],
+            artifact["type"],
+            artifact["path"],
+            artifact["description"],
+        )
+        for artifact in manifest["artifacts"]
+    )

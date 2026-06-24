@@ -21,6 +21,7 @@ from lab_sidecar.collectors.scenario_summary import (
     SCENARIO_SUMMARY_RELATIVE_PATH,
     build_scenario_summary,
 )
+from lab_sidecar.core.artifacts import upsert_artifact
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
@@ -354,7 +355,7 @@ class MetricsCollectionService:
         }
 
     def _upsert_summary_artifact(self, record: TaskRecord, summary_path: Path) -> None:
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_collection_summary",
@@ -375,7 +376,7 @@ class MetricsCollectionService:
         collected_files: list[_CollectedFile],
     ) -> None:
         source_paths = [item.source_file for item in collected_files]
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_normalized_csv",
@@ -385,7 +386,7 @@ class MetricsCollectionService:
                 source_paths=source_paths,
             ),
         )
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_normalized_json",
@@ -396,7 +397,7 @@ class MetricsCollectionService:
             ),
         )
         self._upsert_summary_artifact(record, summary_path)
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_scenario_summary",
@@ -632,17 +633,12 @@ def _best_row_for_metric(
 
 def _selected_fields(row: dict[str, object], metric: str) -> dict[str, Any]:
     selected: dict[str, Any] = {}
-    for field in [*IDENTITY_FIELD_PRIORITY, metric, *CONTEXT_FIELD_PRIORITY]:
-        if field in row and field not in selected and not _is_empty_value(row.get(field)):
-            selected[field] = _bounded_scalar(row[field])
+    for field in [metric, *IDENTITY_FIELD_PRIORITY, *CONTEXT_FIELD_PRIORITY]:
+        value = _safe_selected_field_value(field, row.get(field)) if field in row and field not in selected else None
+        if value is not None:
+            selected[field] = value
         if len(selected) >= MAX_BOUNDED_SELECTED_FIELDS:
             return selected
-    for field, value in row.items():
-        if field in selected or _is_empty_value(value):
-            continue
-        selected[field] = _bounded_scalar(value)
-        if len(selected) >= MAX_BOUNDED_SELECTED_FIELDS:
-            break
     return selected
 
 
@@ -873,6 +869,23 @@ def _parse_number(value: object) -> float | None:
         return None
 
 
+def _safe_selected_field_value(field: str, value: object) -> object | None:
+    if _is_empty_value(value):
+        return None
+    if _is_metric_like_field(field) and _parse_number(value) is None:
+        return None
+    return _bounded_scalar(value)
+
+
+def _is_metric_like_field(field: str) -> bool:
+    normalized = _normalized_field(field)
+    if normalized in HIGHER_IS_BETTER_METRICS or normalized in LOWER_IS_BETTER_METRICS:
+        return True
+    if any(hint in normalized for hint in HIGHER_IS_BETTER_METRICS):
+        return True
+    return any(hint in normalized for hint in LOWER_IS_BETTER_METRICS)
+
+
 def _json_number(value: float) -> int | float:
     if value.is_integer():
         return int(value)
@@ -1038,6 +1051,14 @@ def _resolve_source_pattern(root: Path, pattern: str) -> list[Path]:
     if not _has_glob_magic(pattern):
         candidate = Path(base_pattern).resolve()
         return [candidate] if candidate.exists() and candidate.is_file() else []
+
+    if not path.is_absolute():
+        matches = [
+            candidate.resolve()
+            for candidate in root.resolve().glob(normalized_pattern)
+            if candidate.is_file()
+        ]
+        return sorted(set(matches), key=lambda item: item.as_posix())
 
     matches: list[Path] = []
     for candidate in search_root.rglob("*"):
@@ -1267,10 +1288,6 @@ def _canonical_unit(unit: str) -> str:
 def _format_source_units(source_units: dict[str, str]) -> str:
     return ", ".join(f"{source}={unit}" for source, unit in sorted(source_units.items()))
 
-
-def _upsert_artifact(record: TaskRecord, artifact: ArtifactRecord) -> None:
-    record.artifacts = [item for item in record.artifacts if item.artifact_id != artifact.artifact_id]
-    record.artifacts.append(artifact)
 
 
 def _now_iso() -> str:

@@ -132,8 +132,8 @@ def test_default_responses_omit_full_bodies_and_rows(tmp_path: Path) -> None:
         assert response["omitted"]["full_stdout"] == "omitted_by_default"
         assert response["omitted"]["full_stderr"] == "omitted_by_default"
         assert response["omitted"]["metrics_rows"] == "omitted_by_default"
-        assert response["omitted"]["report_body"] == "omitted_by_default"
-        assert response["omitted"]["ppt_content"] == "omitted_by_default"
+        assert response["omitted"]["report_markdown"] == "omitted_by_default"
+        assert response["omitted"]["ppt_contents"] == "omitted_by_default"
         assert response["omitted"]["worker_prompt_response"] == "omitted_by_default"
         assert response["omitted"]["artifact_bodies"] == "omitted_by_default"
         serialized = json.dumps(response, ensure_ascii=False)

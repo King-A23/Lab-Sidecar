@@ -8,16 +8,32 @@ import types
 from pathlib import Path
 
 from lab_sidecar.core.config import init_workspace
+from lab_sidecar.mcp.responses import DEFAULT_OMITTED
 from lab_sidecar.mcp.server import create_server
 from lab_sidecar.mcp.safety import assess_run_command
 from lab_sidecar.mcp.tools import LabSidecarMCPTools
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PUBLIC_OMITTED_KEYS = {
+    "full_command",
+    "full_stdout",
+    "full_stderr",
+    "metrics_rows",
+    "report_markdown",
+    "ppt_contents",
+    "worker_prompt_response",
+    "artifact_bodies",
+}
 
 
 def copy_examples(workspace: Path) -> None:
     shutil.copytree(PROJECT_ROOT / "examples", workspace / "examples")
+
+
+def test_mcp_default_omitted_contract_uses_public_boundary_keys() -> None:
+    assert set(DEFAULT_OMITTED) == PUBLIC_OMITTED_KEYS
+    assert all(value == "omitted_by_default" for value in DEFAULT_OMITTED.values())
 
 
 def test_mcp_safety_blocks_destructive_commands(tmp_path: Path) -> None:
@@ -340,6 +356,26 @@ def test_mcp_v2_delegate_blocks_workspace_external_result_path(tmp_path: Path) -
     assert result["summary"]["status"] == "blocked"
     assert "outside" in " ".join(result["warnings"])
     assert result["task_id"] is None
+
+
+def test_mcp_v2_delegate_blocks_state_dir_result_path(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    state_path = tmp_path / ".lab-sidecar" / "private-results.csv"
+    state_path.write_text("epoch,accuracy\n1,0.9\n", encoding="utf-8")
+    tools = LabSidecarMCPTools(tmp_path)
+
+    result = tools.delegate_experiment_artifacts(
+        user_goal="This should be blocked because the result path is inside Lab-Sidecar state.",
+        result_path=state_path,
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+
+    assert result["schema_version"] == "1"
+    assert result["summary"]["status"] == "blocked"
+    assert ".lab-sidecar" in " ".join(result["warnings"])
+    assert result["task_id"] is None
+    assert not any((tmp_path / ".lab-sidecar" / "tasks").glob("task_*"))
 
 
 def test_mcp_server_registers_v1_and_v2_tools(monkeypatch, tmp_path: Path) -> None:

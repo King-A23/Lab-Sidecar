@@ -245,12 +245,12 @@ def test_build_provider_prompt_uses_bounded_bundle_only() -> None:
     bundle = {
         "logs": {"stdout_tail": ["hello"], "stderr_tail": ["token=abc123"]},
         "data_previews": [{"row_sample": [{"metric": "acc"}]}],
-        "omitted": {"full_stdout": "omitted_by_default", "full_data_files": "omitted_by_default"},
+        "omitted": {"full_stdout": "omitted_by_default", "artifact_bodies": "omitted_by_default"},
     }
     prompt = build_provider_input(bundle, enabled_fake_policy(max_input_chars=1000)).prompt
 
     assert "full_stdout" in prompt
-    assert "full_data_files" in prompt
+    assert "artifact_bodies" in prompt
     assert "abc123" not in prompt
     assert len(prompt) <= 1000
 

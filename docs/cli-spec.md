@@ -7,7 +7,8 @@
 - 默认 workspace 为当前目录。
 - `task_id` 推荐格式：`task_YYYYMMDD_HHMMSS_<6位短随机串>`。
 - 默认所有产物写入 `.lab-sidecar/tasks/<task_id>/`。
-- 除 `open` 外，所有命令都应在终端里给出明确的下一步提示。
+- 会推进任务阶段或写入 artifact 的命令应在终端里给出明确的下一步提示。
+  只读导航、列表和 verify 类命令可以只输出当前结果或错误诊断。
 
 建议退出码：
 
@@ -429,7 +430,7 @@ Reason: /tmp/package-output already exists and is not empty
 ```text
 Compared tasks: 2
 Source: metrics/normalized_metrics.csv
-Common numeric fields: epoch, val_accuracy, val_loss
+Common numeric fields: val_accuracy, val_loss
 Skipped common non-numeric fields: model
 task_id                         status     metric        value  source
 task_20260531_160210_3b20ef     completed  val_accuracy  0.86   metrics/normalized_metrics.csv

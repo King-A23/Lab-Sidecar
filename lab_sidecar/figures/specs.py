@@ -208,6 +208,14 @@ class FigurePlan:
     unsupported_chart_diagnostics: list[dict[str, Any]] = field(default_factory=list)
 
 
+@dataclass
+class ExplicitFigureSpecBundle:
+    specs: list[FigureSpec]
+    warnings: list[str] = field(default_factory=list)
+    skipped_candidates: list[dict[str, str]] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+
 def build_auto_figure_plan(
     df: pd.DataFrame,
     units: dict[str, str] | None = None,
@@ -234,6 +242,31 @@ def build_auto_figure_plan(
 
 
 def build_explicit_figure_plan(
+    df: pd.DataFrame,
+    spec: FigureSpec | list[FigureSpec],
+    units: dict[str, str] | None = None,
+    warnings: list[str] | None = None,
+    skipped_candidates: list[dict[str, str]] | None = None,
+    errors: list[str] | None = None,
+) -> FigurePlan:
+    plan = FigurePlan(
+        specs=[],
+        warnings=list(warnings or []),
+        skipped_candidates=list(skipped_candidates or []),
+        errors=list(errors or []),
+    )
+    specs = spec if isinstance(spec, list) else [spec]
+    for item in specs:
+        item_plan = _build_single_explicit_figure_plan(df, item, units=units)
+        plan.specs.extend(item_plan.specs)
+        plan.warnings.extend(item_plan.warnings)
+        plan.skipped_candidates.extend(item_plan.skipped_candidates)
+        plan.errors.extend(item_plan.errors)
+        plan.unsupported_chart_diagnostics.extend(item_plan.unsupported_chart_diagnostics)
+    return plan
+
+
+def _build_single_explicit_figure_plan(
     df: pd.DataFrame,
     spec: FigureSpec,
     units: dict[str, str] | None = None,
@@ -287,6 +320,38 @@ def build_explicit_figure_plan(
 
     spec.units = _spec_units(spec, units or {})
     return FigurePlan(specs=[spec], unsupported_chart_diagnostics=unsupported_chart_diagnostics)
+
+
+def parse_explicit_specs(data: Any, task_path: Path) -> ExplicitFigureSpecBundle:
+    if not isinstance(data, dict):
+        raise FigureSpecValidationError("spec must be a YAML object")
+
+    if "figures" not in data:
+        return ExplicitFigureSpecBundle(specs=[parse_explicit_spec(data, task_path)])
+
+    raw_figures = data.get("figures")
+    if not isinstance(raw_figures, list):
+        raise FigureSpecValidationError("field 'figures' must be a list of figure specs")
+    if not raw_figures:
+        raise FigureSpecValidationError("field 'figures' must contain at least one figure spec")
+
+    specs: list[FigureSpec] = []
+    skipped: list[dict[str, str]] = []
+    errors: list[str] = []
+    for index, item in enumerate(raw_figures, start=1):
+        figure_id = _figure_id_for_diagnostic(item, index)
+        if not isinstance(item, dict):
+            reason = f"Figure spec item {index} must be a YAML object."
+            errors.append(reason)
+            skipped.append(_skip(figure_id, reason))
+            continue
+        try:
+            specs.append(parse_explicit_spec(item, task_path))
+        except FigureSpecValidationError as exc:
+            reason = f"Figure spec '{figure_id}' is invalid: {exc}"
+            errors.append(reason)
+            skipped.append(_skip(figure_id, reason))
+    return ExplicitFigureSpecBundle(specs=specs, skipped_candidates=skipped, errors=errors)
 
 
 def parse_explicit_spec(data: Any, task_path: Path) -> FigureSpec:
@@ -624,6 +689,14 @@ def _required_string(data: dict[str, Any], field_name: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise FigureSpecValidationError(f"field '{field_name}' must be a non-empty string")
     return value.strip()
+
+
+def _figure_id_for_diagnostic(item: Any, index: int) -> str:
+    if isinstance(item, dict):
+        figure_id = item.get("figure_id")
+        if isinstance(figure_id, str) and figure_id.strip():
+            return figure_id.strip()
+    return f"figure_{index}"
 
 
 def _process_axis(df: pd.DataFrame) -> str | None:

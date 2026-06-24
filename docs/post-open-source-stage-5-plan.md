@@ -457,7 +457,7 @@ python scripts/mcp_stdio_smoke.py --workspace /tmp/lab-sidecar-stage-5-mcp-smoke
 If plugin guidance changes, also run:
 
 ```bash
-python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
+python <plugin-creator>/scripts/validate_plugin.py plugins/lab-sidecar
 ```
 
 Manual full workflow smoke:
