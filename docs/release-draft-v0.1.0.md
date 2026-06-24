@@ -55,7 +55,7 @@ Saved comparisons are descriptive derived artifacts for two to five already-coll
 
 ## Validation Evidence
 
-- `python -m pytest -q`: 250 passed.
+- `python -m pytest -q`: 252 passed.
 - `python -m ruff check .`: passed.
 - `python -m build`: passed.
 - `python scripts/cli_full_smoke.py --workspace <workspace> --repo <repo>`: passed.

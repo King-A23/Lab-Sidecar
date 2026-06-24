@@ -44,7 +44,7 @@ disposable or repository virtual environment Python on `PATH`.
 | `PATH=/tmp/lab-sidecar-rc-closure-venv/bin:$PATH python -m pip install build` | Passed; installed `build` and its direct dependencies in the disposable release venv. |
 | `.venv/bin/python -m build` | Passed; built `lab_sidecar-0.1.0.tar.gz` and `lab_sidecar-0.1.0-py3-none-any.whl`. |
 | `.venv/bin/python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"` | Passed; built a wheel, installed it into an isolated venv, ran installed `labsidecar`, validated artifacts, packaged the task and saved comparison, and verified both packages. |
-| `.venv/bin/python -m pytest -q` | Passed; 250 tests passed. |
+| `.venv/bin/python -m pytest -q` | Passed; 252 tests passed. |
 | `.venv/bin/python -m ruff check .` | Passed. |
 | `.venv/bin/python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-cli-full-smoke --repo "$(pwd)"` | Passed; covered success, failed-task diagnostic, ingest, saved comparison, comparison validation, comparison packaging, and package verification flows. |
 | `.venv/bin/python -m pytest tests/test_mcp_tools.py tests/test_v2_host_integration.py -q` | Passed; 32 tests passed. |

@@ -84,7 +84,7 @@ run:
 
 | Command | Result |
 | --- | --- |
-| `.venv/bin/python -m pytest -q` | Passed; 250 tests passed. |
+| `.venv/bin/python -m pytest -q` | Passed; 252 tests passed. |
 | `.venv/bin/python -m ruff check .` | Passed. |
 | `.venv/bin/python -m build` | Passed; built `lab_sidecar-0.1.0.tar.gz` and `lab_sidecar-0.1.0-py3-none-any.whl`. |
 | `.venv/bin/python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-cli-full-smoke --repo "$(pwd)"` | Passed; covered success, failed-task diagnostic, ingest, saved comparison, comparison validation, comparison packaging, and package verification flows. |
@@ -98,7 +98,7 @@ run:
 
 Focused comparison artifact suite: 12 tests passed.
 
-Full repository test suite: 250 tests passed.
+Full repository test suite: 252 tests passed.
 
 ## Known Limits
 
