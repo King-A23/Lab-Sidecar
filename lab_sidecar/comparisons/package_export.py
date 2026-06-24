@@ -19,6 +19,7 @@ from lab_sidecar.comparisons.service import (
     TABLE_CSV_RELATIVE_PATH,
     TABLE_JSON_RELATIVE_PATH,
     TRACEABILITY_RELATIVE_PATH,
+    comparison_figure_image_paths,
     refresh_comparison_artifacts,
 )
 from lab_sidecar.storage.package_export import (
@@ -147,16 +148,14 @@ def _prepare_output_dir(root: Path, output_dir: Path) -> Path:
 
 def _package_specs(source_dir: Path) -> list[ComparisonPackageFileSpec]:
     specs = list(COMPARISON_PACKAGE_FILE_SPECS)
-    figures_dir = source_dir / "figures"
-    if figures_dir.is_dir():
-        for path in sorted([*figures_dir.glob("*.png"), *figures_dir.glob("*.svg")], key=lambda item: item.name.lower()):
-            specs.append(
-                ComparisonPackageFileSpec(
-                    path.relative_to(source_dir),
-                    "figures",
-                    "Generated comparison figure image.",
-                )
+    for path in comparison_figure_image_paths(source_dir):
+        specs.append(
+            ComparisonPackageFileSpec(
+                path,
+                "figures",
+                "Generated comparison figure image.",
             )
+        )
     return specs
 
 

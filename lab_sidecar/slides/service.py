@@ -14,6 +14,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
+from lab_sidecar.core.artifacts import upsert_artifact
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord, TaskStatus
 from lab_sidecar.core.paths import resolve_workspace_path
@@ -744,7 +745,7 @@ class SlidesGenerationService:
         }
 
     def _upsert_artifacts(self, record: TaskRecord, source_artifacts: list[str]) -> None:
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="slides_presentation_draft_pptx",
@@ -754,7 +755,7 @@ class SlidesGenerationService:
                 source_paths=source_artifacts,
             ),
         )
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="slides_summary_json",
@@ -1947,10 +1948,6 @@ def _unique_paths(paths: list[Path]) -> list[Path]:
         result.append(resolved)
     return result
 
-
-def _upsert_artifact(record: TaskRecord, artifact: ArtifactRecord) -> None:
-    record.artifacts = [item for item in record.artifacts if item.artifact_id != artifact.artifact_id]
-    record.artifacts.append(artifact)
 
 
 def _json_float(value: Any) -> float | None:

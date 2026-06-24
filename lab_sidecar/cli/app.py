@@ -935,7 +935,7 @@ def validate_comparison(
     except ComparisonNotFound:
         _fail(
             f"Error: comparison '{comparison_id}' was not found.\n"
-            "Hint: saved comparisons live under .lab-sidecar/comparisons/.",
+            "Hint: run 'labsidecar list-comparisons' to find saved comparison ids.",
             code=3,
         )
 
@@ -959,7 +959,7 @@ def package_comparison(
     except ComparisonNotFound:
         _fail(
             f"Error: comparison '{comparison_id}' was not found.\n"
-            "Hint: saved comparisons live under .lab-sidecar/comparisons/.",
+            "Hint: run 'labsidecar list-comparisons' to find saved comparison ids.",
             code=3,
         )
 

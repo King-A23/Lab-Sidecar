@@ -11,6 +11,7 @@ from typing import Any, Literal
 import pandas as pd
 import yaml
 
+from lab_sidecar.core.artifacts import upsert_artifact
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
@@ -854,7 +855,7 @@ class FigureGenerationService:
     ) -> None:
         source_paths = [to_manifest_path(metrics_path, self.root)]
         for item in generated:
-            _upsert_artifact(
+            upsert_artifact(
                 record,
                 ArtifactRecord(
                     artifact_id=f"figure_{item.spec.figure_id}_png",
@@ -864,7 +865,7 @@ class FigureGenerationService:
                     source_paths=source_paths,
                 ),
             )
-            _upsert_artifact(
+            upsert_artifact(
                 record,
                 ArtifactRecord(
                     artifact_id=f"figure_{item.spec.figure_id}_svg",
@@ -874,7 +875,7 @@ class FigureGenerationService:
                     source_paths=source_paths,
                 ),
             )
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="figures_spec",
@@ -892,7 +893,7 @@ class FigureGenerationService:
         summary_path: Path,
         metrics_path: Path,
     ) -> None:
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="figures_summary",
@@ -903,10 +904,6 @@ class FigureGenerationService:
             ),
         )
 
-
-def _upsert_artifact(record: TaskRecord, artifact: ArtifactRecord) -> None:
-    record.artifacts = [item for item in record.artifacts if item.artifact_id != artifact.artifact_id]
-    record.artifacts.append(artifact)
 
 
 def _write_yaml(path: Path, data: dict[str, Any]) -> None:

@@ -324,7 +324,7 @@ Host setup is in [docs/mcp-host-config.md](docs/mcp-host-config.md). A repo-scop
 ## Safety And Limits
 
 - Manual CLI `run` executes the local command the user explicitly provides. Lab-Sidecar records the command, logs, status, and artifacts, but it is not an OS sandbox and the command can do whatever the user's environment permits.
-- MCP/V2 and other agent-triggered command paths are higher risk than manual CLI use. They must go through bounded delegation, configured workspace boundaries, the conservative command safety gate, and explicit command policies or confirmations supplied by the host.
+- MCP/V2 and other agent-triggered command paths are higher risk than manual CLI use. MCP-hosted command delegation goes through bounded delegation, configured workspace boundaries, and the conservative command safety gate. Direct Python host integrations around `delegate_experiment_artifacts(command=...)` must keep explicit command policy or confirmation in front of that call.
 - Those MCP/V2 guardrails are not operating-system isolation, a container runtime, a malware detector, or a guarantee that a command is safe.
 - Generated logs and artifacts may contain local paths, command arguments, environment details, metrics, or snippets of output. Review and redact before sharing.
 - The human experiment owner remains responsible for interpretation, redaction, acceptance, and final decisions.

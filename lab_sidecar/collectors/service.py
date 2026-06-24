@@ -21,6 +21,7 @@ from lab_sidecar.collectors.scenario_summary import (
     SCENARIO_SUMMARY_RELATIVE_PATH,
     build_scenario_summary,
 )
+from lab_sidecar.core.artifacts import upsert_artifact
 from lab_sidecar.core.manifest import load_task, manifest_path, write_manifest
 from lab_sidecar.core.models import ArtifactRecord, TaskRecord
 from lab_sidecar.core.paths import resolve_workspace_path, to_manifest_path
@@ -354,7 +355,7 @@ class MetricsCollectionService:
         }
 
     def _upsert_summary_artifact(self, record: TaskRecord, summary_path: Path) -> None:
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_collection_summary",
@@ -375,7 +376,7 @@ class MetricsCollectionService:
         collected_files: list[_CollectedFile],
     ) -> None:
         source_paths = [item.source_file for item in collected_files]
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_normalized_csv",
@@ -385,7 +386,7 @@ class MetricsCollectionService:
                 source_paths=source_paths,
             ),
         )
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_normalized_json",
@@ -396,7 +397,7 @@ class MetricsCollectionService:
             ),
         )
         self._upsert_summary_artifact(record, summary_path)
-        _upsert_artifact(
+        upsert_artifact(
             record,
             ArtifactRecord(
                 artifact_id="metrics_scenario_summary",
@@ -1287,10 +1288,6 @@ def _canonical_unit(unit: str) -> str:
 def _format_source_units(source_units: dict[str, str]) -> str:
     return ", ".join(f"{source}={unit}" for source, unit in sorted(source_units.items()))
 
-
-def _upsert_artifact(record: TaskRecord, artifact: ArtifactRecord) -> None:
-    record.artifacts = [item for item in record.artifacts if item.artifact_id != artifact.artifact_id]
-    record.artifacts.append(artifact)
 
 
 def _now_iso() -> str:

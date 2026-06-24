@@ -518,11 +518,8 @@ def comparison_artifact_presence(root: Path, comparison_id: str) -> ComparisonAr
         if (output_dir / relative).is_file():
             paths.append(relative.as_posix())
 
-    figures_dir = output_dir / "figures"
-    figure_paths: list[Path] = []
-    if figures_dir.is_dir():
-        figure_paths = sorted([*figures_dir.glob("*.png"), *figures_dir.glob("*.svg")], key=lambda path: path.as_posix())
-        paths.extend(path.relative_to(output_dir).as_posix() for path in figure_paths if path.is_file())
+    figure_paths = comparison_figure_image_paths(output_dir)
+    paths.extend(path.as_posix() for path in figure_paths)
 
     for relative in [
         REPORT_RELATIVE_PATH,
@@ -537,7 +534,7 @@ def comparison_artifact_presence(root: Path, comparison_id: str) -> ComparisonAr
         comparison_dir=output_dir,
         paths=paths,
         artifact_count=len(paths),
-        figure_count=len([path for path in figure_paths if path.is_file()]),
+        figure_count=len(figure_paths),
         report_present=(output_dir / REPORT_RELATIVE_PATH).is_file(),
     )
 
@@ -579,6 +576,51 @@ def refresh_comparison_artifacts(root: Path, manifest: ComparisonManifest) -> Co
     manifest.artifacts.append(trace_artifact)
     _write_manifest(output_dir / MANIFEST_RELATIVE_PATH, manifest)
     return manifest
+
+
+def comparison_figure_image_paths(output_dir: Path) -> list[Path]:
+    """Return existing comparison figure images declared by figure-summary.json."""
+    summary = _read_json(output_dir / FIGURE_SUMMARY_RELATIVE_PATH)
+    figures = comparison_figure_entries(summary)
+    if not figures:
+        return []
+
+    output_root = output_dir.resolve()
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for item in figures:
+        if not isinstance(item, dict):
+            continue
+        for key in ("png_path", "svg_path"):
+            value = item.get(key)
+            if not isinstance(value, str) or not value:
+                continue
+            relative = Path(value)
+            if relative.is_absolute() or ".." in relative.parts or relative.suffix.lower() not in {".png", ".svg"}:
+                continue
+            candidate = (output_dir / relative).resolve()
+            try:
+                normalized = candidate.relative_to(output_root)
+            except ValueError:
+                continue
+            if normalized in seen or not candidate.is_file():
+                continue
+            seen.add(normalized)
+            paths.append(normalized)
+    return paths
+
+
+def comparison_figure_entries(summary: dict[str, Any]) -> list[Any]:
+    """Return declared comparison figure entries from canonical or legacy keys."""
+    generated_figures = summary.get("generated_figures")
+    if isinstance(generated_figures, list) and generated_figures:
+        return generated_figures
+    figures = summary.get("figures")
+    if isinstance(figures, list) and figures:
+        return figures
+    if isinstance(generated_figures, list):
+        return generated_figures
+    return figures if isinstance(figures, list) else []
 
 
 def _comparison_artifacts(output_dir: Path) -> list[ArtifactRecord]:
@@ -631,20 +673,18 @@ def _comparison_artifacts(output_dir: Path) -> list[ArtifactRecord]:
         for relative, artifact_id, artifact_type, description, source_paths in specs
         if (output_dir / relative).is_file()
     ]
-    figures_dir = output_dir / "figures"
-    if figures_dir.is_dir():
-        for path in sorted([*figures_dir.glob("*.png"), *figures_dir.glob("*.svg")], key=lambda item: item.name):
-            suffix = path.suffix.lower().lstrip(".")
-            artifacts.append(
-                _artifact(
-                    output_dir,
-                    path.relative_to(output_dir),
-                    f"comparison_figure_{path.stem}_{suffix}",
-                    "figure",
-                    "Generated comparison figure image",
-                    source_paths=[TABLE_CSV_RELATIVE_PATH.as_posix(), FIGURE_SUMMARY_RELATIVE_PATH.as_posix()],
-                )
+    for relative in comparison_figure_image_paths(output_dir):
+        suffix = relative.suffix.lower().lstrip(".")
+        artifacts.append(
+            _artifact(
+                output_dir,
+                relative,
+                f"comparison_figure_{relative.stem}_{suffix}",
+                "figure",
+                "Generated comparison figure image",
+                source_paths=[TABLE_CSV_RELATIVE_PATH.as_posix(), FIGURE_SUMMARY_RELATIVE_PATH.as_posix()],
             )
+        )
     return artifacts
 
 
@@ -679,6 +719,7 @@ def _comparison_traceability(
     summary = _read_json(output_dir / SUMMARY_RELATIVE_PATH)
     report_summary = _read_json(output_dir / REPORT_SUMMARY_RELATIVE_PATH)
     figure_summary = _read_json(output_dir / FIGURE_SUMMARY_RELATIVE_PATH)
+    figure_entries = comparison_figure_entries(figure_summary)
     return {
         "schema_version": COMPARISON_SCHEMA_VERSION,
         "comparison_id": manifest.comparison_id,
@@ -720,7 +761,7 @@ def _comparison_traceability(
             "present": bool(figure_summary),
             "summary_path": FIGURE_SUMMARY_RELATIVE_PATH.as_posix() if figure_summary else None,
             "figure_count": figure_summary.get("figure_count") if figure_summary else 0,
-            "figures": figure_summary.get("figures") or [],
+            "figures": figure_entries,
         },
         "report_lineage": {
             "present": bool(report_summary),

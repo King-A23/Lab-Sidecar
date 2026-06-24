@@ -27,6 +27,7 @@ from lab_sidecar.comparisons.service import (
     TABLE_CSV_RELATIVE_PATH,
     TABLE_JSON_RELATIVE_PATH,
     TRACEABILITY_RELATIVE_PATH,
+    comparison_figure_entries,
 )
 from lab_sidecar.core.provenance import file_sha256
 from lab_sidecar.core.paths import resolve_workspace_path, tasks_dir
@@ -42,6 +43,15 @@ TRACE_FORBIDDEN_FRAGMENTS = [
     "ppt/presentation.xml",
     "<p:sld",
 ]
+
+
+def _figure_entries_for_validation(summary: dict[str, Any]) -> list[Any]:
+    entries: list[Any] = []
+    for key in ("generated_figures", "figures"):
+        value = summary.get(key)
+        if isinstance(value, list):
+            entries.extend(value)
+    return entries
 
 
 class ComparisonValidationService:
@@ -310,9 +320,10 @@ class ComparisonValidationService:
             )
             return False
         errors = []
-        if is_required and len(summary.get("figures") or []) == 0:
+        figure_entries = comparison_figure_entries(summary)
+        if is_required and len(figure_entries) == 0:
             errors.append("figure summary has no generated figures")
-        for item in summary.get("figures") or []:
+        for item in _figure_entries_for_validation(summary):
             if not isinstance(item, dict):
                 continue
             for key in ("png_path", "svg_path"):

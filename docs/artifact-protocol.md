@@ -321,11 +321,12 @@ unrelated workspace files are omitted by default.
 
 `labsidecar package-comparison <comparison_id> --output <dir>` creates a saved
 comparison package from a separate allowlist. It copies comparison metadata,
-comparison tables, deterministic comparison figures, deterministic comparison
-reports, and comparison-local traceability when present. It does not copy source
-task stdout/stderr logs, source task raw files, source tasks' full normalized
-metrics tables, SQLite, worker audit files, sandbox files, or unrelated
-workspace files.
+comparison tables, deterministic comparison figures declared by
+`figures/figure-summary.json`, deterministic comparison reports, and
+comparison-local traceability when present. It does not copy source task
+stdout/stderr logs, source task raw files, source tasks' full normalized metrics
+tables, SQLite, worker audit files, sandbox files, stray files under comparison
+artifact directories, or unrelated workspace files.
 
 `artifact-index.json` lists included, omitted, unavailable, and package
 metadata files. Included and package metadata entries record package-relative

@@ -2,6 +2,36 @@
 
 All notable user-facing changes should be recorded here. This project has not published a stable release yet; entries describe the current public-alpha baseline and pending changes.
 
+## [0.1.2] - Pending
+
+### Changed
+
+- Consolidated task artifact registration through a shared manifest helper for
+  collected metrics, figures, report fragments, and slide drafts while keeping
+  the existing task artifact layout and CLI workflow unchanged.
+- Hardened saved-comparison artifact discovery and packaging so comparison
+  packages include generated figure images declared by `figure-summary.json`
+  instead of arbitrary image files placed under the comparison `figures/`
+  directory.
+- Clarified comparison CLI recovery guidance when a comparison id is missing,
+  without removing or renaming any existing commands.
+
+### Documentation
+
+- Tightened the artifact protocol wording around `manifest.json` as the
+  task-local source of truth and SQLite as a rebuildable index.
+- Clarified MCP/V2 host-integration boundaries as local, experimental, bounded
+  adapters over CLI artifact services, without expanding the MCP/V2 product
+  surface.
+
+### Validation
+
+- Added manifest/index projection coverage and comparison package allowlist
+  coverage for the v0.1.2 artifact contract stabilization pass.
+- No Web UI, FastAPI/HTTP service, hosted service, remote runner, cloud sync,
+  advanced analytics, statistical significance, AI-authored conclusions, DAG
+  scheduler, or general agent-framework behavior was added.
+
 ## [0.1.1] - 2026-06-24
 
 ### Added

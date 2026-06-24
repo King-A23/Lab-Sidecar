@@ -46,6 +46,15 @@ tools:
 - `generate_report_fragment`
 - `generate_slides`
 
+The CLI remains the primary artifact path and keeps phase boundaries explicit:
+`run / ingest -> collect -> figures -> report -> slides`. Some MCP convenience
+wrappers expose host-facing `collect_if_missing` or `ensure_*` parameters so an
+agent host can request prerequisite artifacts before a tool call. Treat those
+as adapter conveniences over the same local services, not as a new scheduler,
+hosted workflow, or product-level orchestration layer. Hosts that need strict
+phase-by-phase behavior should disable those parameters and call the CLI-shaped
+steps explicitly.
+
 The same smoke also lists and exercises the V2 bounded delegation mirror:
 
 - `delegate_experiment_artifacts`
