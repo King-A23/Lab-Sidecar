@@ -103,6 +103,7 @@ include = [
   "/tests",
   "/examples",
   "/docs",
+  "/scripts",
   "/README.md",
   "/CHANGELOG.md",
   "/CONTRIBUTING.md",
