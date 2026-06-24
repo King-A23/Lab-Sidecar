@@ -230,8 +230,8 @@ or MCP/V2 schema expansion.
 
 Date: 2026-06-24
 
-This pending v0.1.2 pass keeps Lab-Sidecar in the same cautious local-first
-alpha scope and focuses on artifact-contract stability:
+v0.1.2 keeps Lab-Sidecar in the same cautious local-first alpha scope and
+focuses on artifact-contract stability:
 
 - Task artifact registration is consolidated through a shared manifest helper
   for metrics, figures, reports, and slides.
@@ -247,7 +247,6 @@ alpha scope and focuses on artifact-contract stability:
   existing artifact services, not a hosted service, remote runner, Web/API
   layer, or general agent framework.
 
-No release tag, push, PyPI publish, Web UI, FastAPI/HTTP service, hosted
-service, remote runner, cloud sync, advanced analytics, default AI-authored
-conclusions, DAG scheduler, or general agent-framework behavior is part of this
-pending pass.
+No Web UI, FastAPI/HTTP service, hosted service, remote runner, cloud sync,
+advanced analytics, default AI-authored conclusions, DAG scheduler, or general
+agent-framework behavior is part of this release.

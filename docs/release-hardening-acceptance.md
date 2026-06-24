@@ -65,15 +65,17 @@ Package-content inspection:
 
 Date: 2026-06-24
 
-This addendum records the pending v0.1.2 artifact-contract stabilization pass.
-It does not change the release publication status: no tag, push, PyPI upload,
-or GitHub release was performed.
+This addendum records the v0.1.2 artifact-contract stabilization validation
+used for release finalization. PyPI upload remains a separate maintainer
+operation.
 
 | Check | Result |
 | --- | --- |
 | Final diff review | Passed after follow-up fixes; review found a comparison figure alias validation gap, which was closed by sharing the comparison figure entry resolver with validation and adding focused tests. |
 | `.venv/bin/python -m pytest tests/test_comparison_artifacts.py` | Passed; 23 tests passed after the comparison validation fix. |
 | `.venv/bin/python -m pytest` | Passed; 273 tests passed in 65.58 seconds. |
+| `.venv/bin/python -m build` | Passed; built `lab_sidecar-0.1.2.tar.gz` and `lab_sidecar-0.1.2-py3-none-any.whl`. |
+| `.venv/bin/python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-v0.1.2-wheel-smoke --repo "$(pwd)"` | Passed; built and installed `lab_sidecar-0.1.2-py3-none-any.whl`, ran the installed CLI path, validated and packaged a task, saved and packaged a comparison, and verified both packages. |
 | Disposable real-path smoke in `/tmp/lab-sidecar-real-smoke.PYmI1M/workspace` | Passed after installing `.[dev]` in a temporary venv; covered `init`, `doctor`, `run`, `collect`, `figures`, `report`, `slides`, `validate`, `package`, and `package-verify`. |
 | Ingest smoke using `examples/csv-comparison` | Passed; covered `ingest`, `collect`, `figures`, `report`, `slides`, and `validate`. |
 | Saved-comparison smoke | Passed; covered `compare --save --figures --report`, `validate-comparison --require figures --require report --require package-ready`, `package-comparison`, and `package-verify`. |
