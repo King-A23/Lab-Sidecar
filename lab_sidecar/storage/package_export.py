@@ -18,6 +18,8 @@ from lab_sidecar.storage.sqlite_index import upsert_task
 PACKAGE_SCHEMA_VERSION = "1"
 COMMAND_PREVIEW_CHARS = 160
 FAILURE_SUMMARY_CHARS = 1200
+ARTIFACT_INDEX_DIGEST_PATH = Path("artifact-index.sha256")
+ARTIFACT_INDEX_PATH = Path("artifact-index.json")
 
 
 class PackageExportError(RuntimeError):
@@ -28,6 +30,10 @@ class PackageOutputError(PackageExportError):
     """Raised when the requested output path is not usable as a package directory."""
 
 
+class PackageVerifyError(RuntimeError):
+    """Raised when a package directory cannot be inspected."""
+
+
 @dataclass(frozen=True)
 class PackageExportResult:
     path: Path
@@ -35,6 +41,18 @@ class PackageExportResult:
     included_count: int
     omitted_count: int
     unavailable_count: int
+    digest_path: Path
+
+
+@dataclass(frozen=True)
+class PackageVerifyResult:
+    path: Path
+    checked_count: int
+    errors: list[str]
+
+    @property
+    def ok(self) -> bool:
+        return not self.errors
 
 
 @dataclass(frozen=True)
@@ -129,7 +147,8 @@ def export_task_package(root: Path, record: TaskRecord, output_dir: Path) -> Pac
             encoding="utf-8",
         )
         artifact_index["package_metadata"] = _package_metadata_entries(output_path)
-        _write_json(output_path / "artifact-index.json", artifact_index)
+        _write_json(output_path / ARTIFACT_INDEX_PATH, artifact_index)
+        _write_index_digest(output_path)
     except OSError as exc:
         raise PackageExportError(str(exc)) from exc
 
@@ -139,7 +158,53 @@ def export_task_package(root: Path, record: TaskRecord, output_dir: Path) -> Pac
         included_count=len(included),
         omitted_count=len(omitted),
         unavailable_count=len(unavailable),
+        digest_path=output_path / ARTIFACT_INDEX_DIGEST_PATH,
     )
+
+
+def verify_task_package(package_dir: Path) -> PackageVerifyResult:
+    package_path = package_dir.resolve()
+    if not package_path.is_dir():
+        raise PackageVerifyError(f"{package_path} is not a package directory")
+
+    errors: list[str] = []
+    checked_paths: set[str] = set()
+    index_path = package_path / ARTIFACT_INDEX_PATH
+    digest_path = package_path / ARTIFACT_INDEX_DIGEST_PATH
+    expected_index_digest = _read_index_digest(digest_path, errors)
+    if expected_index_digest is not None:
+        _check_file_digest(index_path, "artifact-index.json", expected_index_digest, errors)
+        checked_paths.add(ARTIFACT_INDEX_PATH.as_posix())
+    index = _read_package_index(index_path, errors)
+    if index is None:
+        return PackageVerifyResult(path=package_path, checked_count=len(checked_paths), errors=errors)
+
+    for entry in index.get("included") or []:
+        if isinstance(entry, dict):
+            _check_index_entry(package_path, entry, errors)
+            package_path_text = entry.get("package_path")
+            if isinstance(package_path_text, str) and package_path_text:
+                checked_paths.add(package_path_text)
+    for entry in index.get("package_metadata") or []:
+        if not isinstance(entry, dict):
+            errors.append("package_metadata contains a non-object entry")
+            continue
+        package_path_text = entry.get("package_path")
+        if not isinstance(package_path_text, str) or not package_path_text:
+            errors.append("package_metadata entry is missing package_path")
+            continue
+        checked_paths.add(package_path_text)
+        if package_path_text == ARTIFACT_INDEX_PATH.as_posix():
+            continue
+        _check_index_entry(package_path, entry, errors)
+
+    checked_paths.add(ARTIFACT_INDEX_DIGEST_PATH.as_posix())
+    for path in _package_files(package_path):
+        relative = path.relative_to(package_path).as_posix()
+        if relative not in checked_paths:
+            errors.append(f"unexpected package file: {relative}")
+
+    return PackageVerifyResult(path=package_path, checked_count=len(checked_paths), errors=errors)
 
 
 def _prepare_output_dir(root: Path, output_dir: Path) -> Path:
@@ -451,7 +516,11 @@ def _readme(
             "",
             "This package uses a conservative allowlist. Full stdout/stderr logs, raw source files, local SQLite indexes, worker transcripts, sandbox files, and unrelated workspace files were not copied by default.",
             "",
-            "See `artifact-index.json` for included, omitted, and unavailable files. See `redaction-notes.md` for the default omission policy.",
+            "See `artifact-index.json` for included, omitted, and unavailable files, "
+            "and `artifact-index.sha256` for the package index digest. Run "
+            "`labsidecar package-verify <package_dir>` to check the digest, "
+            "indexed file hashes and sizes, and unexpected files. See "
+            "`redaction-notes.md` for the default omission policy.",
         ]
     )
     if unavailable:
@@ -529,6 +598,82 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _write_index_digest(package_path: Path) -> None:
+    digest = _sha256(package_path / ARTIFACT_INDEX_PATH)
+    (package_path / ARTIFACT_INDEX_DIGEST_PATH).write_text(
+        f"{digest}  {ARTIFACT_INDEX_PATH.as_posix()}\n",
+        encoding="utf-8",
+    )
+
+
+def _read_index_digest(path: Path, errors: list[str]) -> str | None:
+    if not path.is_file():
+        errors.append(f"{ARTIFACT_INDEX_DIGEST_PATH.as_posix()} is missing")
+        return None
+    try:
+        line = path.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        errors.append(f"{ARTIFACT_INDEX_DIGEST_PATH.as_posix()} could not be read: {exc}")
+        return None
+    parts = line.split()
+    if len(parts) != 2 or parts[1] != ARTIFACT_INDEX_PATH.as_posix() or len(parts[0]) != 64:
+        errors.append(f"{ARTIFACT_INDEX_DIGEST_PATH.as_posix()} is not a valid artifact-index checksum")
+        return None
+    return parts[0]
+
+
+def _check_file_digest(path: Path, display_path: str, expected_sha256: str, errors: list[str]) -> None:
+    if not path.is_file():
+        errors.append(f"missing package file: {display_path}")
+        return
+    actual_sha256 = _sha256(path)
+    if actual_sha256 != expected_sha256:
+        errors.append(f"sha256 mismatch for {display_path}")
+
+
+def _read_package_index(path: Path, errors: list[str]) -> dict[str, Any] | None:
+    if not path.is_file():
+        errors.append(f"{ARTIFACT_INDEX_PATH.as_posix()} is missing")
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"{ARTIFACT_INDEX_PATH.as_posix()} could not be parsed: {exc}")
+        return None
+    if not isinstance(data, dict):
+        errors.append(f"{ARTIFACT_INDEX_PATH.as_posix()} does not contain a JSON object")
+        return None
+    return data
+
+
+def _check_index_entry(package_path: Path, entry: dict[str, Any], errors: list[str]) -> None:
+    package_path_text = entry.get("package_path")
+    if not isinstance(package_path_text, str) or not package_path_text:
+        errors.append("artifact index entry is missing package_path")
+        return
+    relative_path = Path(package_path_text)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        errors.append(f"unsafe package path in artifact index: {package_path_text}")
+        return
+    file_path = package_path / relative_path
+    if not file_path.is_file():
+        errors.append(f"missing package file: {package_path_text}")
+        return
+    expected_size = entry.get("size_bytes")
+    if isinstance(expected_size, int) and file_path.stat().st_size != expected_size:
+        errors.append(f"size mismatch for {package_path_text}")
+    expected_sha256 = entry.get("sha256")
+    if isinstance(expected_sha256, str) and expected_sha256:
+        _check_file_digest(file_path, package_path_text, expected_sha256, errors)
+
+
+def _package_files(package_path: Path) -> list[Path]:
+    return sorted(
+        [path for path in package_path.rglob("*") if path.is_file()],
+        key=lambda item: item.relative_to(package_path).as_posix(),
+    )
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
