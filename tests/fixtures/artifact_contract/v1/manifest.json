@@ -1,0 +1,71 @@
+{
+  "schema_version": "1",
+  "task_id": "task_fixture_20260625_000000",
+  "name": "golden argv task",
+  "mode": "run",
+  "status": "completed",
+  "command": "python examples/simple-success/train.py --output metrics.csv",
+  "run_mode": "argv",
+  "argv": [
+    "python",
+    "examples/simple-success/train.py",
+    "--output",
+    "metrics.csv"
+  ],
+  "safe_profile": null,
+  "created_at": "2026-06-25T00:00:00+00:00",
+  "started_at": "2026-06-25T00:00:00+00:00",
+  "finished_at": "2026-06-25T00:00:01+00:00",
+  "updated_at": "2026-06-25T00:00:01+00:00",
+  "working_dir": ".",
+  "source_path": null,
+  "exit_code": 0,
+  "failure_summary": null,
+  "paths": {
+    "task_dir": ".lab-sidecar/tasks/task_fixture_20260625_000000",
+    "stdout": ".lab-sidecar/tasks/task_fixture_20260625_000000/stdout.log",
+    "stderr": ".lab-sidecar/tasks/task_fixture_20260625_000000/stderr.log"
+  },
+  "artifacts": [
+    {
+      "artifact_id": "log_stdout",
+      "type": "log",
+      "path": "stdout.log",
+      "description": "Captured stdout log.",
+      "source_paths": [],
+      "size_bytes": 128,
+      "sha256": null
+    },
+    {
+      "artifact_id": "reproduce_run",
+      "type": "config",
+      "path": "reproduce/run.json",
+      "description": "Structured run metadata.",
+      "source_paths": [],
+      "size_bytes": 240,
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "artifact_id": "metrics_collection_summary",
+      "type": "summary",
+      "path": "metrics/collection-summary.json",
+      "description": "Metrics collection summary.",
+      "source_paths": [
+        "metrics/normalized_metrics.csv"
+      ],
+      "size_bytes": 512,
+      "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "artifact_id": "provenance_traceability_json",
+      "type": "provenance",
+      "path": "provenance/traceability.json",
+      "description": "Task-local traceability index.",
+      "source_paths": [
+        "manifest.json"
+      ],
+      "size_bytes": 1024,
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ]
+}

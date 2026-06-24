@@ -2,6 +2,42 @@
 
 All notable user-facing changes should be recorded here. This project has not published a stable release yet; entries describe the current public-alpha baseline and pending changes.
 
+## [0.1.5] - 2026-06-25
+
+### Added
+
+- Added `scripts/release_check.py` as a maintainer pre-release gate for version
+  consistency, `CHANGELOG.md` coverage, `git diff --check`, root
+  `.lab-sidecar/` hygiene, target-version dist artifacts, stale artifact
+  rejection, and SHA-256 digest reporting.
+- Added `scripts/release_asset_smoke.py` to install a supplied wheel path or
+  explicit wheel URL into an isolated virtual environment and verify the
+  installed `labsidecar` CLI with a compact local workflow.
+- Added small sanitized golden fixtures for the v1 public artifact contract
+  covering `manifest.json`, `metrics/collection-summary.json`,
+  `provenance/traceability.json`, `package-summary.json`, and
+  `artifact-index.json`.
+
+### Changed
+
+- Documented the GitHub release wheel/sdist install verification path while
+  keeping editable installs as the development path.
+- Updated release checklist guidance so maintainers can run local preflight,
+  repository-built wheel smoke, and supplied-release-asset smoke before tagging
+  or publishing release notes.
+
+### Documentation
+
+- Added the v0.1.5 install and release trust plan and acceptance record.
+- Clarified that release/install hardening does not add PyPI publication,
+  hosted service behavior, OS sandboxing, malware detection, remote execution,
+  Web UI, or MCP/V2 product expansion.
+
+### Validation
+
+- No v0.1.5 tag, GitHub release, or PyPI publish was created in this
+  implementation slice.
+
 ## [0.1.4] - 2026-06-25
 
 ### Added
