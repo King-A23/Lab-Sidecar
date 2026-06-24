@@ -33,7 +33,12 @@ The artifact contract is summarized here; details live in
 - Static editable PPTX drafts from metrics, figures, reports, and diagnostic records.
 - Shareable task packages built from an allowlist of generated artifacts.
 - `validate` checks for task artifact health without generating artifacts.
-- `package-verify` checks package digests, indexed file hashes and sizes, and unexpected files.
+- Read-only saved comparison discovery commands:
+  `list-comparisons`, `open-comparison`, and `comparison-artifacts`.
+- `validate` and `validate-comparison` diagnostics that identify missing or
+  malformed artifacts with paths and next actions without generating files.
+- `package-verify` checks package digests, package summary parseability,
+  indexed file hashes and sizes, and unexpected files.
 - Task-local `provenance/traceability.json` that records artifact evidence, source references, and omission notes without embedding full bodies.
 
 ## Not Supported
@@ -67,3 +72,5 @@ They may return task ids, compact summaries, bounded previews, risk flags, next 
 - Treat MCP changes cautiously and avoid schema changes unless explicitly required.
 - Defer Web, remote, hosted, cloud sync, and general agent-framework work.
 - Keep public claims cautious: deterministic artifacts and bounded descriptive summaries, not autonomous research conclusions.
+- Treat v0.1.1 work as artifact quality and CLI UX polish, not a scope
+  expansion.

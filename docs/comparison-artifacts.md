@@ -42,8 +42,9 @@ Comparison artifacts do not add or claim:
 - copying raw source files into comparison packages
 - recursive workspace scanning
 
-Reports and slides generated from comparison artifacts are deterministic
-templates. They remain descriptive only.
+Comparison reports generated from comparison artifacts are deterministic
+templates. They remain descriptive only. Static PPTX comparison decks are not
+part of the current scope.
 
 ## Inputs
 
@@ -162,6 +163,32 @@ not read full comparison tables, do not read report bodies, do not read source
 task logs, and are not exposed through MCP/V2. They preserve the current
 comparison scope: descriptive `final_row` shared finite numeric metrics only,
 with no statistical significance testing and no model superiority claims.
+
+`list-comparisons --limit 20` lists recent saved comparison ids, names,
+creation timestamps, source task ids, artifact counts, figure counts, and
+report presence without reading artifact bodies. `open-comparison` prints the
+absolute comparison artifact directory and rejects malformed or escaped ids.
+`comparison-artifacts` lists existing manifest, summary, table, figure, report,
+and traceability paths without printing file contents.
+
+`validate-comparison` is read-only. Warning and failure checks point to bounded
+next actions such as inspecting `comparison-artifacts`, creating a fresh saved
+comparison with `compare --save --figures` or `compare --save --report`, or
+packaging with `package-comparison`. Package-ready validation requires figures,
+report, traceability, and registered artifacts without relaxing the bounded
+contract.
+
+The deterministic comparison report is formatted for review: source tasks,
+`final_row` row selection, common numeric fields, a bounded table preview,
+evidence paths, figures when present, warnings, and omitted/skipped content.
+It must include this limitation exactly:
+
+```text
+This comparison is descriptive only; no statistical significance or model superiority is inferred.
+```
+
+The report must not claim a winner, statistical significance, deployment
+readiness, or model superiority.
 
 ## Example
 

@@ -119,17 +119,19 @@ The task-local `provenance/traceability.json` file is refreshed as metrics, figu
 Chart fallback is opt-in. Deterministic `line`, `bar`, and `box` figures are always attempted first. Explicit figure specs support both the legacy single-spec YAML shape and the current multi-figure `figures:` YAML shape; see [docs/figure-specs.md](docs/figure-specs.md). For an explicit unsupported chart spec, `figures --fallback bounded` writes bounded request and validation records under `intelligence/<worker_run_id>/`; official fallback PNG/SVG files are created only after validator acceptance. See [docs/alpha4-bounded-chart-fallback-operator-guide.md](docs/alpha4-bounded-chart-fallback-operator-guide.md).
 
 The `validate` command checks a task's artifact health without generating new
-artifacts. The `package` command creates a shareable, inspectable single-task
+artifacts. Its diagnostics call out missing or malformed metrics, summaries,
+reports, slides, and traceability with paths and next actions. The `package`
+command creates a shareable, inspectable single-task
 folder with `README.md`, `manifest.json`, `package-summary.json`,
 `artifact-index.json`, `artifact-index.sha256`, `redaction-notes.md`,
 reproduce metadata, task-local traceability evidence, and generated
 metrics/figures/report/slides artifacts when present. `package-verify` checks
-the package index digest, indexed file hashes and sizes, and rejects unexpected
-files. By default packages do not copy full `stdout.log` or `stderr.log`, raw
-source files, `.lab-sidecar/index.sqlite`, worker prompt/response bodies,
-temporary sandbox files, or unrelated workspace files. Failed tasks package as
-diagnostic folders and are labeled as failed-task diagnostics, not successful
-experiment summaries.
+the package index digest, package summary parseability, indexed file hashes and
+sizes, and rejects unexpected files. By default packages do not copy full
+`stdout.log` or `stderr.log`, raw source files, `.lab-sidecar/index.sqlite`,
+worker prompt/response bodies, temporary sandbox files, or unrelated workspace
+files. Failed tasks package as diagnostic folders and are labeled as
+failed-task diagnostics, not successful experiment summaries.
 
 For an existing-results path, try:
 
@@ -208,6 +210,12 @@ tests, infer model superiority, copy source task logs, or copy source raw files.
 `list-comparisons`, `comparison-artifacts`, and `open-comparison` are read-only
 navigation commands for existing saved comparison records. They do not generate
 artifacts and are not exposed through MCP/V2.
+`validate-comparison` reports missing figures, reports, traceability, stale
+source metrics, and package-readiness issues with bounded next actions. The
+deterministic comparison report includes source tasks, final-row selection,
+bounded table preview, evidence paths, warnings, omissions, and this limitation:
+This comparison is descriptive only; no statistical significance or model
+superiority is inferred.
 
 ## CLI Commands
 

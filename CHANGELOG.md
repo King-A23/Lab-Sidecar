@@ -6,6 +6,11 @@ All notable user-facing changes should be recorded here. This project has not pu
 
 ### Added
 
+- v0.1.1 post-RC artifact UX polish for the local CLI artifact workflow:
+  saved comparison discovery, validation diagnostics, package verification
+  diagnostics, deterministic comparison report formatting, and smoke
+  assertions without expanding MCP/V2, Web/API, remote, cloud, AI, or
+  statistical-claim scope.
 - Contributor guide, security policy, changelog, and release checklist for open-source readiness.
 - MIT license file and package metadata for public open-source release preparation.
 - Package metadata now points at the public README and marks the project as alpha.
@@ -37,6 +42,10 @@ All notable user-facing changes should be recorded here. This project has not pu
 
 ### Documentation
 
+- Documented the post-RC artifact UX polish as CLI-first, file-first,
+  local-first quality work, including read-only comparison discovery commands,
+  descriptive final-row comparison limits, validation/package diagnostics, and
+  deterministic comparison report formatting.
 - Clarified that public claims should stay CLI-first, file-first, and local-first.
 - Reworked the README into a public landing page with quickstart, artifact previews, CLI table, MCP boundary, limits, and project links.
 - Clarified that MCP remains experimental and local, including the V2 mirror.
