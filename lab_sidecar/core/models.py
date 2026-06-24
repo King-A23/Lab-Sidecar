@@ -6,6 +6,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
+RunMode = Literal["shell", "argv"]
+
+
 class TaskStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
@@ -45,6 +48,9 @@ class TaskRecord(BaseModel):
     updated_at: str
     working_dir: str
     command: str | None = None
+    run_mode: RunMode | None = None
+    argv: list[str] | None = None
+    safe_profile: str | None = None
     source_path: str | None = None
     exit_code: int | None = None
     paths: TaskPaths
@@ -70,3 +76,9 @@ class LabConfig(BaseModel):
 
 def model_dump_jsonable(model: BaseModel) -> dict[str, Any]:
     return model.model_dump(mode="json", exclude_none=False)
+
+
+def effective_run_mode(record: TaskRecord) -> RunMode | None:
+    if record.mode == "run":
+        return record.run_mode or "shell"
+    return record.run_mode

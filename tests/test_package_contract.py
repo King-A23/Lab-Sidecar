@@ -29,6 +29,10 @@ REQUIRED_SUMMARY_TASK_KEYS = {
     "started_at",
     "finished_at",
     "command_preview",
+    "run_mode",
+    "argv_count",
+    "run_spec_path",
+    "safe_profile",
     "source_path",
     "failure_summary",
 }
@@ -110,6 +114,9 @@ def _assert_summary_contract(
     expected_status: str,
     expected_exit_code: int,
     expected_command_preview: str,
+    expected_run_mode: str | None,
+    expected_argv_count: int | None,
+    expected_run_spec_path: str | None,
     expected_source_path: str | None,
     expect_failure_summary: bool,
 ) -> None:
@@ -131,6 +138,10 @@ def _assert_summary_contract(
     assert isinstance(task["finished_at"], str) and task["finished_at"]
     assert task["command_preview"] == expected_command_preview
     assert len(task["command_preview"]) <= 160
+    assert task["run_mode"] == expected_run_mode
+    assert task["argv_count"] == expected_argv_count
+    assert task["run_spec_path"] == expected_run_spec_path
+    assert task["safe_profile"] is None
     assert task["source_path"] == expected_source_path
     if expect_failure_summary:
         assert isinstance(task["failure_summary"], str) and task["failure_summary"]
@@ -302,6 +313,9 @@ def test_result_package_summary_and_index_match_public_contract(tmp_path: Path) 
         expected_status="completed",
         expected_exit_code=0,
         expected_command_preview=command,
+        expected_run_mode="shell",
+        expected_argv_count=None,
+        expected_run_spec_path="reproduce/run.json",
         expected_source_path=None,
         expect_failure_summary=False,
     )
@@ -312,7 +326,7 @@ def test_result_package_summary_and_index_match_public_contract(tmp_path: Path) 
         expected_task_id=task_id,
         expected_package_type="result",
     )
-    assert summary["counts"] == {"included": 20, "omitted": 9, "unavailable": 0}
+    assert summary["counts"] == {"included": 21, "omitted": 9, "unavailable": 0}
     _assert_reason_entries(
         index["omitted"],
         expected_by_path={
@@ -404,6 +418,9 @@ def test_failed_diagnostic_package_summary_and_index_match_public_contract(tmp_p
         expected_status="failed",
         expected_exit_code=1,
         expected_command_preview=command,
+        expected_run_mode="shell",
+        expected_argv_count=None,
+        expected_run_spec_path="reproduce/run.json",
         expected_source_path=None,
         expect_failure_summary=True,
     )
@@ -414,7 +431,7 @@ def test_failed_diagnostic_package_summary_and_index_match_public_contract(tmp_p
         expected_task_id=task_id,
         expected_package_type="diagnostic",
     )
-    assert summary["counts"] == {"included": 6, "omitted": 4, "unavailable": 10}
+    assert summary["counts"] == {"included": 7, "omitted": 4, "unavailable": 10}
     assert "FileNotFoundError" in summary["task"]["failure_summary"]
     assert "Starting failing task" not in summary["task"]["failure_summary"]
     _assert_reason_entries(
@@ -446,6 +463,7 @@ def test_failed_diagnostic_package_summary_and_index_match_public_contract(tmp_p
     assert included_paths == {
         "manifest.json",
         "reproduce/command.txt",
+        "reproduce/run.json",
         "reproduce/env.json",
         "reproduce/git.json",
         "reproduce/dependencies.json",
@@ -468,6 +486,44 @@ def test_failed_diagnostic_package_summary_and_index_match_public_contract(tmp_p
             "Opening input file: data/missing.csv",
         ),
     )
+
+
+def test_legacy_run_manifest_without_run_metadata_packages_as_shell(tmp_path: Path) -> None:
+    workspace = tmp_path / "package-contract-legacy-run"
+    workspace.mkdir()
+    copy_examples(workspace)
+    assert invoke(workspace, ["init"]).exit_code == 0
+
+    command = f'"{sys.executable}" examples/simple-success/train.py --output metrics.csv'
+    task_id = extract_task_id(invoke(workspace, ["run", command, "--name", "legacy-run"]).output)
+    task_path = _task_path(workspace, task_id)
+    manifest_path = task_path / "manifest.json"
+    manifest = _read_json(manifest_path)
+    manifest.pop("run_mode", None)
+    manifest.pop("argv", None)
+    manifest.pop("safe_profile", None)
+    manifest["artifacts"] = [
+        artifact
+        for artifact in manifest["artifacts"]
+        if artifact.get("artifact_id") != "reproduce_run"
+    ]
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (task_path / "reproduce" / "run.json").unlink()
+
+    package_path = workspace / f"lab-sidecar-package-{task_id}"
+    result = invoke(workspace, ["package", task_id, "--output", package_path.as_posix()])
+    assert result.exit_code == 0
+
+    summary = _read_json(package_path / "package-summary.json")
+    index = _read_json(package_path / "artifact-index.json")
+    traceability = _read_json(package_path / "provenance" / "traceability.json")
+    assert summary["task"]["run_mode"] == "shell"
+    assert summary["task"]["argv_count"] is None
+    assert summary["task"]["run_spec_path"] is None
+    assert traceability["task"]["run_mode"] == "shell"
+    assert traceability["task"]["argv"] is None
+    assert traceability["task"]["run_spec_path"] is None
+    assert "reproduce/run.json" in {item["path"] for item in index["unavailable"]}
 
 
 def test_ingest_package_summary_and_index_omit_raw_source_refs_and_source_bodies(tmp_path: Path) -> None:
@@ -499,6 +555,9 @@ def test_ingest_package_summary_and_index_omit_raw_source_refs_and_source_bodies
         expected_status="completed",
         expected_exit_code=0,
         expected_command_preview="(none)",
+        expected_run_mode=None,
+        expected_argv_count=None,
+        expected_run_spec_path=None,
         expected_source_path="examples/csv-comparison",
         expect_failure_summary=False,
     )
@@ -509,7 +568,7 @@ def test_ingest_package_summary_and_index_omit_raw_source_refs_and_source_bodies
         expected_task_id=task_id,
         expected_package_type="result",
     )
-    assert summary["counts"] == {"included": 6, "omitted": 6, "unavailable": 10}
+    assert summary["counts"] == {"included": 6, "omitted": 6, "unavailable": 11}
     _assert_reason_entries(
         index["omitted"],
         expected_by_path={
@@ -528,6 +587,7 @@ def test_ingest_package_summary_and_index_omit_raw_source_refs_and_source_bodies
         index["unavailable"],
         expected_by_path={
             "reproduce/command.txt": ("reproduce", UNAVAILABLE_REASON),
+            "reproduce/run.json": ("reproduce", UNAVAILABLE_REASON),
             "reproduce/env.json": ("reproduce", UNAVAILABLE_REASON),
             "reproduce/git.json": ("reproduce", UNAVAILABLE_REASON),
             "reproduce/dependencies.json": ("reproduce", UNAVAILABLE_REASON),

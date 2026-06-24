@@ -2,6 +2,39 @@
 
 All notable user-facing changes should be recorded here. This project has not published a stable release yet; entries describe the current public-alpha baseline and pending changes.
 
+## [0.1.4] - 2026-06-25
+
+### Added
+
+- Added an opt-in argv/non-shell CLI run mode:
+  `labsidecar run --no-shell -- <program> <arg> ...`.
+- Added structured run metadata in `manifest.json` and `reproduce/run.json`
+  so shell and argv runs can be distinguished without changing the legacy
+  `command` field.
+- Added foreground, background, failure, cancellation, package, traceability,
+  and literal-argument regression coverage for argv mode.
+
+### Changed
+
+- `status`, `summarize`, packages, and task-local traceability now expose the
+  recorded run mode while keeping full logs and artifact bodies omitted by
+  default.
+- Single-task packages include the new `reproduce/run.json` metadata file when
+  present.
+
+### Documentation
+
+- Documented legacy explicit shell mode, argv/non-shell mode, and the separate
+  MCP/V2 safety boundary without describing any of them as OS sandboxing.
+- Added v0.1.4 run-safety plan and acceptance records.
+
+### Validation
+
+- No Web UI, FastAPI/HTTP service, hosted service, remote runner, cloud sync,
+  default AI analysis, statistical significance, model-superiority claims,
+  general multi-agent product behavior, tag, release, or PyPI publish was
+  added.
+
 ## [0.1.3] - 2026-06-24
 
 ### Added

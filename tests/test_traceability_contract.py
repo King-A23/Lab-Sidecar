@@ -39,6 +39,10 @@ REQUIRED_TASK_KEYS = {
     "working_dir",
     "manifest_path",
     "command_path",
+    "run_spec_path",
+    "run_mode",
+    "argv",
+    "safe_profile",
     "source_path",
 }
 REQUIRED_ENVIRONMENT_KEYS = {
@@ -281,6 +285,17 @@ def _assert_task_section(
     assert task["command_path"] in {None, "reproduce/command.txt"}
     if task["command_path"] is not None:
         assert (_task_path(workspace, expected_task_id) / task["command_path"]).is_file()
+    assert task["run_spec_path"] in {None, "reproduce/run.json"}
+    if task["run_spec_path"] is not None:
+        assert (_task_path(workspace, expected_task_id) / task["run_spec_path"]).is_file()
+    if expected_mode == "run":
+        assert task["run_mode"] in {"shell", "argv"}
+    else:
+        assert task["run_mode"] is None
+    if task["argv"] is not None:
+        assert isinstance(task["argv"], list)
+        assert all(isinstance(value, str) for value in task["argv"])
+    assert task["safe_profile"] is None or isinstance(task["safe_profile"], str)
     assert task["source_path"] is None or isinstance(task["source_path"], str)
 
 

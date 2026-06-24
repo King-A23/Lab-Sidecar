@@ -126,6 +126,9 @@ def test_completed_run_manifest_matches_public_contract(tmp_path: Path) -> None:
     )
     _assert_local_metadata_policy(manifest)
     assert manifest["command"] == command
+    assert manifest["run_mode"] == "shell"
+    assert manifest["argv"] is None
+    assert manifest["safe_profile"] is None
     assert manifest["source_path"] is None
     assert manifest["exit_code"] == 0
     assert manifest["paths"]["task_dir"] == f".lab-sidecar/tasks/{task_id}"
@@ -136,6 +139,7 @@ def test_completed_run_manifest_matches_public_contract(tmp_path: Path) -> None:
         "log_stdout",
         "log_stderr",
         "reproduce_command",
+        "reproduce_run",
         "reproduce_env",
         "reproduce_git",
         "reproduce_dependencies",
@@ -162,6 +166,9 @@ def test_completed_ingest_manifest_matches_public_contract(tmp_path: Path) -> No
     )
     _assert_local_metadata_policy(manifest)
     assert manifest["command"] is None
+    assert manifest["run_mode"] is None
+    assert manifest["argv"] is None
+    assert manifest["safe_profile"] is None
     assert manifest["source_path"] == "examples/csv-comparison"
     assert manifest["exit_code"] == 0
     artifact_ids = {artifact["artifact_id"] for artifact in manifest["artifacts"]}
@@ -189,6 +196,9 @@ def test_failed_run_manifest_matches_public_contract(tmp_path: Path) -> None:
     )
     _assert_local_metadata_policy(manifest)
     assert manifest["command"] == command
+    assert manifest["run_mode"] == "shell"
+    assert manifest["argv"] is None
+    assert manifest["safe_profile"] is None
     assert manifest["exit_code"] != 0
     assert isinstance(manifest["failure_summary"], str) and "FileNotFoundError" in manifest["failure_summary"]
 
@@ -226,6 +236,8 @@ def test_running_and_cancelled_background_manifests_match_public_contract(tmp_pa
     )
     _assert_local_metadata_policy(running_manifest)
     assert running_manifest["worker_pid"]
+    assert running_manifest["run_mode"] == "shell"
+    assert running_manifest["argv"] is None
 
     cancel = invoke(workspace, ["cancel", task_id])
     assert cancel.exit_code == 0
@@ -239,6 +251,7 @@ def test_running_and_cancelled_background_manifests_match_public_contract(tmp_pa
     _assert_local_metadata_policy(cancelled_manifest)
     assert cancelled_manifest["pid"] is None
     assert cancelled_manifest["worker_pid"] is None
+    assert cancelled_manifest["run_mode"] == "shell"
 
 
 def test_manifest_artifacts_remain_unique_and_shaped_after_collect_figures_report_slides(tmp_path: Path) -> None:

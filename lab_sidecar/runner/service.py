@@ -21,6 +21,7 @@ from lab_sidecar.runner.process import (
     terminate_process_tree,
     worker_popen_kwargs,
 )
+from lab_sidecar.runner.spec import RunSpec
 from lab_sidecar.storage.artifact_store import (
     build_source_refs,
     default_task_artifacts,
@@ -28,6 +29,38 @@ from lab_sidecar.storage.artifact_store import (
     write_source_refs,
 )
 from lab_sidecar.storage.sqlite_index import upsert_task
+
+
+SHELL_RUN_MODE = "shell"
+ARGV_RUN_MODE = "argv"
+
+
+def _coerce_run_spec(command: str | RunSpec) -> RunSpec:
+    return RunSpec.from_jsonable(command)
+
+
+def load_run_spec_json(payload: str) -> RunSpec:
+    return RunSpec.from_json(payload)
+
+
+def dump_run_spec_json(run_spec: str | RunSpec) -> str:
+    spec = _coerce_run_spec(run_spec)
+    return spec.to_json()
+
+
+def _run_spec_mode(run_spec: RunSpec) -> str:
+    mode = run_spec.mode
+    if mode not in {SHELL_RUN_MODE, ARGV_RUN_MODE}:
+        raise ValueError(f"unsupported run spec mode: {mode}")
+    return mode
+
+
+def _run_spec_command_text(run_spec: RunSpec) -> str:
+    return run_spec.display_command()
+
+
+def _run_spec_argv(run_spec: RunSpec) -> list[str]:
+    return list(run_spec.argv or [])
 
 
 def now_iso() -> str:
@@ -62,18 +95,19 @@ class RunnerService:
 
     def run(
         self,
-        command: str,
+        command: str | RunSpec,
         name: str | None = None,
         cwd: Path | None = None,
         background: bool = False,
     ) -> TaskRecord:
         load_config(self.root)
-        record, task_path, run_cwd = self._create_task(command, name, cwd)
+        run_spec = _coerce_run_spec(command)
+        record, task_path, run_cwd = self._create_task(run_spec, name, cwd)
 
         if background:
-            return self._start_background_worker(record, task_path, run_cwd)
+            return self._start_background_worker(record, task_path, run_cwd, run_spec)
 
-        execute_task(self.root, record.task_id, command, run_cwd)
+        execute_task(self.root, record.task_id, run_spec, run_cwd)
         return load_task(self.root, record.task_id)
 
     def refresh(self, task_id: str) -> TaskRecord:
@@ -176,7 +210,7 @@ class RunnerService:
 
     def _create_task(
         self,
-        command: str,
+        run_spec: RunSpec,
         name: str | None,
         cwd: Path | None,
     ) -> tuple[TaskRecord, Path, Path]:
@@ -192,14 +226,14 @@ class RunnerService:
         stdout_path.touch()
         stderr_path.touch()
 
-        record = self._initial_record(task_id, task_path, run_cwd, command, name)
+        record = self._initial_record(task_id, task_path, run_cwd, run_spec, name)
         write_manifest(manifest_path(self.root, task_id), record)
         upsert_task(self.root, record)
 
-        self._write_reproduce_files(task_path, command, run_cwd)
+        self._write_reproduce_files(task_path, run_spec, run_cwd)
         return record, task_path, run_cwd
 
-    def _start_background_worker(self, record: TaskRecord, task_path: Path, run_cwd: Path) -> TaskRecord:
+    def _start_background_worker(self, record: TaskRecord, task_path: Path, run_cwd: Path, run_spec: RunSpec) -> TaskRecord:
         started = now_iso()
         record.status = TaskStatus.RUNNING
         record.started_at = started
@@ -220,8 +254,8 @@ class RunnerService:
                         str(self.root),
                         "--task-id",
                         record.task_id,
-                        "--command",
-                        record.command or "",
+                        "--run-spec",
+                        dump_run_spec_json(run_spec),
                         "--cwd",
                         str(run_cwd),
                     ],
@@ -231,7 +265,7 @@ class RunnerService:
                     close_fds=True,
                     **worker_popen_kwargs(),
                 )
-        except OSError as exc:
+        except (OSError, TypeError, ValueError) as exc:
             stderr_path = task_path / "stderr.log"
             stderr_path.write_text(f"command could not be started: {exc}\n", encoding="utf-8")
             record.failure_summary = str(exc)
@@ -257,10 +291,11 @@ class RunnerService:
         task_id: str,
         task_path: Path,
         run_cwd: Path,
-        command: str,
+        run_spec: RunSpec,
         name: str | None,
     ) -> TaskRecord:
         created = now_iso()
+        command_text = _run_spec_command_text(run_spec)
         paths = TaskPaths(
             task_dir=to_manifest_path(task_path, self.root),
             stdout=to_manifest_path(task_path / "stdout.log", self.root),
@@ -273,7 +308,10 @@ class RunnerService:
             created_at=created,
             updated_at=created,
             working_dir=to_manifest_path(run_cwd, self.root),
-            command=command,
+            command=command_text,
+            run_mode=run_spec.mode,
+            argv=list(run_spec.argv) if run_spec.argv is not None else None,
+            safe_profile=run_spec.safe_profile,
             source_path=None,
             exit_code=None,
             paths=paths,
@@ -281,9 +319,27 @@ class RunnerService:
             name=name,
         )
 
-    def _write_reproduce_files(self, task_path: Path, command: str, run_cwd: Path) -> None:
+    def _write_reproduce_files(self, task_path: Path, run_spec: RunSpec, run_cwd: Path) -> None:
         reproduce_dir = task_path / "reproduce"
+        command = _run_spec_command_text(run_spec)
         (reproduce_dir / "command.txt").write_text(command + "\n", encoding="utf-8")
+        run_metadata = {
+            "schema_version": "1",
+            "run_mode": run_spec.mode,
+            "command_text": command,
+            "argv": list(run_spec.argv) if run_spec.argv is not None else None,
+            "safe_profile": run_spec.safe_profile,
+            "execution_note": (
+                "argv mode executes the recorded argv list with subprocess shell=False; "
+                "this is non-shell execution, not OS sandboxing"
+            )
+            if run_spec.mode == ARGV_RUN_MODE
+            else "shell mode executes the recorded command text with subprocess shell=True",
+        }
+        (reproduce_dir / "run.json").write_text(
+            json.dumps(run_metadata, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
         git_data = git_snapshot(run_cwd)
         dependency_data = dependency_snapshot()
         env_snapshot = {
@@ -322,7 +378,7 @@ class RunnerService:
         )
 
 
-def execute_task(root: Path, task_id: str, command: str, run_cwd: Path) -> TaskRecord:
+def execute_task(root: Path, task_id: str, command: str | RunSpec, run_cwd: Path) -> TaskRecord:
     root = root.resolve()
     task_path = task_dir(root, task_id)
     stdout_path = task_path / "stdout.log"
@@ -340,21 +396,35 @@ def execute_task(root: Path, task_id: str, command: str, run_cwd: Path) -> TaskR
     upsert_task(root, record)
 
     try:
+        run_spec = _coerce_run_spec(command)
         with stdout_path.open("ab") as stdout_fh, stderr_path.open("ab") as stderr_fh:
-            process = subprocess.Popen(
-                command,
-                cwd=run_cwd,
-                shell=True,
-                stdout=stdout_fh,
-                stderr=stderr_fh,
-                **command_popen_kwargs(),
-            )
+            if _run_spec_mode(run_spec) == ARGV_RUN_MODE:
+                argv = _run_spec_argv(run_spec)
+                if not argv:
+                    raise ValueError("argv mode requires a non-empty argv")
+                process = subprocess.Popen(
+                    argv,
+                    cwd=run_cwd,
+                    shell=False,
+                    stdout=stdout_fh,
+                    stderr=stderr_fh,
+                    **command_popen_kwargs(),
+                )
+            else:
+                process = subprocess.Popen(
+                    _run_spec_command_text(run_spec),
+                    cwd=run_cwd,
+                    shell=True,
+                    stdout=stdout_fh,
+                    stderr=stderr_fh,
+                    **command_popen_kwargs(),
+                )
             record.pid = process.pid
             record.updated_at = now_iso()
             write_manifest(manifest_path(root, task_id), record)
             upsert_task(root, record)
             exit_code = process.wait()
-    except OSError as exc:
+    except (OSError, TypeError, ValueError) as exc:
         stderr_path.write_text(f"command could not be started: {exc}\n", encoding="utf-8")
         record = load_task(root, task_id)
         record.failure_summary = str(exc)

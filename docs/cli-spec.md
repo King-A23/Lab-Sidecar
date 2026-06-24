@@ -69,12 +69,19 @@ Hint: use 'labsidecar init --force' to recreate missing files only.
 **用途**
 
 把一条本地命令注册为 Sidecar 任务并执行，保存日志、状态和复现信息。
+默认形式是 legacy explicit shell mode，会把命令字符串交给本地 shell。
+v0.1.4 额外支持 opt-in argv/non-shell mode：
+`labsidecar run --no-shell -- python train.py --config configs/exp.yaml`。
+该模式使用 `subprocess.Popen(argv, shell=False)` 执行 argv 列表，避免本次
+运行经过 shell 解析，但它不是 OS sandbox。
 
 **参数**
 
-- 必需：一条完整命令字符串
+- legacy shell mode 必需：一条完整命令字符串
+- argv/non-shell mode 必需：`--no-shell -- <program> <arg> ...`
 - 可选：`--name <task_name>`
 - 可选：`--cwd <path>`
+- 可选：`--background`
 
 **成功输出示例**
 
@@ -82,8 +89,19 @@ Hint: use 'labsidecar init --force' to recreate missing files only.
 Task created: task_20260531_153044_8fd2ac
 Status: running
 Command: python train.py --config configs/exp.yaml
+Run mode: shell
 Logs: .lab-sidecar/tasks/task_20260531_153044_8fd2ac/stdout.log
 Use 'labsidecar status task_20260531_153044_8fd2ac' to check progress.
+```
+
+argv/non-shell mode 示例：
+
+```text
+Task created: task_20260531_153044_8fd2ac
+Status: completed
+Command: python train.py --config configs/exp.yaml
+Run mode: argv
+Logs: .lab-sidecar/tasks/task_20260531_153044_8fd2ac/stdout.log
 ```
 
 **失败输出示例**
@@ -105,6 +123,7 @@ Reason: python was not found in PATH.
 - `stdout.log`
 - `stderr.log`
 - `reproduce/command.txt`
+- `reproduce/run.json`
 - `reproduce/env.json`
 - `.lab-sidecar/index.sqlite`
 
@@ -175,6 +194,18 @@ Hint: check whether the task directory still exists under .lab-sidecar/tasks/.
 **Phase 1 是否必须实现**
 
 必须。
+
+**v0.1.4 兼容性说明**
+
+- `labsidecar run "<command>"` 保持 shell 行为，manifest 的 `command`
+  字段继续保存显示命令。
+- `labsidecar run --no-shell -- <program> <arg> ...` 保存
+  `run_mode: argv` 和原始 argv 列表，并在 `reproduce/run.json` 中记录结构化
+  复现元数据。
+- `reproduce/command.txt` 仍是 human-readable preview；argv mode 不会从
+  该文本重新解析执行。
+- manual CLI run 和 MCP/V2 safety gates 是不同边界；两者都不是 OS
+  sandboxing。
 
 ## `labsidecar list --limit 20`
 
@@ -351,7 +382,7 @@ lab-sidecar-package-<task_id>/
 **默认会包含哪些文件**
 
 - `manifest.json`
-- `reproduce/command.txt`、`reproduce/env.json`、`reproduce/git.json`、`reproduce/dependencies.json`（若存在）
+- `reproduce/command.txt`、`reproduce/run.json`、`reproduce/env.json`、`reproduce/git.json`、`reproduce/dependencies.json`（若存在）
 - `metrics/normalized_metrics.csv`、`metrics/normalized_metrics.json`、`metrics/collection-summary.json`（若存在）
 - `figures/*.png`、`figures/*.svg`、`figures/figure-spec.yaml`、`figures/figure-summary.json`（若存在）
 - `reports/report-fragment.md`、`reports/report-summary.json`（若存在）

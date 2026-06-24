@@ -231,6 +231,9 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     assert manifest["status"] == "completed"
     assert manifest["working_dir"] == "."
     assert manifest["command"] == command
+    assert manifest["run_mode"] == "shell"
+    assert manifest["argv"] is None
+    assert manifest["safe_profile"] is None
     assert manifest["source_path"] is None
     assert manifest["exit_code"] == 0
     assert set(["task_dir", "stdout", "stderr"]).issubset(manifest["paths"])
@@ -239,12 +242,17 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     assert (task_path / "stdout.log").is_file()
     assert (task_path / "stderr.log").is_file()
     assert (task_path / "reproduce" / "command.txt").is_file()
+    assert (task_path / "reproduce" / "run.json").is_file()
     assert (task_path / "reproduce" / "env.json").is_file()
     assert (task_path / "reproduce" / "git.json").is_file()
     assert (task_path / "reproduce" / "dependencies.json").is_file()
     env_snapshot = json.loads((task_path / "reproduce" / "env.json").read_text(encoding="utf-8"))
+    run_snapshot = json.loads((task_path / "reproduce" / "run.json").read_text(encoding="utf-8"))
     git_snapshot = json.loads((task_path / "reproduce" / "git.json").read_text(encoding="utf-8"))
     dependencies = json.loads((task_path / "reproduce" / "dependencies.json").read_text(encoding="utf-8"))
+    assert run_snapshot["run_mode"] == "shell"
+    assert run_snapshot["command_text"] == command
+    assert run_snapshot["argv"] is None
     assert env_snapshot["python_version"]
     assert env_snapshot["python_executable"]
     assert env_snapshot["platform"]
@@ -257,6 +265,7 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     status = invoke(tmp_path, ["status", task_id])
     assert status.exit_code == 0
     assert "Status: completed" in status.output
+    assert "Run mode: shell" in status.output
     assert "Exit code: 0" in status.output
     assert f"Artifact dir: .lab-sidecar/tasks/{task_id}" in status.output
 
@@ -269,6 +278,7 @@ def test_simple_success_task_and_queries(tmp_path: Path) -> None:
     assert artifacts.exit_code == 0
     assert "[log]" in artifacts.output
     assert "stdout.log" in artifacts.output
+    assert "reproduce/run.json" in artifacts.output
     assert "reproduce/git.json" in artifacts.output
     assert "reproduce/dependencies.json" in artifacts.output
 
@@ -305,6 +315,224 @@ def test_simple_failure_task(tmp_path: Path) -> None:
     logs = invoke(tmp_path, ["logs", task_id, "--stream", "stderr", "--tail", "20"])
     assert logs.exit_code == 0
     assert "FileNotFoundError" in logs.output
+
+
+def test_no_shell_argv_foreground_preserves_literal_arguments_and_metadata(tmp_path: Path) -> None:
+    script = tmp_path / "argv_probe.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "from pathlib import Path",
+                "Path('argv-seen.json').write_text(json.dumps(sys.argv[1:]), encoding='utf-8')",
+                "Path('metrics.csv').write_text('epoch,val_accuracy\\n1,0.91\\n', encoding='utf-8')",
+                "print('ARGV_PROBE_OK', flush=True)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    argv = [
+        sys.executable,
+        "argv_probe.py",
+        "value with spaces",
+        "SECRET_LOOKING_ARG_" + ("x" * 120),
+        "&&",
+        "touch",
+        "argv-sentinel.txt",
+        "*.csv",
+        "$HOME",
+        "--child-opt",
+        "child value",
+    ]
+    result = invoke(tmp_path, ["run", "--no-shell", "--", *argv])
+
+    assert result.exit_code == 0
+    assert "Run mode: argv" in result.output
+    task_id = extract_task_id(result.output)
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    manifest = read_manifest(tmp_path, task_id)
+    run_snapshot = json.loads((task_path / "reproduce" / "run.json").read_text(encoding="utf-8"))
+
+    assert manifest["status"] == "completed"
+    assert manifest["run_mode"] == "argv"
+    assert manifest["argv"] == argv
+    assert manifest["safe_profile"] is None
+    assert run_snapshot["run_mode"] == "argv"
+    assert run_snapshot["argv"] == argv
+    assert "shell=False" in run_snapshot["execution_note"]
+    assert not (tmp_path / "argv-sentinel.txt").exists()
+    assert json.loads((tmp_path / "argv-seen.json").read_text(encoding="utf-8")) == argv[2:]
+
+    status = invoke(tmp_path, ["status", task_id])
+    assert status.exit_code == 0
+    assert "Run mode: argv" in status.output
+    artifacts = invoke(tmp_path, ["artifacts", task_id])
+    assert artifacts.exit_code == 0
+    assert "reproduce/run.json" in artifacts.output
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+    package_path = tmp_path / f"lab-sidecar-package-{task_id}"
+    assert invoke(tmp_path, ["package", task_id, "--output", package_path.as_posix()]).exit_code == 0
+
+    package_summary = json.loads((package_path / "package-summary.json").read_text(encoding="utf-8"))
+    package_index = json.loads((package_path / "artifact-index.json").read_text(encoding="utf-8"))
+    package_traceability = json.loads((package_path / "provenance" / "traceability.json").read_text(encoding="utf-8"))
+    assert package_summary["task"]["run_mode"] == "argv"
+    assert package_summary["task"]["argv_count"] == len(argv)
+    assert package_summary["task"]["run_spec_path"] == "reproduce/run.json"
+    assert "SECRET_LOOKING_ARG_" not in json.dumps(package_summary, ensure_ascii=False)
+    assert "reproduce/run.json" in {item["package_path"] for item in package_index["included"]}
+    assert package_traceability["task"]["run_mode"] == "argv"
+    assert package_traceability["task"]["argv"] == argv
+    assert package_traceability["task"]["run_spec_path"] == "reproduce/run.json"
+    assert_traceability_is_bounded(package_traceability)
+
+
+def test_no_shell_argv_foreground_failure_records_failed_task(tmp_path: Path) -> None:
+    script = tmp_path / "argv_failure.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import sys",
+                "print('argv-fail-start', file=sys.stderr, flush=True)",
+                "raise SystemExit(7)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    argv = [sys.executable, "argv_failure.py"]
+    result = invoke(tmp_path, ["run", "--no-shell", "--", *argv])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    manifest = read_manifest(tmp_path, task_id)
+    assert manifest["status"] == "failed"
+    assert manifest["exit_code"] == 7
+    assert manifest["run_mode"] == "argv"
+    assert manifest["argv"] == argv
+    assert "argv-fail-start" in manifest["failure_summary"]
+
+
+def test_no_shell_missing_executable_records_clear_failed_task(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    missing_executable = "lab-sidecar-missing-executable-v014"
+    result = invoke(tmp_path, ["run", "--no-shell", "--", missing_executable, "--version"])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    manifest = read_manifest(tmp_path, task_id)
+    stderr_text = (tmp_path / ".lab-sidecar" / "tasks" / task_id / "stderr.log").read_text(encoding="utf-8")
+    assert manifest["status"] == "failed"
+    assert manifest["run_mode"] == "argv"
+    assert manifest["argv"] == [missing_executable, "--version"]
+    assert manifest["exit_code"] is None
+    assert "command could not be started" in stderr_text
+    assert missing_executable in stderr_text
+
+
+def test_no_shell_child_flags_are_not_parsed_as_sidecar_options(tmp_path: Path) -> None:
+    script = tmp_path / "argv_child_flags.py"
+    script.write_text(
+        "\n".join(
+            [
+                "import json",
+                "import sys",
+                "from pathlib import Path",
+                "Path('child-flags.json').write_text(json.dumps(sys.argv[1:]), encoding='utf-8')",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    result = invoke(tmp_path, ["run", "--no-shell", sys.executable, "argv_child_flags.py", "--name", "child"])
+
+    assert result.exit_code == 0
+    task_id = extract_task_id(result.output)
+    manifest = read_manifest(tmp_path, task_id)
+    assert manifest["name"] is None
+    assert manifest["argv"] == [sys.executable, "argv_child_flags.py", "--name", "child"]
+    assert json.loads((tmp_path / "child-flags.json").read_text(encoding="utf-8")) == ["--name", "child"]
+
+
+def test_no_shell_argv_background_success_and_cancel(tmp_path: Path) -> None:
+    success_script = tmp_path / "argv_background_success.py"
+    success_script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "print('argv-background-start', flush=True)",
+                "time.sleep(0.2)",
+                "print('argv-background-done', flush=True)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    cancel_script = tmp_path / "argv_background_cancel.py"
+    cancel_script.write_text(
+        "\n".join(
+            [
+                "import time",
+                "print('argv-cancel-ready', flush=True)",
+                "time.sleep(30)",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    success_argv = [sys.executable, "argv_background_success.py"]
+    success_task = extract_task_id(
+        invoke(tmp_path, ["run", "--background", "--no-shell", "--", *success_argv]).output
+    )
+    deadline = time.time() + 10
+    status = None
+    while time.time() < deadline:
+        status = invoke(tmp_path, ["status", success_task])
+        assert status.exit_code == 0
+        if "Status: completed" in status.output:
+            break
+        time.sleep(0.2)
+    assert status is not None
+    assert "Status: completed" in status.output
+    success_manifest = read_manifest(tmp_path, success_task)
+    assert success_manifest["run_mode"] == "argv"
+    assert success_manifest["argv"] == success_argv
+    assert success_manifest["worker_pid"] is None
+
+    cancel_argv = [sys.executable, "argv_background_cancel.py"]
+    cancel_task = extract_task_id(
+        invoke(tmp_path, ["run", "--background", "--no-shell", "--", *cancel_argv]).output
+    )
+    wait_for_output(tmp_path, cancel_task, "argv-cancel-ready")
+    cancel = invoke(tmp_path, ["cancel", cancel_task])
+    assert cancel.exit_code == 0
+    cancel_manifest = read_manifest(tmp_path, cancel_task)
+    assert cancel_manifest["status"] == "cancelled"
+    assert cancel_manifest["run_mode"] == "argv"
+    assert cancel_manifest["argv"] == cancel_argv
+    assert cancel_manifest["pid"] is None
+    assert cancel_manifest["worker_pid"] is None
+
+
+def test_no_shell_without_argv_fails_before_task_creation(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+
+    result = invoke(tmp_path, ["run", "--no-shell", "--"])
+
+    assert result.exit_code == 2
+    assert "--no-shell requires argv" in result.output
+    assert list((tmp_path / ".lab-sidecar" / "tasks").iterdir()) == []
 
 
 def test_each_task_has_independent_directory(tmp_path: Path) -> None:
@@ -734,6 +962,7 @@ def test_package_completed_task_exports_allowlisted_artifacts_only(tmp_path: Pat
         "artifact-index.json",
         "redaction-notes.md",
         "reproduce/command.txt",
+        "reproduce/run.json",
         "reproduce/env.json",
         "reproduce/git.json",
         "reproduce/dependencies.json",
@@ -820,6 +1049,7 @@ def test_package_failed_task_is_diagnostic_and_omits_full_logs(tmp_path: Path) -
     assert (package_path / "README.md").is_file()
     assert (package_path / "redaction-notes.md").is_file()
     assert (package_path / "reproduce" / "command.txt").is_file()
+    assert (package_path / "reproduce" / "run.json").is_file()
     assert (package_path / "provenance" / "traceability.json").is_file()
     assert not (package_path / "stderr.log").exists()
     assert not (package_path / "stdout.log").exists()
@@ -874,6 +1104,7 @@ def test_package_ingested_task_omits_raw_source_refs_and_source_files(tmp_path: 
     assert "raw/source_refs.json" in omitted_paths
     assert "examples/csv-comparison" in omitted_paths
     assert "reproduce/command.txt" in unavailable_paths
+    assert "reproduce/run.json" in unavailable_paths
     traceability = json.loads((package_path / "provenance" / "traceability.json").read_text(encoding="utf-8"))
     assert "examples/csv-comparison" in {item["path"] for item in traceability["omitted"]}
     assert any(source["path"].endswith("baseline.csv") and source["sha256"] for source in traceability["sources"])

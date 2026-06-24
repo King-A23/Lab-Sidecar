@@ -61,6 +61,7 @@ from lab_sidecar.reports.service import (
     ReportWriteError,
 )
 from lab_sidecar.runner.service import RunnerService, list_task_ids, tail_lines
+from lab_sidecar.runner.spec import RunSpec
 from lab_sidecar.slides.service import (
     InvalidSlidesTemplateError,
     SlidesArtifactsRequiredError,
@@ -233,6 +234,48 @@ def _print_validation_result(result: ValidationResult) -> None:
             typer.echo(f"  next: {check.next_action}")
 
 
+def _parse_legacy_run_options_after_command(
+    args: list[str],
+    name: str | None,
+    cwd: Path | None,
+    background: bool,
+) -> tuple[str | None, Path | None, bool]:
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg in {"--background", "--detach"}:
+            background = True
+            index += 1
+            continue
+        if arg == "--name":
+            if index + 1 >= len(args):
+                _fail("Error: --name requires a value.", code=2)
+            name = args[index + 1]
+            index += 2
+            continue
+        if arg.startswith("--name="):
+            name = arg.split("=", 1)[1]
+            index += 1
+            continue
+        if arg == "--cwd":
+            if index + 1 >= len(args):
+                _fail("Error: --cwd requires a value.", code=2)
+            cwd = Path(args[index + 1])
+            index += 2
+            continue
+        if arg.startswith("--cwd="):
+            cwd = Path(arg.split("=", 1)[1])
+            index += 1
+            continue
+        _fail(
+            "Error: unexpected extra run arguments.\n"
+            'Hint: quote legacy shell commands as \'labsidecar run "<command>"\' '
+            "or use 'labsidecar run --no-shell -- <program> <args>'.",
+            code=2,
+        )
+    return name, cwd, background
+
+
 def _print_comparison_validation_result(result: ComparisonValidationResult) -> None:
     typer.echo(f"Validation for {result.comparison_id}")
     typer.echo(f"Result: {result.status.value}")
@@ -299,6 +342,7 @@ def _print_task_identity(record) -> None:
         typer.echo(f"Source: {record.source_path or '(none)'}")
     else:
         typer.echo(f"Command: {_preview_text(record.command)}")
+        typer.echo(f"Run mode: {record.run_mode or 'shell'}")
         typer.echo(f"Working dir: {record.working_dir}")
     typer.echo(f"Artifact dir: {record.paths.task_dir}")
 
@@ -470,24 +514,55 @@ def doctor() -> None:
         raise typer.Exit(code=1)
 
 
-@app.command()
+@app.command(
+    context_settings={
+        "allow_extra_args": True,
+        "ignore_unknown_options": True,
+        "allow_interspersed_args": False,
+    }
+)
 def run(
-    command: str = typer.Argument(..., help="Command to run."),
+    ctx: typer.Context,
+    command: str | None = typer.Argument(None, help="Command to run."),
     name: str | None = typer.Option(None, "--name", help="Optional task name."),
     cwd: Path | None = typer.Option(None, "--cwd", help="Working directory for the command."),
     background: bool = typer.Option(False, "--background", "--detach", help="Start the task and return immediately."),
+    no_shell: bool = typer.Option(
+        False,
+        "--no-shell",
+        help="Run argv directly with subprocess shell=False. Pass argv after --.",
+    ),
 ) -> None:
     """Run a local command and capture its task artifacts."""
     root = _root()
     service = RunnerService(root)
+    if no_shell:
+        argv = ([command] if command is not None else []) + list(ctx.args)
+        if not argv:
+            _fail(
+                "Error: --no-shell requires argv after '--'.\n"
+                "Example: labsidecar run --no-shell -- python train.py --output metrics.csv",
+                code=2,
+            )
+        run_command: str | RunSpec = RunSpec.argv_command(argv)
+    else:
+        if command is None:
+            _fail(
+                "Error: run requires a command string.\n"
+                'Hint: use \'labsidecar run "<command>"\' or \'labsidecar run --no-shell -- <program> <args>\'.',
+                code=2,
+            )
+        name, cwd, background = _parse_legacy_run_options_after_command(ctx.args, name, cwd, background)
+        run_command = command
     try:
-        record = service.run(command, name=name, cwd=cwd, background=background)
+        record = service.run(run_command, name=name, cwd=cwd, background=background)
     except FileNotFoundError:
         _fail("Error: workspace is not initialized.\nHint: run 'labsidecar init' first.", code=2)
 
     typer.echo(f"Task created: {record.task_id}")
     typer.echo(f"Status: {record.status.value}")
     typer.echo(f"Command: {record.command}")
+    typer.echo(f"Run mode: {record.run_mode or 'shell'}")
     typer.echo(f"Artifacts: {record.paths.task_dir}")
     typer.echo(f"Stdout: {record.paths.stdout}")
     typer.echo(f"Stderr: {record.paths.stderr}")

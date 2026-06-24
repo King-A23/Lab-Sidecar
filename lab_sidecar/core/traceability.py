@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lab_sidecar.core.models import ArtifactRecord, TaskRecord
+from lab_sidecar.core.models import ArtifactRecord, TaskRecord, effective_run_mode
 from lab_sidecar.core.paths import resolve_workspace_path
 from lab_sidecar.core.provenance import file_provenance, python_executable
 
@@ -83,6 +83,10 @@ def build_traceability_index(
             "working_dir": record.working_dir,
             "manifest_path": "manifest.json",
             "command_path": "reproduce/command.txt" if (task_path / "reproduce" / "command.txt").exists() else None,
+            "run_spec_path": "reproduce/run.json" if (task_path / "reproduce" / "run.json").exists() else None,
+            "run_mode": effective_run_mode(record),
+            "argv": record.argv,
+            "safe_profile": record.safe_profile,
             "source_path": record.source_path,
         },
         "environment": {
@@ -577,6 +581,7 @@ def _traceability_source_paths(task_path: Path) -> list[str]:
         "reports/report-summary.json",
         "slides/slides-summary.json",
         "reproduce/command.txt",
+        "reproduce/run.json",
         "reproduce/env.json",
         "reproduce/git.json",
         "reproduce/dependencies.json",
