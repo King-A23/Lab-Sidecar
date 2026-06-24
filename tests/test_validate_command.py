@@ -110,6 +110,86 @@ def test_validate_missing_figure_artifact_fails_with_path(tmp_path: Path) -> Non
     assert missing_path_text in result.output
 
 
+def test_validate_missing_metrics_artifacts_fail_with_paths_and_next_action(tmp_path: Path) -> None:
+    task_id = _run_success_pipeline(tmp_path)
+    task_path = _task_path(tmp_path, task_id)
+    (task_path / "metrics" / "normalized_metrics.csv").unlink()
+
+    result = invoke(tmp_path, ["validate", task_id])
+
+    assert result.exit_code == 5
+    assert "[fail] metrics:" in result.output
+    assert "normalized CSV:" in result.output
+    assert "metrics/normalized_metrics.csv" in result.output
+    assert f"next: labsidecar collect {task_id}" in result.output
+
+
+def test_validate_missing_report_summary_fails_with_next_action(tmp_path: Path) -> None:
+    task_id = _run_success_pipeline(tmp_path)
+    (_task_path(tmp_path, task_id) / "reports" / "report-summary.json").unlink()
+
+    result = invoke(tmp_path, ["validate", task_id])
+
+    assert result.exit_code == 5
+    assert "[fail] report:" in result.output
+    assert "reports/report-summary.json is missing" in result.output
+    assert f"next: labsidecar report {task_id}" in result.output
+
+
+def test_validate_missing_slides_summary_fails_with_next_action(tmp_path: Path) -> None:
+    task_id = _run_success_pipeline(tmp_path)
+    (_task_path(tmp_path, task_id) / "slides" / "slides-summary.json").unlink()
+
+    result = invoke(tmp_path, ["validate", task_id])
+
+    assert result.exit_code == 5
+    assert "[fail] slides:" in result.output
+    assert "slides/slides-summary.json is missing" in result.output
+    assert f"next: labsidecar slides {task_id}" in result.output
+
+
+def test_validate_missing_traceability_warns_or_fails_when_package_ready_required(tmp_path: Path) -> None:
+    task_id = _run_success_pipeline(tmp_path)
+    (_task_path(tmp_path, task_id) / "provenance" / "traceability.json").unlink()
+
+    warn = invoke(tmp_path, ["validate", task_id])
+    required = invoke(tmp_path, ["validate", task_id, "--require", "package-ready"])
+
+    assert warn.exit_code == 0
+    assert "[warn] traceability:" in warn.output
+    assert f"next: labsidecar collect {task_id}" in warn.output
+    assert required.exit_code == 5
+    assert "[fail] traceability:" in required.output
+    assert "[fail] package-ready:" in required.output
+
+
+def test_validate_malformed_manifest_reports_path_without_traceback(tmp_path: Path) -> None:
+    task_id = _run_success_pipeline(tmp_path)
+    manifest_path = _task_path(tmp_path, task_id) / "manifest.json"
+    manifest_path.write_text("{not-json\n", encoding="utf-8")
+
+    result = invoke(tmp_path, ["validate", task_id])
+
+    assert result.exit_code == 5
+    assert "[fail] manifest:" in result.output
+    assert "manifest.json is not a valid task manifest" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_validate_malformed_summary_json_reports_path_and_next_action(tmp_path: Path) -> None:
+    task_id = _run_success_pipeline(tmp_path)
+    summary_path = _task_path(tmp_path, task_id) / "metrics" / "collection-summary.json"
+    summary_path.write_text("{not-json\n", encoding="utf-8")
+
+    result = invoke(tmp_path, ["validate", task_id])
+
+    assert result.exit_code == 5
+    assert "[fail] metrics:" in result.output
+    assert "metrics artifact could not be read with bounded checks" in result.output
+    assert "metrics/" in result.output
+    assert f"next: labsidecar collect {task_id}" in result.output
+
+
 def test_validate_failed_diagnostic_task(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     assert invoke(tmp_path, ["init"]).exit_code == 0

@@ -197,6 +197,8 @@ def verify_task_package(package_dir: Path) -> PackageVerifyResult:
         if package_path_text == ARTIFACT_INDEX_PATH.as_posix():
             continue
         _check_index_entry(package_path, entry, errors)
+        if package_path_text == "package-summary.json":
+            _check_package_summary_json(package_path / package_path_text, errors)
 
     checked_paths.add(ARTIFACT_INDEX_DIGEST_PATH.as_posix())
     for path in _package_files(package_path):
@@ -667,6 +669,21 @@ def _check_index_entry(package_path: Path, entry: dict[str, Any], errors: list[s
     expected_sha256 = entry.get("sha256")
     if isinstance(expected_sha256, str) and expected_sha256:
         _check_file_digest(file_path, package_path_text, expected_sha256, errors)
+
+
+def _check_package_summary_json(path: Path, errors: list[str]) -> None:
+    if not path.is_file():
+        return
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"package-summary.json could not be parsed: {exc}")
+        return
+    if not isinstance(data, dict):
+        errors.append("package-summary.json does not contain a JSON object")
+        return
+    if not data.get("package_type"):
+        errors.append("package-summary.json is missing package_type")
 
 
 def _package_files(package_path: Path) -> list[Path]:

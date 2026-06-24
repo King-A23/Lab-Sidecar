@@ -67,6 +67,48 @@ def test_package_verify_detects_tampered_artifact_index(tmp_path: Path) -> None:
     assert "sha256 mismatch for artifact-index.json" in verify.output
 
 
+def test_package_verify_detects_missing_digest(tmp_path: Path) -> None:
+    _task_id, package_path = _create_result_package(tmp_path)
+    (package_path / "artifact-index.sha256").unlink()
+
+    verify = invoke(tmp_path, ["package-verify", package_path.as_posix()])
+
+    assert verify.exit_code == 5
+    assert "artifact-index.sha256 is missing" in verify.output
+
+
+def test_package_verify_detects_malformed_artifact_index(tmp_path: Path) -> None:
+    _task_id, package_path = _create_result_package(tmp_path)
+    (package_path / "artifact-index.json").write_text("{not-json\n", encoding="utf-8")
+
+    verify = invoke(tmp_path, ["package-verify", package_path.as_posix()])
+
+    assert verify.exit_code == 5
+    assert "sha256 mismatch for artifact-index.json" in verify.output
+    assert "artifact-index.json could not be parsed" in verify.output
+
+
+def test_package_verify_detects_malformed_package_summary(tmp_path: Path) -> None:
+    _task_id, package_path = _create_result_package(tmp_path)
+    (package_path / "package-summary.json").write_text("{not-json\n", encoding="utf-8")
+
+    verify = invoke(tmp_path, ["package-verify", package_path.as_posix()])
+
+    assert verify.exit_code == 5
+    assert "sha256 mismatch for package-summary.json" in verify.output
+    assert "package-summary.json could not be parsed" in verify.output
+
+
+def test_package_verify_detects_missing_included_file(tmp_path: Path) -> None:
+    _task_id, package_path = _create_result_package(tmp_path)
+    (package_path / "metrics" / "normalized_metrics.csv").unlink()
+
+    verify = invoke(tmp_path, ["package-verify", package_path.as_posix()])
+
+    assert verify.exit_code == 5
+    assert "missing package file: metrics/normalized_metrics.csv" in verify.output
+
+
 def test_package_verify_detects_unregistered_extra_file(tmp_path: Path) -> None:
     _task_id, package_path = _create_result_package(tmp_path)
     (package_path / "stdout.log").write_text("full log should not be inside package\n", encoding="utf-8")
