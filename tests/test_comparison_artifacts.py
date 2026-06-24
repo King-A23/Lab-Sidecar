@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.test_cli_smoke import extract_task_id, invoke
 
 
@@ -52,6 +54,17 @@ def _comparison_id(output: str) -> str:
 
 def _comparison_path(workspace: Path, comparison_id: str) -> Path:
     return workspace / ".lab-sidecar" / "comparisons" / comparison_id
+
+
+def _state_snapshot(workspace: Path) -> dict[str, tuple[int, int]]:
+    state = workspace / ".lab-sidecar"
+    if not state.exists():
+        return {}
+    return {
+        path.relative_to(state).as_posix(): (path.stat().st_size, path.stat().st_mtime_ns)
+        for path in sorted(state.rglob("*"))
+        if path.is_file()
+    }
 
 
 def test_compare_legacy_print_remains_compatible(tmp_path: Path) -> None:
@@ -201,6 +214,208 @@ def test_compare_save_generates_bounded_artifacts_figures_report_validate_and_pa
     assert not (package_path / "stdout.log").exists()
     assert not (package_path / "stderr.log").exists()
     assert not (package_path / "raw").exists()
+
+
+def test_list_comparisons_empty_workspace(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    before = _state_snapshot(tmp_path)
+
+    result = invoke(tmp_path, ["list-comparisons"])
+
+    assert result.exit_code == 0
+    assert result.output.strip() == "No comparisons found."
+    assert _state_snapshot(tmp_path) == before
+
+
+def test_list_comparisons_shows_saved_records_counts_and_limit(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first = _create_collected_task(tmp_path, "run-a", task_name="baseline")
+    second = _create_collected_task(
+        tmp_path,
+        "run-b",
+        task_name="model-a",
+        rows=[
+            {"epoch": "1", "val_accuracy": "0.72", "val_loss": "0.48", "seed": "2"},
+            {"epoch": "2", "val_accuracy": "0.85", "val_loss": "0.35", "seed": "2"},
+        ],
+    )
+    first_result = invoke(
+        tmp_path,
+        ["compare", first, second, "--save", "--name", "baseline-vs-model-a", "--figures", "--report"],
+    )
+    assert first_result.exit_code == 0, first_result.output
+    first_comparison = _comparison_id(first_result.output)
+    second_result = invoke(tmp_path, ["compare", first, second, "--save", "--name", "second-comparison"])
+    assert second_result.exit_code == 0, second_result.output
+    second_comparison = _comparison_id(second_result.output)
+    before = _state_snapshot(tmp_path)
+
+    listing = invoke(tmp_path, ["list-comparisons"])
+    limited = invoke(tmp_path, ["list-comparisons", "--limit", "1"])
+
+    assert listing.exit_code == 0, listing.output
+    assert "comparison_id" in listing.output
+    assert "name" in listing.output
+    assert "created_at" in listing.output
+    assert "source_tasks" in listing.output
+    assert "artifacts" in listing.output
+    assert "figures" in listing.output
+    assert "report" in listing.output
+    assert first_comparison in listing.output
+    assert "baseline-vs-model-a" in listing.output
+    assert second_comparison in listing.output
+    assert "second-comparison" in listing.output
+    assert first in listing.output
+    assert second in listing.output
+
+    assert limited.exit_code == 0, limited.output
+    limited_rows = [line for line in limited.output.splitlines() if line.startswith("comparison_20")]
+    assert len(limited_rows) == 1
+    assert second_comparison in limited.output
+    assert first_comparison not in limited.output
+    assert _state_snapshot(tmp_path) == before
+
+
+def test_list_comparisons_bounds_long_names(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first = _create_collected_task(tmp_path, "run-a")
+    second = _create_collected_task(tmp_path, "run-b")
+    long_name = "comparison-" + ("very-long-name-" * 20)
+    result = invoke(tmp_path, ["compare", first, second, "--save", "--name", long_name])
+    assert result.exit_code == 0, result.output
+    before = _state_snapshot(tmp_path)
+
+    listing = invoke(tmp_path, ["list-comparisons", "--limit", "1"])
+
+    assert listing.exit_code == 0, listing.output
+    assert long_name not in listing.output
+    assert "..." in listing.output
+    assert _state_snapshot(tmp_path) == before
+
+
+def test_open_comparison_prints_absolute_path_and_rejects_missing_or_escaped_ids(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first = _create_collected_task(tmp_path, "run-a")
+    second = _create_collected_task(tmp_path, "run-b")
+    result = invoke(tmp_path, ["compare", first, second, "--save"])
+    assert result.exit_code == 0, result.output
+    comparison_id = _comparison_id(result.output)
+    before = _state_snapshot(tmp_path)
+
+    opened = invoke(tmp_path, ["open-comparison", comparison_id])
+    missing = invoke(tmp_path, ["open-comparison", "comparison_20260101_000000_deadbe"])
+    escaped = invoke(tmp_path, ["open-comparison", "../escape"])
+
+    assert opened.exit_code == 0
+    assert opened.output.strip() == str(_comparison_path(tmp_path, comparison_id).resolve())
+    assert missing.exit_code == 3
+    assert "was not found" in missing.output
+    assert "list-comparisons" in missing.output
+    assert escaped.exit_code == 2
+    assert "invalid comparison id" in escaped.output
+    assert _state_snapshot(tmp_path) == before
+
+
+def test_open_comparison_rejects_symlink_escape_for_valid_id(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    comparison_root = tmp_path / ".lab-sidecar" / "comparisons"
+    comparison_root.mkdir()
+    escaped_target = tmp_path / "outside-comparison"
+    escaped_target.mkdir()
+    comparison_id = "comparison_20260101_000000_abcdef"
+    (escaped_target / "comparison-manifest.json").write_text(
+        json.dumps(
+            {
+                "comparison_id": comparison_id,
+                "created_at": "2026-01-01T00:00:00+00:00",
+                "updated_at": "2026-01-01T00:00:00+00:00",
+                "task_ids": ["task_a", "task_b"],
+                "paths": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    try:
+        (comparison_root / comparison_id).symlink_to(escaped_target, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"symlink creation is not available: {exc}")
+    before = (escaped_target / "comparison-manifest.json").stat().st_mtime_ns
+
+    opened = invoke(tmp_path, ["open-comparison", comparison_id])
+    listed = invoke(tmp_path, ["list-comparisons", "--limit", "1"])
+
+    assert opened.exit_code == 2
+    assert "invalid comparison id" in opened.output
+    assert listed.exit_code == 0
+    assert "No comparisons found." in listed.output
+    assert "Traceback" not in listed.output
+    assert "Warning: skipped damaged comparison manifest" not in listed.output
+    assert (escaped_target / "comparison-manifest.json").stat().st_mtime_ns == before
+
+
+def test_comparison_artifacts_lists_paths_without_bodies_and_is_read_only(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first = _create_collected_task(tmp_path, "run-a", task_name="baseline")
+    second = _create_collected_task(
+        tmp_path,
+        "run-b",
+        task_name="model-a",
+        rows=[
+            {"epoch": "1", "val_accuracy": "0.72", "val_loss": "0.48", "seed": "2"},
+            {"epoch": "2", "val_accuracy": "0.85", "val_loss": "0.35", "seed": "2"},
+        ],
+    )
+    result = invoke(tmp_path, ["compare", first, second, "--save", "--figures", "--report"])
+    assert result.exit_code == 0, result.output
+    comparison_id = _comparison_id(result.output)
+    before = _state_snapshot(tmp_path)
+
+    artifacts = invoke(tmp_path, ["comparison-artifacts", comparison_id])
+    escaped = invoke(tmp_path, ["comparison-artifacts", "../escape"])
+    missing = invoke(tmp_path, ["comparison-artifacts", "comparison_20260101_000000_deadbe"])
+
+    assert artifacts.exit_code == 0, artifacts.output
+    for expected in [
+        "comparison-manifest.json",
+        "comparison-summary.json",
+        "comparison-table.csv",
+        "comparison-table.json",
+        "figures/figure-summary.json",
+        "reports/comparison-report-fragment.md",
+        "reports/comparison-report-summary.json",
+        "provenance/traceability.json",
+    ]:
+        assert expected in artifacts.output
+    assert "figures/comparison_val_accuracy.png" in artifacts.output
+    assert "figures/comparison_val_accuracy.svg" in artifacts.output
+    assert "val_accuracy, val_loss" not in artifacts.output
+    assert "This comparison is descriptive only" not in artifacts.output
+    assert first not in artifacts.output
+    assert second not in artifacts.output
+    assert escaped.exit_code == 2
+    assert "invalid comparison id" in escaped.output
+    assert missing.exit_code == 3
+    assert "was not found" in missing.output
+    assert _state_snapshot(tmp_path) == before
+
+
+def test_list_comparisons_warns_on_damaged_manifest_without_traceback(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    comparison_root = tmp_path / ".lab-sidecar" / "comparisons"
+    damaged_id = "comparison_20260101_000000_badbad"
+    damaged_dir = comparison_root / damaged_id
+    damaged_dir.mkdir(parents=True)
+    (damaged_dir / "comparison-manifest.json").write_text("{not-json\n", encoding="utf-8")
+    before = _state_snapshot(tmp_path)
+
+    result = invoke(tmp_path, ["list-comparisons"])
+
+    assert result.exit_code == 0
+    assert "No comparisons found." in result.output
+    assert "Warning: skipped damaged comparison manifest" in result.output
+    assert damaged_id in result.output
+    assert "Traceback" not in result.output
+    assert _state_snapshot(tmp_path) == before
 
 
 def test_compare_save_supports_three_to_five_tasks(tmp_path: Path) -> None:

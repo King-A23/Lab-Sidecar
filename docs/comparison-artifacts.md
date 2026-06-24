@@ -146,12 +146,22 @@ The tradeoff is that comparison validation and packaging need small
 comparison-specific commands:
 
 ```text
+labsidecar list-comparisons
+labsidecar open-comparison <comparison_id>
+labsidecar comparison-artifacts <comparison_id>
 labsidecar validate-comparison <comparison_id>
 labsidecar package-comparison <comparison_id> --output <dir>
 ```
 
 `labsidecar package-verify <package_dir>` remains reusable because package
 verification checks the package artifact index rather than task semantics.
+
+The discovery commands are read-only navigation helpers for existing saved
+comparison records. They do not create artifacts, do not refresh manifests, do
+not read full comparison tables, do not read report bodies, do not read source
+task logs, and are not exposed through MCP/V2. They preserve the current
+comparison scope: descriptive `final_row` shared finite numeric metrics only,
+with no statistical significance testing and no model superiority claims.
 
 ## Example
 
@@ -171,6 +181,9 @@ python -m lab_sidecar.cli.app collect "$TASK_ID_B"
 python -m lab_sidecar.cli.app compare "$TASK_ID_A" "$TASK_ID_B" --save --name "baseline-vs-model-a" --figures --report
 export COMPARISON_ID=<printed_comparison_id>
 
+python -m lab_sidecar.cli.app list-comparisons
+python -m lab_sidecar.cli.app comparison-artifacts "$COMPARISON_ID"
+python -m lab_sidecar.cli.app open-comparison "$COMPARISON_ID"
 python -m lab_sidecar.cli.app validate-comparison "$COMPARISON_ID" --require figures --require report --require package-ready
 python -m lab_sidecar.cli.app package-comparison "$COMPARISON_ID" --output "lab-sidecar-comparison-$COMPARISON_ID"
 python -m lab_sidecar.cli.app package-verify "lab-sidecar-comparison-$COMPARISON_ID"

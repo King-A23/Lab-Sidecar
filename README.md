@@ -195,6 +195,9 @@ To save that comparison as local artifacts:
 ```bash
 python -m lab_sidecar.cli.app compare <task_id_a> <task_id_b> --save --name "baseline-vs-model-a" --figures --report
 export COMPARISON_ID=<printed_comparison_id>
+python -m lab_sidecar.cli.app list-comparisons
+python -m lab_sidecar.cli.app comparison-artifacts "$COMPARISON_ID"
+python -m lab_sidecar.cli.app open-comparison "$COMPARISON_ID"
 python -m lab_sidecar.cli.app validate-comparison "$COMPARISON_ID" --require figures --require report --require package-ready
 python -m lab_sidecar.cli.app package-comparison "$COMPARISON_ID" --output "lab-sidecar-comparison-$COMPARISON_ID"
 python -m lab_sidecar.cli.app package-verify "lab-sidecar-comparison-$COMPARISON_ID"
@@ -202,6 +205,9 @@ python -m lab_sidecar.cli.app package-verify "lab-sidecar-comparison-$COMPARISON
 
 Saved comparison artifacts are descriptive only. They do not run statistical
 tests, infer model superiority, copy source task logs, or copy source raw files.
+`list-comparisons`, `comparison-artifacts`, and `open-comparison` are read-only
+navigation commands for existing saved comparison records. They do not generate
+artifacts and are not exposed through MCP/V2.
 
 ## CLI Commands
 
@@ -219,6 +225,9 @@ Both `labsidecar` and `lab-sidecar` console scripts point at the same CLI after 
 | `summarize <task_id>` | Print a bounded task digest with major artifact paths and summary counts, without full logs or artifact bodies. |
 | `compare <task_id> <task_id> [...]` | Compare final-row shared numeric metrics for 2-5 collected local tasks. |
 | `compare <task_id> <task_id> [...] --save [--figures] [--report]` | Save a bounded local comparison artifact under `.lab-sidecar/comparisons/`. |
+| `list-comparisons --limit 20` | Show recent saved comparisons without reading table, report, or log bodies. |
+| `open-comparison <comparison_id>` | Print the absolute saved comparison artifact directory path. |
+| `comparison-artifacts <comparison_id>` | List existing saved comparison artifact paths without printing artifact bodies. |
 | `validate-comparison <comparison_id>` | Check saved comparison artifact health without generating artifacts. |
 | `package-comparison <comparison_id> --output <dir>` | Create a shareable saved-comparison package from allowlisted comparison artifacts. |
 | `validate <task_id>` | Check task artifact health without generating new artifacts. |

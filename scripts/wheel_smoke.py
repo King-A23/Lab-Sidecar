@@ -195,6 +195,12 @@ def _run_installed_comparison_flow(
     )
     commands.append(compare)
     comparison_id = _extract_comparison_id(compare["stdout"])
+    for args in [
+        ["list-comparisons"],
+        ["comparison-artifacts", comparison_id],
+        ["open-comparison", comparison_id],
+    ]:
+        commands.append(_run_json([str(installed_labsidecar), *args], cwd=smoke_workspace, env=env))
     commands.append(
         _run_json(
             [

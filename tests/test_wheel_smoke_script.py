@@ -104,6 +104,8 @@ def test_wheel_smoke_summary_includes_comparison_contract(tmp_path: Path, monkey
             stdout = "Imported as task: task_comparison\n"
         elif " compare " in f" {text} ":
             stdout = "Comparison created: comparison_20260624_120000_abcdef\n"
+        elif " open-comparison " in f" {text} ":
+            stdout = str(cwd / ".lab-sidecar" / "comparisons" / "comparison_20260624_120000_abcdef") + "\n"
         else:
             stdout = ""
         return {
@@ -183,6 +185,14 @@ def test_wheel_smoke_summary_includes_comparison_contract(tmp_path: Path, monkey
     assert comparison["package_path"].endswith("/packages/comparison-comparison_20260624_120000_abcdef")
     assert comparison["package_verify_status"] == "passed"
     command_log = "\n".join(item["command"] for item in summary["commands"])
-    for command in ["compare", "validate-comparison", "package-comparison", "package-verify"]:
+    for command in [
+        "compare",
+        "list-comparisons",
+        "comparison-artifacts",
+        "open-comparison",
+        "validate-comparison",
+        "package-comparison",
+        "package-verify",
+    ]:
         assert command in command_log
     assert (PROJECT_ROOT / ".lab-sidecar").exists() is before_repo_state

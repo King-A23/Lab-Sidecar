@@ -24,6 +24,9 @@ All notable user-facing changes should be recorded here. This project has not pu
 - Saved comparison artifacts with `compare --save`, deterministic comparison
   tables, bounded summaries, optional figures/reports, comparison traceability,
   `validate-comparison`, and `package-comparison`.
+- Read-only saved comparison discovery commands:
+  `list-comparisons`, `open-comparison`, and `comparison-artifacts`, without
+  changing the final-row descriptive comparison scope or exposing MCP/V2 tools.
 - Explicit multi-figure YAML specs under `figures:` while preserving the
   legacy single-spec YAML shape.
 - `scripts/cli_full_smoke.py` and `scripts/wheel_smoke.py` for release-oriented

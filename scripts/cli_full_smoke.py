@@ -253,6 +253,9 @@ def _comparison_flow(
         ],
     ).stdout
     comparison_id = _extract_comparison_id(output)
+    _run_cli(workspace, env, cli_python, ["list-comparisons"])
+    _run_cli(workspace, env, cli_python, ["comparison-artifacts", comparison_id])
+    _run_cli(workspace, env, cli_python, ["open-comparison", comparison_id])
     _run_cli(
         workspace,
         env,

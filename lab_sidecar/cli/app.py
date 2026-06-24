@@ -38,7 +38,13 @@ from lab_sidecar.comparisons.package_export import (
     ComparisonPackageExportError,
     export_comparison_package,
 )
-from lab_sidecar.comparisons.service import ComparisonService
+from lab_sidecar.comparisons.service import (
+    ComparisonService,
+    comparison_artifact_dir,
+    comparison_artifact_presence,
+    list_comparison_ids,
+    load_comparison_manifest,
+)
 from lab_sidecar.comparisons.validation import ComparisonValidationService
 from lab_sidecar.figures.fallback_worker import FallbackWorkerMode
 from lab_sidecar.figures.service import (
@@ -236,6 +242,22 @@ def _print_comparison_validation_result(result: ComparisonValidationResult) -> N
         typer.echo(f"[{check.status.value}] {check.name}: {check.message}{suffix}")
         if check.next_action:
             typer.echo(f"  next: {check.next_action}")
+
+
+def _comparison_artifact_error(comparison_id: str, exc: Exception) -> None:
+    if isinstance(exc, ComparisonInvalidId):
+        _fail(
+            f"Error: {exc}.\n"
+            "Hint: use a saved comparison id such as comparison_YYYYMMDD_HHMMSS_xxxxxx.",
+            code=2,
+        )
+    if isinstance(exc, ComparisonNotFound):
+        _fail(
+            f"Error: comparison '{comparison_id}' was not found.\n"
+            "Hint: run 'labsidecar list-comparisons' to find saved comparison ids.",
+            code=3,
+        )
+    raise exc
 
 
 def _next_commands_for(record) -> list[str]:
@@ -960,6 +982,79 @@ def package_comparison(
     typer.echo(f"Omitted by default: {result.omitted_count}")
     typer.echo(f"Unavailable optional files: {result.unavailable_count}")
     typer.echo(f"Digest: {result.digest_path}")
+
+
+@app.command("list-comparisons")
+def list_comparisons(
+    limit: int = typer.Option(20, "--limit", min=1, help="Maximum number of saved comparison records to show."),
+) -> None:
+    """List recent saved comparison records without reading artifact bodies."""
+    root = _root()
+    comparison_ids = list_comparison_ids(root)
+    if not comparison_ids:
+        typer.echo("No comparisons found.")
+        return
+
+    rows: list[list[str]] = [
+        ["comparison_id", "name", "created_at", "source_tasks", "artifacts", "figures", "report"]
+    ]
+    warnings: list[str] = []
+    for comparison_id in comparison_ids[:limit]:
+        try:
+            manifest = load_comparison_manifest(root, comparison_id)
+            presence = comparison_artifact_presence(root, comparison_id)
+        except Exception as exc:
+            warnings.append(
+                f"skipped damaged comparison manifest {comparison_id}: {_preview_text(str(exc), 180)}"
+            )
+            continue
+        rows.append(
+            [
+                manifest.comparison_id,
+                _preview_text(manifest.name or "", 120),
+                manifest.created_at,
+                _preview_text(", ".join(manifest.task_ids), 160),
+                str(presence.artifact_count),
+                str(presence.figure_count),
+                "yes" if presence.report_present else "no",
+            ]
+        )
+    if len(rows) == 1:
+        typer.echo("No comparisons found.")
+    else:
+        _table(rows)
+    for warning in warnings[:5]:
+        typer.echo(f"Warning: {warning}", err=True)
+    if len(warnings) > 5:
+        typer.echo(f"Warning: omitted {len(warnings) - 5} additional damaged comparison manifest(s).", err=True)
+
+
+@app.command("open-comparison")
+def open_comparison(comparison_id: str) -> None:
+    """Print the saved comparison artifact directory path."""
+    root = _root()
+    try:
+        path = comparison_artifact_dir(root, comparison_id)
+    except (ComparisonInvalidId, ComparisonNotFound) as exc:
+        _comparison_artifact_error(comparison_id, exc)
+    typer.echo(path)
+
+
+@app.command("comparison-artifacts")
+def comparison_artifacts(comparison_id: str) -> None:
+    """List saved comparison artifacts without printing artifact bodies."""
+    root = _root()
+    try:
+        presence = comparison_artifact_presence(root, comparison_id)
+    except (ComparisonInvalidId, ComparisonNotFound) as exc:
+        _comparison_artifact_error(comparison_id, exc)
+
+    typer.echo(f"Artifacts for {presence.comparison_id}")
+    if not presence.paths:
+        typer.echo("(none)")
+        return
+    for path in presence.paths:
+        typer.echo(path)
 
 
 @app.command("open")

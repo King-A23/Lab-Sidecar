@@ -5,6 +5,7 @@ import json
 import math
 import re
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -22,7 +23,7 @@ from lab_sidecar.comparisons.models import (
     ComparisonTaskNotFound,
     NoCommonComparisonMetrics,
 )
-from lab_sidecar.comparisons.paths import comparison_dir, comparison_manifest_path, is_valid_comparison_id
+from lab_sidecar.comparisons.paths import comparisons_dir, comparison_dir, is_valid_comparison_id
 from lab_sidecar.core.manifest import load_task
 from lab_sidecar.core.models import ArtifactRecord
 from lab_sidecar.core.paths import resolve_workspace_path, tasks_dir, to_manifest_path
@@ -88,6 +89,16 @@ LOWER_IS_BETTER_HINTS = (
     "time",
     "memory",
 )
+
+
+@dataclass(frozen=True)
+class ComparisonArtifactPresence:
+    comparison_id: str
+    comparison_dir: Path
+    paths: list[str]
+    artifact_count: int
+    figure_count: int
+    report_present: bool
 
 
 class ComparisonService:
@@ -446,15 +457,89 @@ def generate_comparison_id() -> str:
 def load_comparison(root: Path, comparison_id: str) -> ComparisonManifest:
     if not is_valid_comparison_id(comparison_id):
         raise ComparisonInvalidId(f"invalid comparison id: {comparison_id!r}")
-    path = comparison_manifest_path(root, comparison_id)
-    if not path.is_file():
-        raise ComparisonNotFound(f"comparison '{comparison_id}' was not found")
+    path = comparison_artifact_dir(root, comparison_id) / MANIFEST_RELATIVE_PATH
     manifest = ComparisonManifest.model_validate_json(path.read_text(encoding="utf-8"))
     if manifest.comparison_id != comparison_id:
         raise ComparisonInvalidId(
             f"comparison manifest id {manifest.comparison_id!r} does not match requested id {comparison_id!r}"
         )
     return manifest
+
+
+def list_comparison_ids(root: Path) -> list[str]:
+    output_dir = comparisons_dir(root).resolve()
+    if not output_dir.is_dir():
+        return []
+    candidates: list[tuple[float, str]] = []
+    for path in output_dir.iterdir():
+        if path.is_symlink() or not path.is_dir() or not is_valid_comparison_id(path.name):
+            continue
+        try:
+            path.resolve().relative_to(output_dir)
+        except ValueError:
+            continue
+        manifest_path = path / MANIFEST_RELATIVE_PATH
+        try:
+            sort_time = manifest_path.stat().st_mtime if manifest_path.is_file() else path.stat().st_mtime
+        except OSError:
+            continue
+        candidates.append((sort_time, path.name))
+    return [comparison_id for _sort_time, comparison_id in sorted(candidates, reverse=True)]
+
+
+def load_comparison_manifest(root: Path, comparison_id: str) -> ComparisonManifest:
+    return load_comparison(root, comparison_id)
+
+
+def comparison_artifact_dir(root: Path, comparison_id: str) -> Path:
+    if not is_valid_comparison_id(comparison_id):
+        raise ComparisonInvalidId(f"invalid comparison id: {comparison_id!r}")
+    comparisons_root = comparisons_dir(root).resolve()
+    output_dir = comparison_dir(root, comparison_id).resolve()
+    try:
+        output_dir.relative_to(comparisons_root)
+    except ValueError as exc:
+        raise ComparisonInvalidId(f"invalid comparison id: {comparison_id!r}") from exc
+    if not (output_dir / MANIFEST_RELATIVE_PATH).is_file():
+        raise ComparisonNotFound(f"comparison '{comparison_id}' was not found")
+    return output_dir
+
+
+def comparison_artifact_presence(root: Path, comparison_id: str) -> ComparisonArtifactPresence:
+    output_dir = comparison_artifact_dir(root, comparison_id)
+    paths: list[str] = []
+    for relative in [
+        MANIFEST_RELATIVE_PATH,
+        SUMMARY_RELATIVE_PATH,
+        TABLE_CSV_RELATIVE_PATH,
+        TABLE_JSON_RELATIVE_PATH,
+        FIGURE_SUMMARY_RELATIVE_PATH,
+    ]:
+        if (output_dir / relative).is_file():
+            paths.append(relative.as_posix())
+
+    figures_dir = output_dir / "figures"
+    figure_paths: list[Path] = []
+    if figures_dir.is_dir():
+        figure_paths = sorted([*figures_dir.glob("*.png"), *figures_dir.glob("*.svg")], key=lambda path: path.as_posix())
+        paths.extend(path.relative_to(output_dir).as_posix() for path in figure_paths if path.is_file())
+
+    for relative in [
+        REPORT_RELATIVE_PATH,
+        REPORT_SUMMARY_RELATIVE_PATH,
+        TRACEABILITY_RELATIVE_PATH,
+    ]:
+        if (output_dir / relative).is_file():
+            paths.append(relative.as_posix())
+
+    return ComparisonArtifactPresence(
+        comparison_id=comparison_id,
+        comparison_dir=output_dir,
+        paths=paths,
+        artifact_count=len(paths),
+        figure_count=len([path for path in figure_paths if path.is_file()]),
+        report_present=(output_dir / REPORT_RELATIVE_PATH).is_file(),
+    )
 
 
 def refresh_comparison_artifacts(root: Path, manifest: ComparisonManifest) -> ComparisonManifest:
