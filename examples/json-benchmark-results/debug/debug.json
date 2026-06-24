@@ -1,0 +1,13 @@
+[
+  {
+    "method": "debug_only",
+    "case": "debug",
+    "seed": 0,
+    "accuracy": 0.01,
+    "runtime_ms": 999,
+    "error_rate": 0.99,
+    "status": "debug",
+    "warning_flag": 1,
+    "artifact_present": false
+  }
+]

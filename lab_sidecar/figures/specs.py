@@ -230,7 +230,8 @@ def build_auto_figure_plan(
     x_column = _process_axis(df)
     if x_column:
         specs = _build_line_specs(df, x_column, warnings, skipped, units or {}, groups or {})
-        return FigurePlan(specs=specs, warnings=warnings, skipped_candidates=skipped)
+        if specs:
+            return FigurePlan(specs=specs, warnings=warnings, skipped_candidates=skipped)
 
     if _seed_distribution_candidate(df):
         specs = _build_box_specs(df, warnings, skipped, units or {})

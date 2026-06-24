@@ -185,10 +185,13 @@ Current outputs:
 
 `collection-summary.json` records detected fields, source candidates,
 processed files, skipped files, row counts, units/groups when configured, and
-bounded diagnostics. `scenario-summary.json` records bounded training-run or
-benchmark-style summaries when the collector can identify those shapes. These
-summaries may reference `metrics/normalized_metrics.csv` row numbers and small
-selected fields, but they do not embed complete metric rows.
+bounded diagnostics. It also records bounded `source_selection` evidence for
+explicit config source include/exclude handling, selected files, skipped
+configured sources, and next-action guidance without embedding raw row bodies.
+`scenario-summary.json` records bounded training-run or benchmark-style
+summaries when the collector can identify those shapes. These summaries may
+reference `metrics/normalized_metrics.csv` row numbers and small selected
+fields, but they do not embed complete metric rows.
 
 ### `figures/`
 

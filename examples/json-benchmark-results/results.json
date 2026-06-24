@@ -1,0 +1,60 @@
+{
+  "benchmark_name": "classification_latency",
+  "dataset": "local_sample",
+  "records": [
+    {
+      "method": "linear_baseline",
+      "case": "small",
+      "seed": 1,
+      "metrics": {"accuracy": 0.812, "runtime_ms": 38, "error_rate": 0.188},
+      "status": "ok",
+      "warning_flag": 0,
+      "artifact_present": true
+    },
+    {
+      "method": "linear_baseline",
+      "case": "small",
+      "seed": 2,
+      "metrics": {"accuracy": 0.818, "runtime_ms": 40, "error_rate": 0.182},
+      "status": "ok",
+      "warning_flag": 0,
+      "artifact_present": true
+    },
+    {
+      "method": "tree_candidate",
+      "case": "small",
+      "seed": 1,
+      "metrics": {"accuracy": 0.846, "runtime_ms": 44, "error_rate": 0.154},
+      "status": "ok",
+      "warning_flag": 0,
+      "artifact_present": true
+    },
+    {
+      "method": "tree_candidate",
+      "case": "small",
+      "seed": 2,
+      "metrics": {"accuracy": 0.851, "runtime_ms": 43, "error_rate": 0.149},
+      "status": "ok",
+      "warning_flag": 0,
+      "artifact_present": true
+    },
+    {
+      "method": "tree_candidate",
+      "case": "stress",
+      "seed": 3,
+      "metrics": {"accuracy": 0.804, "runtime_ms": 71, "error_rate": 0.196},
+      "status": "partial_timeout",
+      "warning_flag": 1,
+      "artifact_present": false
+    },
+    {
+      "method": "nearest_neighbor",
+      "case": "small",
+      "seed": 1,
+      "metrics": {"accuracy": 0.827, "runtime_ms": 96, "error_rate": 0.173},
+      "status": "ok",
+      "warning_flag": 0,
+      "artifact_present": true
+    }
+  ]
+}

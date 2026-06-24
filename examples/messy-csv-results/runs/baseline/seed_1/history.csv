@@ -1,0 +1,4 @@
+epoch,model,trial,val_accuracy,val_loss,runtime_ms,status,warning_flag,checkpoint
+1,baseline,1,0.701,0.612,55,ok,0,ckpt/baseline-s1-e1.pt
+2,baseline,1,0.742,0.540,51,ok,0,ckpt/baseline-s1-e2.pt
+3,baseline,1,0.758,0.522,49,ok,0,ckpt/baseline-s1-e3.pt

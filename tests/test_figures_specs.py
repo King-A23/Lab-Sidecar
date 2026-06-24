@@ -171,3 +171,33 @@ def test_multi_explicit_spec_partial_failures_record_diagnostics(tmp_path: Path)
     assert summary["fallback"]["mode"] == "off"
     assert summary["fallback"]["attempted"] is False
     assert not (task_path / "intelligence").exists()
+
+
+def test_auto_figures_try_bar_when_line_default_has_too_few_points(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    source = tmp_path / "sparse-results"
+    source.mkdir()
+    (source / "metrics.csv").write_text(
+        "\n".join(
+            [
+                "epoch,method,accuracy,runtime_ms",
+                "1,baseline,0.72,51",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    task_id = extract_task_id(invoke(tmp_path, ["ingest", "sparse-results"]).output)
+    assert invoke(tmp_path, ["collect", task_id]).exit_code == 0
+
+    result = invoke(tmp_path, ["figures", task_id])
+
+    assert result.exit_code == 0
+    task_path = tmp_path / ".lab-sidecar" / "tasks" / task_id
+    summary = _figure_summary(task_path)
+    assert summary["figure_count"] == 1
+    assert summary["generated_figures"][0]["chart_type"] == "bar"
+    assert summary["generated_figures"][0]["x"] == "method"
+    assert summary["generated_figures"][0]["y"] == "accuracy"
+    assert any("fewer than 2 numeric points" in item["reason"] for item in summary["skipped_candidates"])
+    assert_non_empty_file(task_path / "figures" / "bar_accuracy_by_method.png")

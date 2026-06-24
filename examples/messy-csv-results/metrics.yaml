@@ -1,0 +1,33 @@
+sources:
+  include:
+    - examples/messy-csv-results/runs/**/*.csv
+    - examples/messy-csv-results/debug/*.csv
+    - examples/messy-csv-results/scratch/*
+    - examples/messy-csv-results/notes/*.txt
+  exclude:
+    - examples/messy-csv-results/debug/*.csv
+    - examples/messy-csv-results/scratch/*
+fields:
+  epoch:
+    sources: [epoch, step, iter]
+  method:
+    sources: [model, method, algo, variant]
+  seed:
+    sources: [seed, trial, run_id]
+  accuracy:
+    sources: [val_accuracy, score_pct, acc]
+    unit: ratio
+  loss:
+    sources: [val_loss, loss]
+  latency_ms:
+    sources: [runtime_ms, latency_ms, time_ms, runtime_s]
+    unit: ms
+  status:
+    sources: [status]
+  warning_flag:
+    sources: [warning_flag]
+  checkpoint:
+    sources: [checkpoint, ckpt]
+groups:
+  primary: method
+  secondary: seed

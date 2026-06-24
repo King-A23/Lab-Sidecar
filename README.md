@@ -184,6 +184,33 @@ The same summary also includes bounded best-row, checkpoint, and anomaly
 metadata so agents can answer common ranking or incomplete-run questions without
 reading full normalized metric tables.
 
+Two small checked-in real-ish fixtures exercise this explicit-config path:
+
+```bash
+python -m lab_sidecar.cli.app ingest examples/messy-csv-results
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app collect "$TASK_ID" --config examples/messy-csv-results/metrics.yaml
+python -m lab_sidecar.cli.app figures "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
+python -m lab_sidecar.cli.app validate "$TASK_ID"
+```
+
+```bash
+python -m lab_sidecar.cli.app ingest examples/json-benchmark-results
+export TASK_ID=<printed_task_id>
+python -m lab_sidecar.cli.app collect "$TASK_ID" --config examples/json-benchmark-results/metrics.yaml
+python -m lab_sidecar.cli.app figures "$TASK_ID"
+python -m lab_sidecar.cli.app report "$TASK_ID"
+python -m lab_sidecar.cli.app slides "$TASK_ID"
+python -m lab_sidecar.cli.app validate "$TASK_ID"
+```
+
+These examples are representative fixtures, not broad format promises. They
+show explicit source selection, alias mapping, bounded skipped-file diagnostics,
+unit warnings, deterministic figures, report fragments, and static editable
+PPTX drafts.
+
 To compare a small set of collected local tasks, pass two to five task ids:
 
 ```bash

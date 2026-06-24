@@ -1,0 +1,32 @@
+sources:
+  include:
+    - examples/json-benchmark-results/results.json
+    - examples/json-benchmark-results/extra/*.json
+    - examples/json-benchmark-results/debug/*.json
+  exclude:
+    - examples/json-benchmark-results/debug/*.json
+fields:
+  method:
+    sources: [method, algorithm]
+  case:
+    sources: [case, input_size, dataset_slice]
+  seed:
+    sources: [seed, trial, run_id]
+  accuracy:
+    sources: [metrics_accuracy, accuracy, score]
+    unit: ratio
+  runtime_ms:
+    sources: [metrics_runtime_ms, runtime_ms, latency_ms]
+    unit: ms
+  error_rate:
+    sources: [metrics_error_rate, error_rate]
+    unit: ratio
+  status:
+    sources: [status]
+  warning_flag:
+    sources: [warning_flag]
+  artifact_present:
+    sources: [artifact_present]
+groups:
+  primary: method
+  secondary: seed
