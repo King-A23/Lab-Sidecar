@@ -18,6 +18,12 @@ def test_release_asset_smoke_resolves_local_wheel_and_file_url(tmp_path: Path) -
     assert release_asset_smoke._resolve_wheel(wheel.resolve().as_uri()) == str(wheel.resolve())
 
 
+def test_release_asset_smoke_resolves_https_wheel_url_unchanged() -> None:
+    wheel_url = "https://example.invalid/releases/lab_sidecar-0.1.5-py3-none-any.whl"
+
+    assert release_asset_smoke._resolve_wheel(wheel_url) == wheel_url
+
+
 def test_release_asset_smoke_refuses_non_wheel_file(tmp_path: Path) -> None:
     path = tmp_path / "not-a-wheel.txt"
     path.write_text("not wheel\n", encoding="utf-8")
@@ -28,6 +34,21 @@ def test_release_asset_smoke_refuses_non_wheel_file(tmp_path: Path) -> None:
         assert "must end in .whl" in str(exc)
     else:
         raise AssertionError("expected non-wheel file to be rejected")
+
+
+def test_release_asset_smoke_refuses_non_wheel_http_urls() -> None:
+    for wheel_url in [
+        "http://example.invalid/releases/lab_sidecar-0.1.5.zip",
+        "https://example.invalid/releases/lab_sidecar-0.1.5",
+    ]:
+        try:
+            release_asset_smoke._resolve_wheel(wheel_url)
+        except RuntimeError as exc:
+            message = str(exc)
+            assert "wheel URL must end in .whl" in message
+            assert wheel_url in message
+        else:
+            raise AssertionError(f"expected non-wheel URL to be rejected: {wheel_url}")
 
 
 def test_release_asset_smoke_refuses_non_smoke_workspace(tmp_path: Path) -> None:

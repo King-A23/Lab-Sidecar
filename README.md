@@ -53,63 +53,44 @@ The full demo recipe is in [docs/demo-public-alpha.md](docs/demo-public-alpha.md
 
 ## 10-Minute Quickstart
 
-For released v0.1.x artifacts, download the wheel or sdist from the GitHub
-release page and install it locally:
+Start with the release-wheel quickstart:
+
+- [First-user quickstart](docs/first-user-quickstart.md): install a GitHub
+  release wheel, get the matching examples, run the simple demo, validate,
+  package, and verify the package.
+- [Recipe gallery](docs/recipes.md): copyable paths for local training runs,
+  messy CSV/JSON ingest, and saved comparison packages.
+- [Public alpha quickstart](docs/public-alpha-quickstart.md): compact local
+  workflow reference, including editable-install development notes.
+
+For released v0.1.x artifacts, download the wheel from the GitHub release page
+and install it in a virtual environment:
 
 ```bash
 python -m pip install lab_sidecar-<version>-py3-none-any.whl
 labsidecar --help
+labsidecar init
 labsidecar doctor
 ```
 
-The sdist can be installed the same way:
-
-```bash
-python -m pip install lab_sidecar-<version>.tar.gz
-```
-
 PyPI is not the default install promise for this public-alpha line unless a
-maintainer publishes and announces it separately. For development from a clone,
-use an editable install:
+maintainer publishes and announces it separately. The wheel is the
+install-smoked release artifact. Use the matching source archive or a clone for
+examples and docs.
+
+Run the deterministic training fixture after copying `examples/` into your
+workspace:
 
 ```bash
-python -m pip install -e ".[dev]"
-```
-
-If you also want the optional MCP smoke and plugin checks, install
-`.[dev,mcp]` instead.
-
-On Windows, use `py -3` instead of `python` if that is your configured launcher.
-
-Create a clean demo workspace from the repository root:
-
-```bash
-export LABSIDECAR_REPO="$(pwd)"
-export LABSIDECAR_WS="${TMPDIR:-/tmp}/lab-sidecar-alpha-workspace"
-rm -rf "$LABSIDECAR_WS"
-mkdir -p "$LABSIDECAR_WS"
-cp -R "$LABSIDECAR_REPO/examples" "$LABSIDECAR_WS/examples"
-cd "$LABSIDECAR_WS"
-python -m lab_sidecar.cli.app init
-python -m lab_sidecar.cli.app doctor
-```
-
-Run the deterministic training fixture:
-
-```bash
-python -m lab_sidecar.cli.app run "python examples/simple-success/train.py --output metrics.csv"
+labsidecar run "python examples/simple-success/train.py --output metrics.csv"
 export TASK_ID=<printed_task_id>
-python -m lab_sidecar.cli.app list
-python -m lab_sidecar.cli.app summarize "$TASK_ID"
-python -m lab_sidecar.cli.app collect "$TASK_ID"
-python -m lab_sidecar.cli.app figures "$TASK_ID"
-python -m lab_sidecar.cli.app report "$TASK_ID"
-python -m lab_sidecar.cli.app slides "$TASK_ID"
-python -m lab_sidecar.cli.app validate "$TASK_ID"
-python -m lab_sidecar.cli.app package "$TASK_ID" --output "lab-sidecar-package-$TASK_ID"
-python -m lab_sidecar.cli.app package-verify "lab-sidecar-package-$TASK_ID"
-python -m lab_sidecar.cli.app artifacts "$TASK_ID"
-python -m lab_sidecar.cli.app open "$TASK_ID"
+labsidecar collect "$TASK_ID"
+labsidecar figures "$TASK_ID"
+labsidecar report "$TASK_ID"
+labsidecar slides "$TASK_ID"
+labsidecar validate "$TASK_ID"
+labsidecar package "$TASK_ID" --output "lab-sidecar-package-$TASK_ID"
+labsidecar package-verify "lab-sidecar-package-$TASK_ID"
 ```
 
 For commands that do not need shell parsing, v0.1.4 also supports an
@@ -124,7 +105,7 @@ This uses non-shell argv execution for that run and records the argv list in
 
 The `run` command prints the task id, artifact directory, log paths, and next likely commands. A task id looks like `task_20260608_132834_153843`.
 
-Expected files:
+Expected task artifact categories:
 
 ```text
 .lab-sidecar/tasks/$TASK_ID/
@@ -145,8 +126,6 @@ Expected files:
 
 The task-local `provenance/traceability.json` file is refreshed as metrics, figures, reports, slides, or packages are generated. It records source references, generated artifact hashes/sizes, metric lineage, figure lineage, report claim traces, slide evidence, reproduce metadata pointers, and omission notes without embedding full logs, full metric rows, report bodies, PPTX contents, worker prompt/response bodies, raw source files, or SQLite.
 
-Chart fallback is opt-in. Deterministic `line`, `bar`, and `box` figures are always attempted first. Explicit figure specs support both the legacy single-spec YAML shape and the current multi-figure `figures:` YAML shape; see [docs/figure-specs.md](docs/figure-specs.md). For an explicit unsupported chart spec, `figures --fallback bounded` writes bounded request and validation records under `intelligence/<worker_run_id>/`; official fallback PNG/SVG files are created only after validator acceptance. See [docs/alpha4-bounded-chart-fallback-operator-guide.md](docs/alpha4-bounded-chart-fallback-operator-guide.md).
-
 The `validate` command checks a task's artifact health without generating new
 artifacts. Its diagnostics call out missing or malformed metrics, summaries,
 reports, slides, and traceability with paths and next actions. The `package`
@@ -162,116 +141,15 @@ worker prompt/response bodies, temporary sandbox files, or unrelated workspace
 files. Failed tasks package as diagnostic folders and are labeled as
 failed-task diagnostics, not successful experiment summaries.
 
-For an existing-results path, try:
+For existing results, explicit configs, chart specs, and saved comparison
+packages, use the recipe gallery:
 
-```bash
-python -m lab_sidecar.cli.app ingest examples/csv-comparison
-export TASK_ID=<printed_task_id>
-python -m lab_sidecar.cli.app collect "$TASK_ID"
-python -m lab_sidecar.cli.app figures "$TASK_ID"
-python -m lab_sidecar.cli.app report "$TASK_ID"
-python -m lab_sidecar.cli.app slides "$TASK_ID"
-```
-
-For nested or messy result directories, keep discovery explicit with
-`collect --config`. The older config shapes still work, including
-`sources: results.csv`, `sources: [results/*.csv]`, `fields: {accuracy:
-score_pct}`, and top-level `units`. Stage 3 also supports include/exclude
-source lists and field alias lists:
-
-```yaml
-sources:
-  include:
-    - messy-results/**/*.csv
-  exclude:
-    - messy-results/**/debug*.csv
-    - messy-results/**/scratch/*
-fields:
-  epoch:
-    sources: [epoch, step, iter]
-  method:
-    sources: [model, method, algo, variant]
-  seed:
-    sources: [seed, trial, run_id]
-  accuracy:
-    sources: [val_accuracy, score_pct, acc]
-    unit: ratio
-  latency_ms:
-    sources: [runtime_ms, latency_ms, time_ms]
-    unit: ms
-groups:
-  primary: method
-  secondary: seed
-```
-
-Configured sources must stay inside the local workspace and, for ingested
-tasks, inside the ingested source refs. Missing sources, missing mapped
-fields, unsupported file types, excluded files, and unit conflicts are recorded
-in `metrics/collection-summary.json`. Lab-Sidecar does not recursively scan
-entire workspaces by default and does not convert units automatically.
-The same summary also includes bounded best-row, checkpoint, and anomaly
-metadata so agents can answer common ranking or incomplete-run questions without
-reading full normalized metric tables.
-
-Two small checked-in real-ish fixtures exercise this explicit-config path:
-
-```bash
-python -m lab_sidecar.cli.app ingest examples/messy-csv-results
-export TASK_ID=<printed_task_id>
-python -m lab_sidecar.cli.app collect "$TASK_ID" --config examples/messy-csv-results/metrics.yaml
-python -m lab_sidecar.cli.app figures "$TASK_ID"
-python -m lab_sidecar.cli.app report "$TASK_ID"
-python -m lab_sidecar.cli.app slides "$TASK_ID"
-python -m lab_sidecar.cli.app validate "$TASK_ID"
-```
-
-```bash
-python -m lab_sidecar.cli.app ingest examples/json-benchmark-results
-export TASK_ID=<printed_task_id>
-python -m lab_sidecar.cli.app collect "$TASK_ID" --config examples/json-benchmark-results/metrics.yaml
-python -m lab_sidecar.cli.app figures "$TASK_ID"
-python -m lab_sidecar.cli.app report "$TASK_ID"
-python -m lab_sidecar.cli.app slides "$TASK_ID"
-python -m lab_sidecar.cli.app validate "$TASK_ID"
-```
-
-These examples are representative fixtures, not broad format promises. They
-show explicit source selection, alias mapping, bounded skipped-file diagnostics,
-unit warnings, deterministic figures, report fragments, and static editable
-PPTX drafts.
-
-To compare a small set of collected local tasks, pass two to five task ids:
-
-```bash
-python -m lab_sidecar.cli.app compare <task_id_a> <task_id_b>
-```
-
-`compare` reads each task's `metrics/normalized_metrics.csv`, uses the final row from each file, and reports shared numeric fields only. It does not claim statistical significance or infer research conclusions.
-
-To save that comparison as local artifacts:
-
-```bash
-python -m lab_sidecar.cli.app compare <task_id_a> <task_id_b> --save --name "baseline-vs-model-a" --figures --report
-export COMPARISON_ID=<printed_comparison_id>
-python -m lab_sidecar.cli.app list-comparisons
-python -m lab_sidecar.cli.app comparison-artifacts "$COMPARISON_ID"
-python -m lab_sidecar.cli.app open-comparison "$COMPARISON_ID"
-python -m lab_sidecar.cli.app validate-comparison "$COMPARISON_ID" --require figures --require report --require package-ready
-python -m lab_sidecar.cli.app package-comparison "$COMPARISON_ID" --output "lab-sidecar-comparison-$COMPARISON_ID"
-python -m lab_sidecar.cli.app package-verify "lab-sidecar-comparison-$COMPARISON_ID"
-```
+- [Recipe gallery](docs/recipes.md)
+- [Figure specs](docs/figure-specs.md)
+- [Comparison artifacts](docs/comparison-artifacts.md)
 
 Saved comparison artifacts are descriptive only. They do not run statistical
 tests, infer model superiority, copy source task logs, or copy source raw files.
-`list-comparisons`, `comparison-artifacts`, and `open-comparison` are read-only
-navigation commands for existing saved comparison records. They do not generate
-artifacts and are not exposed through MCP/V2.
-`validate-comparison` reports missing figures, reports, traceability, stale
-source metrics, and package-readiness issues with bounded next actions. The
-deterministic comparison report includes source tasks, final-row selection,
-bounded table preview, evidence paths, warnings, omissions, and this limitation:
-This comparison is descriptive only; no statistical significance or model
-superiority is inferred.
 
 ## CLI Commands
 
@@ -429,10 +307,10 @@ python -m build
 Run release-oriented smokes from a repository checkout:
 
 ```bash
-python scripts/release_check.py --version 0.1.5
+python scripts/release_check.py --version 0.1.6
 python scripts/cli_full_smoke.py --workspace /tmp/lab-sidecar-cli-full-smoke --repo "$(pwd)"
 python scripts/wheel_smoke.py --workspace /tmp/lab-sidecar-wheel-smoke --repo "$(pwd)"
-python scripts/release_asset_smoke.py --wheel dist/lab_sidecar-0.1.5-py3-none-any.whl --version 0.1.5 --workspace /tmp/lab-sidecar-release-asset-smoke --repo "$(pwd)"
+python scripts/release_asset_smoke.py --wheel dist/lab_sidecar-0.1.6-py3-none-any.whl --version 0.1.6 --workspace /tmp/lab-sidecar-release-asset-smoke --repo "$(pwd)"
 ```
 
 `release_check.py` and the smoke scripts are verification tools only. They do
@@ -440,17 +318,31 @@ not create tags, GitHub releases, uploads, or PyPI publications.
 
 ## Project Docs
 
+Start here:
+
+- [First-user quickstart](docs/first-user-quickstart.md)
+- [Recipe gallery](docs/recipes.md)
+- [Public alpha quickstart](docs/public-alpha-quickstart.md)
+- [Deterministic public alpha demo](docs/demo-public-alpha.md)
+
+Reference:
+
 - [Current scope](docs/current-scope.md)
 - [Artifact protocol](docs/artifact-protocol.md)
 - [Comparison artifacts](docs/comparison-artifacts.md)
 - [Figure specs](docs/figure-specs.md)
-- [Public alpha quickstart](docs/public-alpha-quickstart.md)
-- [Deterministic public alpha demo](docs/demo-public-alpha.md)
 - [Public alpha release notes](docs/public-alpha-release-notes.md)
-- [Release checklist](docs/release-checklist.md)
-- [MCP host configuration](docs/mcp-host-config.md)
-- [Next-stage acceptance record](docs/next-stage-product-growth-acceptance.md)
 - [Changelog](CHANGELOG.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
 - [MIT license](LICENSE)
+
+Advanced local MCP:
+
+- [MCP host configuration](docs/mcp-host-config.md)
+
+Maintainer release docs:
+
+- [Release checklist](docs/release-checklist.md)
+- [v0.1.6 onboarding plan](docs/v0.1.6-first-user-onboarding-plan.md)
+- [v0.1.6 onboarding acceptance](docs/v0.1.6-first-user-onboarding-acceptance.md)

@@ -193,8 +193,12 @@ Release notes should include:
 - Upgrade notes, if any.
 
 The current release hardening acceptance record is
-[v0.1.5-install-release-trust-acceptance.md](v0.1.5-install-release-trust-acceptance.md)
-for the v0.1.5 line. Older release hardening evidence remains in
+[v0.1.6-first-user-onboarding-acceptance.md](v0.1.6-first-user-onboarding-acceptance.md)
+for the v0.1.6 onboarding line. It records the real published v0.1.5 GitHub
+release wheel smoke separately from local v0.1.6 build and wheel smoke
+validation. The v0.1.5 install-trust record remains in
+[v0.1.5-install-release-trust-acceptance.md](v0.1.5-install-release-trust-acceptance.md).
+Older release hardening evidence remains in
 [release-hardening-acceptance.md](release-hardening-acceptance.md).
 
 ## Post-Release
