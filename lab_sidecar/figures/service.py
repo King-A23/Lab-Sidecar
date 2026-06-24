@@ -18,13 +18,14 @@ from lab_sidecar.core.provenance import file_provenance
 from lab_sidecar.core.traceability import refresh_traceability
 from lab_sidecar.figures.render import render_figure
 from lab_sidecar.figures.specs import (
+    ExplicitFigureSpecBundle,
     FigurePlan,
     FigureOutput,
     FigureSpec,
     FigureSpecValidationError,
     build_auto_figure_plan,
     build_explicit_figure_plan,
-    parse_explicit_spec,
+    parse_explicit_specs,
 )
 from lab_sidecar.figures.fallback_worker import (
     FallbackWorkerMode,
@@ -129,7 +130,7 @@ class FigureGenerationService:
             fallback, fallback_generated = self._prepare_fallback(
                 record=record,
                 task_path=task_path,
-                spec=explicit_spec,
+                spec=_fallback_spec(explicit_spec),
                 metrics_path=metrics_path,
                 metrics_metadata=metrics_metadata,
                 plan=plan,
@@ -303,7 +304,7 @@ class FigureGenerationService:
             fallback=fallback,
         )
 
-    def _load_explicit_spec(self, task_path: Path, spec_path: Path) -> FigureSpec:
+    def _load_explicit_spec(self, task_path: Path, spec_path: Path) -> ExplicitFigureSpecBundle:
         resolved_spec_path = spec_path.resolve()
         if not resolved_spec_path.exists():
             raise FigureSpecLoadError(f"spec file does not exist: {spec_path}")
@@ -315,14 +316,14 @@ class FigureGenerationService:
             raise FigureSpecLoadError(f"spec file could not be read: {exc}") from exc
 
         try:
-            return parse_explicit_spec(spec_data, task_path)
+            return parse_explicit_specs(spec_data, task_path)
         except FigureSpecValidationError as exc:
             raise FigureSpecLoadError(str(exc)) from exc
 
     def _build_plan(
         self,
         df: pd.DataFrame,
-        explicit_spec: FigureSpec | None,
+        explicit_spec: ExplicitFigureSpecBundle | None,
         metrics_metadata: dict[str, Any],
     ) -> FigurePlan:
         if explicit_spec is None:
@@ -331,7 +332,14 @@ class FigureGenerationService:
                 units=metrics_metadata["units"],
                 groups=metrics_metadata["groups"],
             )
-        return build_explicit_figure_plan(df, explicit_spec, units=metrics_metadata["units"])
+        return build_explicit_figure_plan(
+            df,
+            explicit_spec.specs,
+            units=metrics_metadata["units"],
+            warnings=explicit_spec.warnings,
+            skipped_candidates=explicit_spec.skipped_candidates,
+            errors=explicit_spec.errors,
+        )
 
     def _read_metrics(self, metrics_path: Path) -> pd.DataFrame:
         try:
@@ -1085,6 +1093,12 @@ def _figure_proposal_fields(proposal: FigureFallbackProposal) -> list[str]:
     if proposal.group_by:
         fields.append(proposal.group_by)
     return fields
+
+
+def _fallback_spec(bundle: ExplicitFigureSpecBundle | None) -> FigureSpec | None:
+    if bundle is None or not bundle.specs:
+        return None
+    return bundle.specs[0]
 
 
 def _field_units_for_fields(fields: list[str], units: dict[str, str]) -> dict[str, str]:
