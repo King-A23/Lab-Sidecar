@@ -78,7 +78,7 @@ redacting, accepting, and making final decisions from the artifacts.
 If the repo-scoped Codex plugin guidance changes, validate the plugin scaffold:
 
 ```bash
-python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
+python <plugin-creator>/scripts/validate_plugin.py plugins/lab-sidecar
 ```
 
 For V2 Codex-plugin-like host setup, smoke guidance, safety boundaries, and MCP

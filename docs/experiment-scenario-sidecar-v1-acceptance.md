@@ -151,14 +151,14 @@ The workspace was disposable and outside the repository. Generated
 Commands:
 
 ```bash
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app init
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app run "/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python examples/simple-success/train.py --output metrics.csv" --name canonical-training-run
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app collect task_20260622_094912_b6dd4d
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app summarize task_20260622_094912_b6dd4d
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app figures task_20260622_094912_b6dd4d
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app report task_20260622_094912_b6dd4d
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app slides task_20260622_094912_b6dd4d
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app artifacts task_20260622_094912_b6dd4d
+.venv/bin/python -m lab_sidecar.cli.app init
+.venv/bin/python -m lab_sidecar.cli.app run ".venv/bin/python examples/simple-success/train.py --output metrics.csv" --name canonical-training-run
+.venv/bin/python -m lab_sidecar.cli.app collect task_20260622_094912_b6dd4d
+.venv/bin/python -m lab_sidecar.cli.app summarize task_20260622_094912_b6dd4d
+.venv/bin/python -m lab_sidecar.cli.app figures task_20260622_094912_b6dd4d
+.venv/bin/python -m lab_sidecar.cli.app report task_20260622_094912_b6dd4d
+.venv/bin/python -m lab_sidecar.cli.app slides task_20260622_094912_b6dd4d
+.venv/bin/python -m lab_sidecar.cli.app artifacts task_20260622_094912_b6dd4d
 ```
 
 Result:
@@ -183,13 +183,13 @@ Result:
 Commands:
 
 ```bash
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app ingest examples/algorithm-benchmark --name canonical-algorithm-benchmark
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app collect task_20260622_095301_233f4f --config algorithm-benchmark.yaml
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app summarize task_20260622_095301_233f4f
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app figures task_20260622_095301_233f4f
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app report task_20260622_095301_233f4f
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app slides task_20260622_095301_233f4f
-/Users/anyuchen/Projects/personal/Lab-Sidecar/.venv/bin/python -m lab_sidecar.cli.app artifacts task_20260622_095301_233f4f
+.venv/bin/python -m lab_sidecar.cli.app ingest examples/algorithm-benchmark --name canonical-algorithm-benchmark
+.venv/bin/python -m lab_sidecar.cli.app collect task_20260622_095301_233f4f --config algorithm-benchmark.yaml
+.venv/bin/python -m lab_sidecar.cli.app summarize task_20260622_095301_233f4f
+.venv/bin/python -m lab_sidecar.cli.app figures task_20260622_095301_233f4f
+.venv/bin/python -m lab_sidecar.cli.app report task_20260622_095301_233f4f
+.venv/bin/python -m lab_sidecar.cli.app slides task_20260622_095301_233f4f
+.venv/bin/python -m lab_sidecar.cli.app artifacts task_20260622_095301_233f4f
 ```
 
 Config used:

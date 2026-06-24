@@ -45,7 +45,7 @@ Existing unrelated working-tree state preserved:
 
 ## Workspaces And IDs
 
-- Repository workspace: `/Users/anyuchen/Projects/personal/Lab-Sidecar`
+- Repository workspace: `<repo>`
 - Acceptance smoke workspace: `/var/folders/n8/27vxlzfd6_l57knsz60pmz4c0000gn/T/lab-sidecar-v2-phase-2-2-d_g3i7i2`
 - Acceptance smoke task ID: `task_20260606_164443_71efbe`
 - Acceptance smoke worker run ID: `worker_run_20260606_164443_364d90`

@@ -66,7 +66,7 @@ These MCP/V2 checks are guardrails, not isolation. Lab-Sidecar does not claim OS
 Install optional MCP support:
 
 ```bash
-python -m pip install -e ".[mcp]"
+python -m pip install -e ".[dev,mcp]"
 ```
 
 Run the stdio smoke:
@@ -142,8 +142,8 @@ Stage 5 validation evidence:
 - `git diff --check`: passed
 - `PATH=.venv/bin:$PATH python -m pytest tests/test_cli_smoke.py -q`: 85 passed
 - `PATH=.venv/bin:$PATH python -m pytest -q`: 137 passed
-- Manual full workflow smoke passed in `/private/tmp/lab-sidecar-stage-5-zgNNeC`
-  with task `task_20260618_222513_2fc3fd`
+- Manual full workflow smoke passed in a disposable local workspace with task
+  `task_20260618_222513_2fc3fd`
 - SQLite-independent inspection passed after deleting `.lab-sidecar/index.sqlite`
 
 Additional release limits after Stage 5:
@@ -201,3 +201,27 @@ Focused validation passed:
 Additional limits remain unchanged: no Web UI, FastAPI, remote runner, hosted
 service, cloud sync, generic multi-agent framework, default AI analysis, or
 statistical research-claim engine.
+
+## Release Hardening Notes
+
+Date: 2026-06-23
+
+Release hardening keeps the same cautious local-first alpha scope and adds
+verification surfaces for existing artifacts:
+
+- `validate <task_id>` checks task artifact health without generating new
+  artifacts.
+- `package-verify <package_dir>` checks `artifact-index.sha256`,
+  `artifact-index.json`, indexed file hashes and sizes, and unexpected package
+  files.
+- Explicit figure specs now document both the legacy single-spec YAML shape and
+  the multi-figure `figures:` shape for deterministic `line`, `bar`, and `box`
+  charts.
+- `scripts/cli_full_smoke.py` is the optional release CLI full smoke from a
+  repository checkout.
+- `scripts/wheel_smoke.py` builds a wheel, installs it into an isolated venv,
+  and runs the installed CLI path in a disposable workspace.
+
+The scope remains unchanged: no Web UI, FastAPI/HTTP service, hosted service,
+cloud sync, remote runner, default AI analysis, general multi-agent framework,
+or MCP/V2 schema expansion.

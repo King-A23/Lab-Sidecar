@@ -59,6 +59,9 @@ python -m lab_sidecar.cli.app collect "$TASK_ID"
 python -m lab_sidecar.cli.app figures "$TASK_ID"
 python -m lab_sidecar.cli.app report "$TASK_ID"
 python -m lab_sidecar.cli.app slides "$TASK_ID"
+python -m lab_sidecar.cli.app validate "$TASK_ID"
+python -m lab_sidecar.cli.app package "$TASK_ID" --output "lab-sidecar-package-$TASK_ID"
+python -m lab_sidecar.cli.app package-verify "lab-sidecar-package-$TASK_ID"
 python -m lab_sidecar.cli.app artifacts "$TASK_ID"
 python -m lab_sidecar.cli.app open "$TASK_ID"
 ```
@@ -72,6 +75,10 @@ py -3 -m lab_sidecar.cli.app collect $env:TASK_ID
 py -3 -m lab_sidecar.cli.app figures $env:TASK_ID
 py -3 -m lab_sidecar.cli.app report $env:TASK_ID
 py -3 -m lab_sidecar.cli.app slides $env:TASK_ID
+py -3 -m lab_sidecar.cli.app validate $env:TASK_ID
+$PACKAGE_DIR = "lab-sidecar-package-$($env:TASK_ID)"
+py -3 -m lab_sidecar.cli.app package $env:TASK_ID --output $PACKAGE_DIR
+py -3 -m lab_sidecar.cli.app package-verify $PACKAGE_DIR
 py -3 -m lab_sidecar.cli.app artifacts $env:TASK_ID
 py -3 -m lab_sidecar.cli.app open $env:TASK_ID
 ```
@@ -92,6 +99,11 @@ Key files:
 - `reports/report-fragment.md`
 - `slides/presentation-draft.pptx`
 - `slides/slides-summary.json`
+
+The package directory includes `package-summary.json`, `artifact-index.json`,
+`artifact-index.sha256`, and `redaction-notes.md`. `package-verify` checks the
+package index digest, indexed file hashes and sizes, and rejects unexpected
+files.
 
 ## Ingest Existing Results
 
@@ -119,6 +131,23 @@ python -m lab_sidecar.cli.app slides "$TASK_ID" --template zh-project
 
 Use `python -m lab_sidecar.cli.app list` to find recent tasks, and
 `python -m lab_sidecar.cli.app open "$TASK_ID"` to print the artifact directory.
+
+## Save A Local Comparison
+
+After collecting two to five local tasks, save a descriptive comparison:
+
+```bash
+python -m lab_sidecar.cli.app compare <task_id_a> <task_id_b> --save --name "baseline-vs-model-a" --figures --report
+export COMPARISON_ID=<printed_comparison_id>
+python -m lab_sidecar.cli.app validate-comparison "$COMPARISON_ID" --require figures --require report --require package-ready
+python -m lab_sidecar.cli.app package-comparison "$COMPARISON_ID" --output "lab-sidecar-comparison-$COMPARISON_ID"
+python -m lab_sidecar.cli.app package-verify "lab-sidecar-comparison-$COMPARISON_ID"
+```
+
+Saved comparison artifacts live under
+`.lab-sidecar/comparisons/$COMPARISON_ID/`. They are descriptive only: no
+statistical significance, model superiority, remote execution, Web UI, MCP
+schema expansion, or default AI analysis is added.
 
 ## MCP Smoke
 
@@ -169,3 +198,6 @@ python -m lab_sidecar.cli.app figures "$TASK_ID" --spec figure.yaml --fallback b
 Fallback is default-off. See
 `docs/alpha4-bounded-chart-fallback-operator-guide.md` for status meanings
 (`not_needed`, `unavailable`, `rejected`, `adopted`) and troubleshooting.
+
+Explicit figure specs can be a legacy single YAML object or a multi-figure
+`figures:` YAML file. See `docs/figure-specs.md` for copyable examples.

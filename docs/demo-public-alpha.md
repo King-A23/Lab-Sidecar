@@ -60,6 +60,9 @@ python -m lab_sidecar.cli.app collect "$TASK_ID"
 python -m lab_sidecar.cli.app figures "$TASK_ID"
 python -m lab_sidecar.cli.app report "$TASK_ID"
 python -m lab_sidecar.cli.app slides "$TASK_ID"
+python -m lab_sidecar.cli.app validate "$TASK_ID"
+python -m lab_sidecar.cli.app package "$TASK_ID" --output "lab-sidecar-package-$TASK_ID"
+python -m lab_sidecar.cli.app package-verify "lab-sidecar-package-$TASK_ID"
 python -m lab_sidecar.cli.app artifacts "$TASK_ID"
 python -m lab_sidecar.cli.app open "$TASK_ID"
 ```
@@ -74,6 +77,8 @@ Expected files:
 - `.lab-sidecar/tasks/$TASK_ID/reports/report-fragment.md`
 - `.lab-sidecar/tasks/$TASK_ID/slides/presentation-draft.pptx`
 - `.lab-sidecar/tasks/$TASK_ID/slides/slides-summary.json`
+- `lab-sidecar-package-$TASK_ID/artifact-index.json`
+- `lab-sidecar-package-$TASK_ID/artifact-index.sha256`
 
 ## Scenario 2: Multi-Run CSV Comparison
 
@@ -108,6 +113,34 @@ draft from metrics, figures, report text, and source artifact metadata. The
 deck is editable and deterministic; it is not AI-polished and contains no
 animation or video output.
 
+## Optional Scenario: Saved Comparison Artifact
+
+After collecting two to five task ids, save a bounded local comparison:
+
+```bash
+python -m lab_sidecar.cli.app compare <task_id_a> <task_id_b> --save --name "baseline-vs-model-a" --figures --report
+export COMPARISON_ID=<printed_comparison_id>
+python -m lab_sidecar.cli.app validate-comparison "$COMPARISON_ID" --require figures --require report --require package-ready
+python -m lab_sidecar.cli.app package-comparison "$COMPARISON_ID" --output "lab-sidecar-comparison-$COMPARISON_ID"
+python -m lab_sidecar.cli.app package-verify "lab-sidecar-comparison-$COMPARISON_ID"
+```
+
+Expected files:
+
+- `.lab-sidecar/comparisons/$COMPARISON_ID/comparison-manifest.json`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/comparison-summary.json`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/comparison-table.csv`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/comparison-table.json`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/figures/figure-summary.json`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/figures/*.png`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/reports/comparison-report-fragment.md`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/reports/comparison-report-summary.json`
+- `.lab-sidecar/comparisons/$COMPARISON_ID/provenance/traceability.json`
+
+The comparison is descriptive only. It does not infer statistical significance,
+model superiority, or deployment readiness, and it does not copy source task
+full logs or raw source files into the comparison package.
+
 ## Scenario 4: Failed Run Diagnosis
 
 ```bash
@@ -122,6 +155,19 @@ python -m lab_sidecar.cli.app artifacts "$TASK_ID"
 Expected result: the task status is `failed`, exit code and stderr are
 preserved in task-local records, and report/PPTX output contains bounded
 diagnostic content.
+
+## Optional Release CLI Full Smoke
+
+For release validation from a repository checkout, run the canonical CLI smoke
+in a disposable workspace:
+
+```bash
+python "$LABSIDECAR_REPO/scripts/cli_full_smoke.py" --workspace "${TMPDIR:-/tmp}/lab-sidecar-cli-full-smoke" --repo "$LABSIDECAR_REPO"
+```
+
+This is a release smoke, not a normal user step. It runs success, failed-task
+diagnostic, and ingest flows; validates generated tasks; packages result and
+diagnostic outputs; and verifies those packages.
 
 ## Optional MCP Stdio Smoke
 

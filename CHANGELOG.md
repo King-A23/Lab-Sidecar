@@ -17,6 +17,20 @@ All notable user-facing changes should be recorded here. This project has not pu
   `preview_sidecar_artifact`, and `cancel_sidecar_task`.
 - Bounded `metrics/scenario-summary.json` records for canonical
   `training-run` and `algorithm-benchmark` scenarios.
+- `validate <task_id>` for task artifact health checks without generating new
+  artifacts.
+- `package-verify <package_dir>` and `artifact-index.sha256` for package
+  integrity checks.
+- Saved comparison artifacts with `compare --save`, deterministic comparison
+  tables, bounded summaries, optional figures/reports, comparison traceability,
+  `validate-comparison`, and `package-comparison`.
+- Explicit multi-figure YAML specs under `figures:` while preserving the
+  legacy single-spec YAML shape.
+- `scripts/cli_full_smoke.py` and `scripts/wheel_smoke.py` for release-oriented
+  local and wheel-install smoke validation from a repository checkout.
+- `docs/release-hardening-acceptance.md` as the release-candidate closure
+  record for build, installed-wheel smoke, package verification, and local-first
+  scope confirmation.
 
 ### Documentation
 
@@ -31,6 +45,33 @@ All notable user-facing changes should be recorded here. This project has not pu
   review, redaction, interpretation, and final-decision responsibilities.
 - Added the Phase 2 Core Stability and Trust source-of-truth plan and baseline
   acceptance scaffold.
+- Added current-scope, figure-spec, artifact-protocol, and release-checklist
+  coverage for validate, package verification, multi-figure specs, and wheel
+  smoke validation.
+- Added comparison artifact documentation covering bounded descriptive
+  comparisons, non-goals, artifact layout, validation, packaging, and package
+  verification.
+- Documented online and offline wheelhouse release-smoke paths for environments
+  with or without direct PyPI access.
+- Release candidate notes now emphasize the local-first alpha CLI artifact
+  workflow, `validate`, `package`, `package-verify`, traceability, and bounded
+  optional MCP adapter limits.
+
+### Release Candidate
+
+- Hardened saved comparison release readiness with duplicate-task rejection,
+  comparison id/path validation, non-finite and metadata-field exclusion
+  coverage, stricter comparison validation/package consistency checks, smoke
+  summary re-baselining, and a dedicated comparison acceptance record.
+- Closed the build and installed-wheel smoke blocker in a venv-backed release
+  validation environment: `python -m build` produced the `0.1.0` sdist and wheel,
+  and `scripts/wheel_smoke.py` installed the wheel into an isolated venv before
+  running the installed `labsidecar` workflow through `package-verify`.
+- Aligned MCP/V2 omitted-content metadata keys with the public bounded-response
+  contract without expanding the tool surface or returning additional artifact
+  bodies.
+- Kept version `0.1.0` for the pending public alpha; no tag, push, release, or
+  PyPI publish was performed.
 
 ## [0.1.0] - Pending Public Alpha
 

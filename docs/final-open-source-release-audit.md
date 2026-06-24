@@ -104,7 +104,7 @@ rg -n "guaranteed|大量star|production-grade|OS sandbox|malware detection|hoste
 - Bounded response contract preserved; full command/stdout/stderr/metrics/artifact bodies were omitted by default.
 
 ```bash
-.venv/bin/python /Users/anyuchen/.codex/skills/.system/plugin-creator/scripts/validate_plugin.py plugins/lab-sidecar
+.venv/bin/python <plugin-creator>/scripts/validate_plugin.py plugins/lab-sidecar
 ```
 
 - Passed.

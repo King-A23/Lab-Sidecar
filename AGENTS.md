@@ -71,10 +71,14 @@ Use Conventional Commits, for example `docs: add release checklist` or `feat: ad
 
 ## Scope Boundaries
 
+All coding agents must treat [docs/current-scope.md](docs/current-scope.md) as
+the current development boundary. Historical roadmap documents are useful
+context, but they are not permission to expand the active alpha scope.
+
 Keep public claims cautious: Lab-Sidecar is CLI-first, file-first, and local-first. The MCP adapter is experimental and local; it does not turn Lab-Sidecar into a hosted service, remote runner, Web UI, FastAPI app, or general multi-agent framework. CLI `run` is a user-explicit local command execution path, while MCP-facing `run_experiment` has a separate conservative workspace and command safety gate.
 
 Codex supervisor agents and subagents may be used to coordinate repository work, audits, or implementation slices. They are execution coordination for development, not Lab-Sidecar product architecture.
 
 ## Agent-Specific Instructions
 
-Read the relevant docs and tests before editing. Do not revert concurrent changes made by others. Keep edits scoped to the requested slice, preserve the local `run -> collect -> figures -> report -> slides` path, and avoid touching `lab_sidecar/mcp` code or MCP tests unless MCP behavior is explicitly in scope.
+Read the relevant docs and tests before editing. Do not revert concurrent changes made by others. Keep edits scoped to the requested slice, preserve the local `run/ingest -> collect -> figures -> report -> slides` path, and avoid touching `lab_sidecar/mcp` code or MCP tests unless MCP behavior is explicitly in scope. Do not add Web UI, FastAPI/HTTP service, hosted service behavior, cloud sync, remote runner behavior, or general multi-agent framework behavior unless the user explicitly changes the current scope.
