@@ -2,7 +2,7 @@
 
 All notable user-facing changes should be recorded here. This project has not published a stable release yet; entries describe the current public-alpha baseline and pending changes.
 
-## [0.1.2] - Pending
+## [0.1.2] - 2026-06-24
 
 ### Changed
 
