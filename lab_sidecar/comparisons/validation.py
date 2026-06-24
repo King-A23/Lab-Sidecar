@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ from lab_sidecar.core.paths import resolve_workspace_path, tasks_dir
 
 MAX_JSON_BYTES = 5 * 1024 * 1024
 MAX_TEXT_BYTES = 5 * 1024 * 1024
+DESCRIPTIVE_ONLY_NOTE = "This comparison is descriptive only; no statistical significance or model superiority is inferred."
 TRACE_FORBIDDEN_FRAGMENTS = [
     "epoch,train_loss,val_loss",
     "Best val_accuracy",
@@ -97,6 +99,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message=f"comparison manifest could not be read: {exc}",
                     path=_display_path(path, self.root),
+                    next_action="inspect .lab-sidecar/comparisons/ or rerun labsidecar compare --save",
                 )
             )
             return None
@@ -109,6 +112,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message=f"comparison-manifest.json is not valid: {exc}",
                     path=MANIFEST_RELATIVE_PATH.as_posix(),
+                    next_action="inspect comparison-artifacts for the saved id or rerun labsidecar compare --save",
                 )
             )
             return None
@@ -119,6 +123,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message=f"manifest comparison_id is {manifest.comparison_id!r}, expected {comparison_id!r}",
                     path=MANIFEST_RELATIVE_PATH.as_posix(),
+                    next_action=f"run labsidecar list-comparisons and inspect labsidecar comparison-artifacts {comparison_id}",
                 )
             )
             return manifest
@@ -149,6 +154,7 @@ class ComparisonValidationService:
                 status=ComparisonValidationStatus.FAIL,
                 message="comparison artifact directory is missing",
                 path=_display_path(output_dir, self.root),
+                next_action="run labsidecar list-comparisons to find saved comparison ids",
             )
         )
 
@@ -168,6 +174,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message=f"comparison summary could not be parsed: {exc}",
                     path=SUMMARY_RELATIVE_PATH.as_posix(),
+                    next_action=f"inspect labsidecar comparison-artifacts {manifest.comparison_id} or rerun labsidecar compare --save",
                 )
             )
             return False
@@ -191,6 +198,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message="comparison summary is inconsistent: " + "; ".join(errors),
                     path=SUMMARY_RELATIVE_PATH.as_posix(),
+                    next_action=f"inspect labsidecar comparison-artifacts {manifest.comparison_id} or rerun labsidecar compare --save",
                 )
             )
             return False
@@ -219,6 +227,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message="comparison table CSV or JSON is missing",
                     path=TABLE_CSV_RELATIVE_PATH.as_posix(),
+                    next_action=f"inspect labsidecar comparison-artifacts {manifest.comparison_id} or rerun labsidecar compare --save",
                 )
             )
             return False
@@ -233,6 +242,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message=f"comparison table could not be read: {exc}",
                     path=TABLE_CSV_RELATIVE_PATH.as_posix(),
+                    next_action=f"inspect labsidecar comparison-artifacts {manifest.comparison_id} or rerun labsidecar compare --save",
                 )
             )
             return False
@@ -252,6 +262,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message="comparison table is inconsistent: " + "; ".join(errors),
                     path=TABLE_CSV_RELATIVE_PATH.as_posix(),
+                    next_action=f"inspect labsidecar comparison-artifacts {manifest.comparison_id} or rerun labsidecar compare --save",
                 )
             )
             return False
@@ -281,7 +292,7 @@ class ComparisonValidationService:
                     name="figures",
                     status=ComparisonValidationStatus.FAIL if is_required else ComparisonValidationStatus.WARN,
                     message="comparison figures have not been generated",
-                    next_action=f"labsidecar compare {' '.join(manifest.task_ids)} --save --figures",
+                    next_action=f"labsidecar compare {' '.join(manifest.task_ids)} --save --figures creates a fresh saved comparison with figures",
                 )
             )
             return False
@@ -294,6 +305,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message=f"figure summary could not be parsed: {exc}",
                     path=FIGURE_SUMMARY_RELATIVE_PATH.as_posix(),
+                    next_action=f"rerun labsidecar compare {' '.join(manifest.task_ids)} --save --figures to create a fresh saved comparison",
                 )
             )
             return False
@@ -320,6 +332,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message="comparison figure artifacts are incomplete: " + "; ".join(errors),
                     path=FIGURE_SUMMARY_RELATIVE_PATH.as_posix(),
+                    next_action=f"rerun labsidecar compare {' '.join(manifest.task_ids)} --save --figures to create a fresh saved comparison",
                 )
             )
             return False
@@ -352,7 +365,7 @@ class ComparisonValidationService:
                     name="report",
                     status=ComparisonValidationStatus.FAIL if is_required else ComparisonValidationStatus.WARN,
                     message="comparison report has not been generated",
-                    next_action=f"labsidecar compare {' '.join(manifest.task_ids)} --save --report",
+                    next_action=f"labsidecar compare {' '.join(manifest.task_ids)} --save --report creates a fresh saved comparison with a report",
                 )
             )
             return False
@@ -365,15 +378,10 @@ class ComparisonValidationService:
             errors.append(f"{REPORT_SUMMARY_RELATIVE_PATH.as_posix()} could not be parsed: {exc}")
             summary = {}
         text = report_path.read_text(encoding="utf-8") if report_path.is_file() else ""
-        forbidden_positive_claims = [
-            "statistically significant",
-            "model superiority is inferred",
-            "deployment-ready",
-        ]
-        for fragment in forbidden_positive_claims:
-            if fragment in text and fragment != "model superiority is inferred":
-                errors.append(f"report contains forbidden claim fragment: {fragment}")
-        if "This comparison is descriptive only" not in text:
+        forbidden_claims = _report_forbidden_claim_fragments(text)
+        for fragment in forbidden_claims:
+            errors.append(f"report contains forbidden claim fragment: {fragment}")
+        if DESCRIPTIVE_ONLY_NOTE not in text:
             errors.append("report is missing descriptive-only non-claim note")
         if summary and not (summary.get("source_artifacts") or summary.get("claim_traces")):
             errors.append("report summary has neither source_artifacts nor claim_traces")
@@ -384,6 +392,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message="comparison report artifacts are incomplete: " + "; ".join(errors),
                     path="reports/",
+                    next_action=f"rerun labsidecar compare {' '.join(manifest.task_ids)} --save --report to create a fresh saved comparison",
                 )
             )
             return False
@@ -413,6 +422,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL if is_required else ComparisonValidationStatus.WARN,
                     message="comparison traceability index has not been generated yet",
                     path=TRACEABILITY_RELATIVE_PATH.as_posix(),
+                    next_action=f"run labsidecar package-comparison {manifest.comparison_id} --output <package_dir> or rerun labsidecar compare --save",
                 )
             )
             return False
@@ -426,6 +436,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message=f"comparison traceability could not be parsed: {exc}",
                     path=TRACEABILITY_RELATIVE_PATH.as_posix(),
+                    next_action=f"inspect labsidecar comparison-artifacts {manifest.comparison_id}",
                 )
             )
             return False
@@ -454,6 +465,7 @@ class ComparisonValidationService:
                     status=ComparisonValidationStatus.FAIL,
                     message="comparison traceability is inconsistent: " + "; ".join(errors),
                     path=TRACEABILITY_RELATIVE_PATH.as_posix(),
+                    next_action=f"inspect labsidecar comparison-artifacts {manifest.comparison_id}",
                 )
             )
             return False
@@ -497,6 +509,7 @@ class ComparisonValidationService:
                     name="source metrics",
                     status=ComparisonValidationStatus.FAIL,
                     message="source metrics are unavailable or stale: " + "; ".join(errors),
+                    next_action="rerun labsidecar collect <task_id> for stale sources, then rerun labsidecar compare --save",
                 )
             )
             return False
@@ -534,6 +547,7 @@ class ComparisonValidationService:
                     name="package-ready",
                     status=ComparisonValidationStatus.FAIL,
                     message="manifest registers missing artifact(s): " + ", ".join(sorted(missing_registered)),
+                    next_action=f"run labsidecar comparison-artifacts {manifest.comparison_id} and regenerate missing artifacts",
                 )
             )
             return
@@ -543,6 +557,7 @@ class ComparisonValidationService:
                     name="package-ready",
                     status=ComparisonValidationStatus.FAIL,
                     message="comparison is missing figures, report, or traceability needed for a result package",
+                    next_action=f"rerun labsidecar compare {' '.join(manifest.task_ids)} --save --figures --report to create a fresh saved comparison",
                 )
             )
             return
@@ -591,6 +606,27 @@ def _registered_artifact_exists(output_dir: Path, path_text: str) -> bool:
     errors: list[str] = []
     path = _safe_comparison_path(output_dir, path_text, errors, "manifest artifact path")
     return path is not None and path.is_file()
+
+
+def _report_forbidden_claim_fragments(text: str) -> list[str]:
+    scannable = text.replace(DESCRIPTIVE_ONLY_NOTE, "")
+    lowered = scannable.lower()
+    forbidden: list[str] = []
+    for fragment in [
+        "statistically significant",
+        "model superiority is inferred",
+        "deployment-ready",
+        "ai-written conclusion",
+    ]:
+        if fragment in lowered:
+            forbidden.append(fragment)
+    for pattern, label in [
+        (r"\bwinner\b", "winner"),
+        (r"\bsuperior\b", "superior"),
+    ]:
+        if re.search(pattern, lowered):
+            forbidden.append(label)
+    return forbidden
 
 
 def _display_path(path: Path, root: Path) -> str:

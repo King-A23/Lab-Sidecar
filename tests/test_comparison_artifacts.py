@@ -216,6 +216,42 @@ def test_compare_save_generates_bounded_artifacts_figures_report_validate_and_pa
     assert not (package_path / "raw").exists()
 
 
+def test_comparison_report_formatting_is_descriptive_and_evidence_bounded(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first = _create_collected_task(tmp_path, "run-a", task_name="baseline|pipe")
+    second = _create_collected_task(tmp_path, "run-b", task_name="model-a")
+
+    result = invoke(tmp_path, ["compare", first, second, "--save", "--figures", "--report"])
+
+    assert result.exit_code == 0, result.output
+    comparison_id = _comparison_id(result.output)
+    comparison_path = _comparison_path(tmp_path, comparison_id)
+    report_text = (comparison_path / "reports" / "comparison-report-fragment.md").read_text(encoding="utf-8")
+    summary = json.loads((comparison_path / "comparison-summary.json").read_text(encoding="utf-8"))
+    report_summary = json.loads((comparison_path / "reports" / "comparison-report-summary.json").read_text(encoding="utf-8"))
+
+    for heading in [
+        "## Source Tasks",
+        "## Row Selection",
+        "## Comparison Table",
+        "## Evidence Paths",
+        "## Omitted And Skipped",
+        "## Omitted By Default",
+    ]:
+        assert heading in report_text
+    assert "baseline\\|pipe" in report_text
+    assert "This comparison is descriptive only; no statistical significance or model superiority is inferred." in report_text
+    assert "Comparison table CSV: `comparison-table.csv`" in report_text
+    assert "Source metrics:" in report_text
+    assert f"`{first}`" in report_text
+    assert "metrics/normalized_metrics.csv" in report_text
+    assert report_summary["non_claim_note"].startswith("This comparison is descriptive only")
+    assert summary["metrics"]
+    assert "epoch,val_accuracy,val_loss" not in report_text
+    for fragment in ["winner", "is superior", "statistically significant result", "deployment-ready", "AI-written conclusion"]:
+        assert fragment not in report_text
+
+
 def test_list_comparisons_empty_workspace(tmp_path: Path) -> None:
     assert invoke(tmp_path, ["init"]).exit_code == 0
     before = _state_snapshot(tmp_path)
@@ -639,6 +675,59 @@ def test_validate_comparison_rejects_escaped_internal_paths(tmp_path: Path) -> N
     assert validate.exit_code == 5
     assert "figure png_path escapes comparison directory" in validate.output
     assert "traceability artifact path escapes comparison directory" in validate.output
+
+
+def test_validate_comparison_missing_artifacts_show_next_actions(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first = _create_collected_task(tmp_path, "run-a")
+    second = _create_collected_task(tmp_path, "run-b")
+    result = invoke(tmp_path, ["compare", first, second, "--save"])
+    assert result.exit_code == 0, result.output
+    comparison_id = _comparison_id(result.output)
+
+    validate = invoke(
+        tmp_path,
+        [
+            "validate-comparison",
+            comparison_id,
+            "--require",
+            "figures",
+            "--require",
+            "report",
+            "--require",
+            "package-ready",
+        ],
+    )
+
+    assert validate.exit_code == 5
+    assert "[fail] figures:" in validate.output
+    assert "--save --figures creates a fresh saved comparison" in validate.output
+    assert "[fail] report:" in validate.output
+    assert "--save --report creates a fresh saved comparison" in validate.output
+    assert "[fail] package-ready:" in validate.output
+    assert "--save --figures --report to create a fresh saved comparison" in validate.output
+    assert "Traceback" not in validate.output
+
+
+def test_validate_comparison_detects_tampered_positive_claim(tmp_path: Path) -> None:
+    assert invoke(tmp_path, ["init"]).exit_code == 0
+    first = _create_collected_task(tmp_path, "run-a")
+    second = _create_collected_task(tmp_path, "run-b")
+    result = invoke(tmp_path, ["compare", first, second, "--save", "--report"])
+    assert result.exit_code == 0, result.output
+    comparison_id = _comparison_id(result.output)
+    report_path = _comparison_path(tmp_path, comparison_id) / "reports" / "comparison-report-fragment.md"
+    report_path.write_text(
+        report_path.read_text(encoding="utf-8") + "\nThis result is statistically significant and superior.\n",
+        encoding="utf-8",
+    )
+
+    validate = invoke(tmp_path, ["validate-comparison", comparison_id, "--require", "report"])
+
+    assert validate.exit_code == 5
+    assert "report contains forbidden claim fragment: statistically significant" in validate.output
+    assert "report contains forbidden claim fragment: superior" in validate.output
+    assert "This comparison is descriptive only" not in validate.output
 
 
 def test_validate_comparison_rejects_escaped_source_metrics_path(tmp_path: Path) -> None:

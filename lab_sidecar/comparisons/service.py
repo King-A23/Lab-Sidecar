@@ -841,6 +841,8 @@ def _comparison_report_markdown(
     figure_summary: dict[str, Any],
 ) -> str:
     title = manifest.name or manifest.comparison_id
+    row_selection = summary.get("row_selection") if isinstance(summary.get("row_selection"), dict) else {}
+    evidence = summary.get("evidence") if isinstance(summary.get("evidence"), dict) else {}
     lines = [
         f"# Comparison: {title}",
         "",
@@ -873,7 +875,9 @@ def _comparison_report_markdown(
             "",
             "## Row Selection",
             "",
-            "`final_row` from each source task's `metrics/normalized_metrics.csv`.",
+            f"`{row_selection.get('method') or ROW_SELECTION}` from each source task's `metrics/normalized_metrics.csv`.",
+            "",
+            _md(str(row_selection.get("description") or "Each selected value is descriptive final-row evidence.")),
             "",
             "## Common Numeric Metrics",
             "",
@@ -887,15 +891,48 @@ def _comparison_report_markdown(
     )
     for row in table_rows[:80]:
         lines.append(
-            f"| `{row['task_id']}` | `{row['metric']}` | {row['value']} | {row['source_row_number']} |"
+            f"| `{_md(str(row['task_id']))}` | `{_md(str(row['metric']))}` | {row['value']} | {row['source_row_number']} |"
         )
     omitted_rows = max(0, len(table_rows) - 80)
     if omitted_rows:
         lines.append(f"| ... | ... | omitted {omitted_rows} row(s) from report display | ... |")
+    lines.extend(
+        [
+            "",
+            "## Evidence Paths",
+            "",
+            f"- Comparison table CSV: `{evidence.get('comparison_table_csv') or TABLE_CSV_RELATIVE_PATH.as_posix()}`",
+            f"- Comparison table JSON: `{evidence.get('comparison_table_json') or TABLE_JSON_RELATIVE_PATH.as_posix()}`",
+        ]
+    )
+    source_metrics = evidence.get("source_metrics") if isinstance(evidence.get("source_metrics"), list) else []
+    for item in source_metrics:
+        if not isinstance(item, dict):
+            continue
+        lines.append(
+            "- Source metrics: "
+            f"`{item.get('task_id')}` -> `{item.get('path')}` "
+            f"(row `{item.get('source_row_number')}`, sha256 `{item.get('sha256')}`)"
+        )
     if figure_summary:
         lines.extend(["", "## Figures", ""])
         for figure in figure_summary.get("figures") or []:
             lines.append(f"- `{figure.get('png_path')}` / `{figure.get('svg_path')}`")
+    omitted_metric_count = summary.get("omitted_metric_summary_count")
+    skipped_fields = summary.get("skipped_fields") if isinstance(summary.get("skipped_fields"), dict) else {}
+    if omitted_metric_count or any(skipped_fields.get(key) for key in skipped_fields):
+        lines.extend(["", "## Omitted And Skipped", ""])
+        if omitted_metric_count:
+            lines.append(f"- Omitted metric summaries from report display: `{omitted_metric_count}`")
+        excluded = skipped_fields.get("excluded_metadata_fields") or []
+        if excluded:
+            lines.append("- Metadata fields excluded from metrics: " + ", ".join(f"`{_md(str(field))}`" for field in excluded))
+        common_non_numeric = skipped_fields.get("common_non_numeric_fields") or []
+        if common_non_numeric:
+            lines.append(f"- Common non-numeric fields skipped: `{len(common_non_numeric)}`")
+        task_specific = skipped_fields.get("task_specific_fields") or {}
+        if isinstance(task_specific, dict) and task_specific:
+            lines.append(f"- Task-specific fields skipped: `{len(task_specific)}` task(s)")
     warnings = summary.get("warnings") or []
     if warnings:
         lines.extend(["", "## Warnings", ""])
