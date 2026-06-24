@@ -95,6 +95,16 @@ python -m lab_sidecar.cli.app artifacts "$TASK_ID"
 python -m lab_sidecar.cli.app open "$TASK_ID"
 ```
 
+For commands that do not need shell parsing, v0.1.4 also supports an
+opt-in argv mode:
+
+```bash
+python -m lab_sidecar.cli.app run --no-shell -- python examples/simple-success/train.py --output metrics.csv
+```
+
+This uses non-shell argv execution for that run and records the argv list in
+`reproduce/run.json`. It is not an OS sandbox.
+
 The `run` command prints the task id, artifact directory, log paths, and next likely commands. A task id looks like `task_20260608_132834_153843`.
 
 Expected files:
@@ -104,6 +114,8 @@ Expected files:
   manifest.json
   stdout.log
   stderr.log
+  reproduce/command.txt
+  reproduce/run.json
   metrics/normalized_metrics.csv
   metrics/scenario-summary.json
   figures/*.png
@@ -254,6 +266,7 @@ Both `labsidecar` and `lab-sidecar` console scripts point at the same CLI after 
 | `doctor` | Check Python version, writable workspace, config, task directory, and optional MCP SDK. |
 | `run "<command>"` | Execute a user-provided local command and capture task logs/artifacts. |
 | `run "<command>" --background` | Start a long task and return a task id immediately. |
+| `run --no-shell -- <program> <arg> ...` | Execute an argv list with `subprocess` `shell=False`; this avoids shell parsing for that run but is not sandboxing. |
 | `ingest <path>` | Register an existing file or directory without running a command. |
 | `status <task_id>` | Refresh and print status, exit code, timestamps, artifact count, and next steps. |
 | `list --limit 20 [--status completed]` | Show recent tasks from task manifests with scan-friendly status, timestamp, artifact, and name columns. |
@@ -350,7 +363,8 @@ Host setup is in [docs/mcp-host-config.md](docs/mcp-host-config.md). A repo-scop
 
 ## Safety And Limits
 
-- Manual CLI `run` executes the local command the user explicitly provides. Lab-Sidecar records the command, logs, status, and artifacts, but it is not an OS sandbox and the command can do whatever the user's environment permits.
+- Manual CLI `run "<command>"` executes the local command string the user explicitly provides through the legacy shell path. Lab-Sidecar records the command, logs, status, and artifacts, but it is not an OS sandbox and the command can do whatever the user's environment permits.
+- Manual CLI `run --no-shell -- <program> <arg> ...` executes an argv list with `subprocess` `shell=False` and records the structure in `reproduce/run.json`. This avoids shell parsing, glob expansion, variable expansion, and shell chaining for that run; it is still local process execution with the user's normal permissions, not OS sandboxing.
 - MCP/V2 and other agent-triggered command paths are higher risk than manual CLI use. MCP-hosted command delegation goes through bounded delegation, configured workspace boundaries, and the conservative command safety gate. Direct Python host integrations around `delegate_experiment_artifacts(command=...)` must keep explicit command policy or confirmation in front of that call.
 - Those MCP/V2 guardrails are not operating-system isolation, a container runtime, a malware detector, or a guarantee that a command is safe.
 - Generated logs and artifacts may contain local paths, command arguments, environment details, metrics, or snippets of output. Review and redact before sharing.

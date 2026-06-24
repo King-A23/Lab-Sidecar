@@ -84,9 +84,9 @@ complete.
 - [x] Add type-check baseline and CI gate.
 - [x] Add coverage reporting and a conservative ratcheting policy.
 - [x] Add Windows and macOS CI smoke coverage.
-- [ ] Design the additive CLI argv/non-shell run path.
-- [ ] Implement the argv/non-shell path without breaking `run "<command>"`.
-- [ ] Add reproduce metadata that distinguishes shell and argv run modes.
+- [x] Design the additive CLI argv/non-shell run path.
+- [x] Implement the argv/non-shell path without breaking `run "<command>"`.
+- [x] Add reproduce metadata that distinguishes shell and argv run modes.
 - [ ] Add safe-profile tests only after argv mode exists.
 - [ ] Add alpha.4 release readiness or post-release audit evidence before any
   tag or publish step.
@@ -598,10 +598,39 @@ Observed results for this P4 cross-platform CI smoke slice:
   coverage reporting, package build, stale-worker recovery, background failure
   refresh, or future argv/non-shell run safety cases on Windows/macOS.
 
+Commands run for this P3 argv/non-shell run-safety slice:
+
+```text
+PATH=.venv/bin:$PATH python -m pytest tests/test_cli_smoke.py tests/test_manifest_contract.py tests/test_traceability_contract.py tests/test_package_contract.py -q
+PATH=.venv/bin:$PATH ruff check lab_sidecar tests
+PATH=.venv/bin:$PATH python -m mypy
+git diff --check
+```
+
+Observed results for this P3 argv/non-shell run-safety slice:
+
+- Added an opt-in `run --no-shell -- <program> <arg> ...` path that executes
+  argv with `subprocess.Popen(argv, shell=False)`.
+- Preserved legacy `run "<command>"` shell execution with `shell=True`.
+- Added structured run metadata to `manifest.json`, `reproduce/run.json`,
+  package summaries, and task-local traceability.
+- Confirmed package omission defaults for full logs, raw sources, SQLite,
+  worker audit files, sandbox files, and unrelated workspace files remain in
+  force.
+- `PATH=.venv/bin:$PATH python -m pytest tests/test_cli_smoke.py tests/test_manifest_contract.py tests/test_traceability_contract.py tests/test_package_contract.py -q`:
+  passed, `119 passed in 11.64s`.
+- `PATH=.venv/bin:$PATH ruff check lab_sidecar tests`: passed,
+  `All checks passed!`.
+- `PATH=.venv/bin:$PATH python -m mypy`: passed,
+  `Success: no issues found in 18 source files`.
+- `git diff --check`: passed with no output.
+- Full final validation for this v0.1.4 implementation is recorded in
+  `docs/v0.1.4-run-safety-acceptance.md`.
+
 ## Current Acceptance Status
 
-Phase 2 is not accepted yet. P0 inventory, P1 schema stabilization, and the P2
-ruff lint, type-check, and coverage baseline/CI gate slices are accepted for
-this phase. The first P4 Windows/macOS focused CI smoke slice is also accepted,
-but P3 run-safety design, broader P4 cross-platform reliability, and P5
-alpha.4 release evidence remain open.
+Phase 2 is not accepted yet. P0 inventory, P1 schema stabilization, the P2
+ruff lint, type-check, and coverage baseline/CI gate slices, and the P3
+additive CLI argv/non-shell run path slice are accepted for this phase. The
+first P4 Windows/macOS focused CI smoke slice is also accepted, but broader P4
+cross-platform reliability and P5 alpha.4 release evidence remain open.

@@ -16,6 +16,7 @@ def default_task_artifacts(task_dir: Path, root: Path) -> list[ArtifactRecord]:
     stdout = task_dir / "stdout.log"
     stderr = task_dir / "stderr.log"
     command = task_dir / "reproduce" / "command.txt"
+    run = task_dir / "reproduce" / "run.json"
     env = task_dir / "reproduce" / "env.json"
     git = task_dir / "reproduce" / "git.json"
     dependencies = task_dir / "reproduce" / "dependencies.json"
@@ -39,6 +40,13 @@ def default_task_artifacts(task_dir: Path, root: Path) -> list[ArtifactRecord]:
             type="reproduce",
             path=to_manifest_path(command, root),
             description="Original command used to run the task",
+            source_paths=[],
+        ),
+        ArtifactRecord(
+            artifact_id="reproduce_run",
+            type="reproduce",
+            path=to_manifest_path(run, root),
+            description="Structured run mode and argv metadata",
             source_paths=[],
         ),
         ArtifactRecord(

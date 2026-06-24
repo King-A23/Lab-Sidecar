@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lab_sidecar.core.models import TaskRecord, TaskStatus
+from lab_sidecar.core.models import TaskRecord, TaskStatus, effective_run_mode
 from lab_sidecar.core.paths import resolve_workspace_path, sqlite_path
 from lab_sidecar.core.traceability import TRACEABILITY_RELATIVE_PATH, refresh_traceability
 from lab_sidecar.core.manifest import manifest_path, write_manifest
@@ -66,6 +66,7 @@ class PackageFileSpec:
 PACKAGE_FILE_SPECS = [
     PackageFileSpec(Path("manifest.json"), "manifest", "Task manifest.", required=True),
     PackageFileSpec(Path("reproduce/command.txt"), "reproduce", "Original command."),
+    PackageFileSpec(Path("reproduce/run.json"), "reproduce", "Structured run mode and argv metadata."),
     PackageFileSpec(Path("reproduce/env.json"), "reproduce", "Environment metadata."),
     PackageFileSpec(Path("reproduce/git.json"), "reproduce", "Git metadata."),
     PackageFileSpec(Path("reproduce/dependencies.json"), "reproduce", "Dependency metadata."),
@@ -438,7 +439,11 @@ def _package_summary(
             "created_at": record.created_at,
             "started_at": record.started_at,
             "finished_at": record.finished_at,
-            "command_preview": _preview(record.command),
+            "command_preview": _package_command_preview(record, included),
+            "run_mode": effective_run_mode(record),
+            "argv_count": len(record.argv or []) if effective_run_mode(record) == "argv" else None,
+            "run_spec_path": "reproduce/run.json" if _has_run_spec(record, included) else None,
+            "safe_profile": record.safe_profile,
             "source_path": record.source_path,
             "failure_summary": _bounded_failure_summary(record.failure_summary),
         },
@@ -457,6 +462,21 @@ def _package_summary(
         ],
         "omission_policy": "allowlist package; full logs, raw source files, local indexes, worker transcripts, sandbox files, and unrelated workspace files are omitted by default",
     }
+
+
+def _has_run_spec(record: TaskRecord, included: list[dict[str, Any]]) -> bool:
+    if record.mode != "run":
+        return False
+    return any(item.get("package_path") == "reproduce/run.json" for item in included)
+
+
+def _package_command_preview(record: TaskRecord, included: list[dict[str, Any]]) -> str:
+    if effective_run_mode(record) != "argv":
+        return _preview(record.command)
+    argv_count = len(record.argv or [])
+    if _has_run_spec(record, included):
+        return f"(argv mode; {argv_count} args; see reproduce/run.json)"
+    return f"(argv mode; {argv_count} args; structured run metadata unavailable)"
 
 
 def _readme(
@@ -479,7 +499,8 @@ def _readme(
     if record.mode == "ingest":
         lines.append(f"Source path: `{record.source_path or '(none)'}`")
     else:
-        lines.append(f"Command preview: `{_preview(record.command)}`")
+        lines.append(f"Command preview: `{_package_command_preview(record, included)}`")
+        lines.append(f"Run mode: `{effective_run_mode(record) or 'shell'}`")
     if summary["package_type"] == "diagnostic":
         lines.extend(
             [
@@ -547,6 +568,8 @@ def _redaction_notes(
         f"Package task id: `{record.task_id}`",
         "",
         "This package was built with a local allowlist. It includes the task manifest, reproduce metadata, normalized metrics, generated figures, report fragments, and slide drafts when those files are present.",
+        "",
+        "`manifest.json`, `reproduce/run.json`, and `provenance/traceability.json` can include command previews, argv values, local paths, and other run metadata. Review and redact those files before sharing outside a trusted context.",
         "",
         "The default package does not copy full stdout/stderr logs, raw source files, `.lab-sidecar/index.sqlite`, worker prompt or response bodies, temporary sandbox files, or unrelated workspace files.",
         "",
