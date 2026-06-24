@@ -632,17 +632,12 @@ def _best_row_for_metric(
 
 def _selected_fields(row: dict[str, object], metric: str) -> dict[str, Any]:
     selected: dict[str, Any] = {}
-    for field in [*IDENTITY_FIELD_PRIORITY, metric, *CONTEXT_FIELD_PRIORITY]:
-        if field in row and field not in selected and not _is_empty_value(row.get(field)):
-            selected[field] = _bounded_scalar(row[field])
+    for field in [metric, *IDENTITY_FIELD_PRIORITY, *CONTEXT_FIELD_PRIORITY]:
+        value = _safe_selected_field_value(field, row.get(field)) if field in row and field not in selected else None
+        if value is not None:
+            selected[field] = value
         if len(selected) >= MAX_BOUNDED_SELECTED_FIELDS:
             return selected
-    for field, value in row.items():
-        if field in selected or _is_empty_value(value):
-            continue
-        selected[field] = _bounded_scalar(value)
-        if len(selected) >= MAX_BOUNDED_SELECTED_FIELDS:
-            break
     return selected
 
 
@@ -873,6 +868,23 @@ def _parse_number(value: object) -> float | None:
         return None
 
 
+def _safe_selected_field_value(field: str, value: object) -> object | None:
+    if _is_empty_value(value):
+        return None
+    if _is_metric_like_field(field) and _parse_number(value) is None:
+        return None
+    return _bounded_scalar(value)
+
+
+def _is_metric_like_field(field: str) -> bool:
+    normalized = _normalized_field(field)
+    if normalized in HIGHER_IS_BETTER_METRICS or normalized in LOWER_IS_BETTER_METRICS:
+        return True
+    if any(hint in normalized for hint in HIGHER_IS_BETTER_METRICS):
+        return True
+    return any(hint in normalized for hint in LOWER_IS_BETTER_METRICS)
+
+
 def _json_number(value: float) -> int | float:
     if value.is_integer():
         return int(value)
@@ -1038,6 +1050,14 @@ def _resolve_source_pattern(root: Path, pattern: str) -> list[Path]:
     if not _has_glob_magic(pattern):
         candidate = Path(base_pattern).resolve()
         return [candidate] if candidate.exists() and candidate.is_file() else []
+
+    if not path.is_absolute():
+        matches = [
+            candidate.resolve()
+            for candidate in root.resolve().glob(normalized_pattern)
+            if candidate.is_file()
+        ]
+        return sorted(set(matches), key=lambda item: item.as_posix())
 
     matches: list[Path] = []
     for candidate in search_root.rglob("*"):

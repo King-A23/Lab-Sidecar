@@ -68,8 +68,12 @@ Canonical response shape:
   "next_actions": ["inspect_sidecar_task task_..."],
   "risk_flags": [],
   "omitted": {
+    "full_command": "omitted_by_default",
     "full_stdout": "omitted_by_default",
+    "full_stderr": "omitted_by_default",
     "metrics_rows": "omitted_by_default",
+    "report_markdown": "omitted_by_default",
+    "ppt_contents": "omitted_by_default",
     "worker_prompt_response": "omitted_by_default",
     "artifact_bodies": "omitted_by_default"
   }

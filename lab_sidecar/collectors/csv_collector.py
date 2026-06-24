@@ -15,7 +15,7 @@ class CsvCollectionResult:
 
 def read_csv_rows(path: Path) -> list[dict[str, object]]:
     with path.open("r", newline="", encoding="utf-8-sig") as fh:
-        reader = csv.DictReader(fh)
+        reader = csv.DictReader(fh, strict=True)
         if not reader.fieldnames:
             return []
 

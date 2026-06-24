@@ -134,6 +134,39 @@ def test_v2_compact_scenario_does_not_leak_free_text_selected_fields(tmp_path: P
     assert "SECRET-PRIVATE-COMMENT-FOR-V2-COMPACT-RESPONSE" not in serialized
 
 
+def test_v2_delegate_rejects_workspace_external_and_state_dir_result_paths(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+    outside = tmp_path.parent / "external-results.csv"
+    outside.write_text("epoch,accuracy\n1,0.9\n", encoding="utf-8")
+    state_path = tmp_path / ".lab-sidecar" / "private-results.csv"
+    state_path.write_text("epoch,accuracy\n1,0.8\n", encoding="utf-8")
+
+    outside_result = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="This should be rejected because the result path is outside the workspace.",
+        result_path=outside,
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+    state_result = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="This should be rejected because the result path is inside Lab-Sidecar state.",
+        result_path=state_path,
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+
+    assert outside_result["schema_version"] == "2.1"
+    assert outside_result["status"] == "rejected"
+    assert outside_result["task_id"] is None
+    assert "outside" in " ".join(outside_result["warnings"])
+    assert state_result["schema_version"] == "2.1"
+    assert state_result["status"] == "rejected"
+    assert state_result["task_id"] is None
+    assert ".lab-sidecar" in " ".join(state_result["warnings"])
+    assert not any((tmp_path / ".lab-sidecar" / "tasks").glob("task_*"))
+
+
 def test_cancel_completed_and_missing_tasks_return_bounded_not_applicable(tmp_path: Path) -> None:
     copy_examples(tmp_path)
     init_workspace(tmp_path)
@@ -252,6 +285,36 @@ def test_preview_does_not_return_complete_artifact_bodies_by_default(tmp_path: P
     assert "Best val_accuracy=0.86" not in serialized
     assert serialized.count("val_accuracy") <= 2
     assert "presentation-draft.pptx" not in serialized
+
+
+def test_v2_omitted_contract_uses_public_boundary_keys(tmp_path: Path) -> None:
+    init_workspace(tmp_path)
+
+    result = delegate_experiment_artifacts(
+        workspace_path=tmp_path,
+        user_goal="Validate omitted contract keys for rejected result path.",
+        result_path=tmp_path / ".lab-sidecar" / "private-results.csv",
+        desired_outputs=["metrics"],
+        intelligent_mode="off",
+    )
+
+    omitted = result["omitted"]
+    public_keys = {
+        "full_command",
+        "full_stdout",
+        "full_stderr",
+        "metrics_rows",
+        "report_markdown",
+        "ppt_contents",
+        "worker_prompt_response",
+        "artifact_bodies",
+    }
+    assert set(omitted) == public_keys
+    for key in public_keys:
+        assert omitted[key] == "omitted_by_default"
+    assert "report_body" not in omitted
+    assert "ppt_content" not in omitted
+    assert "full_data_files" not in omitted
 
 
 def test_preview_withholds_complete_small_csv_markdown_and_log_bodies(tmp_path: Path) -> None:

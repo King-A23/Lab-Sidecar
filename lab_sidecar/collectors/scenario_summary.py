@@ -474,9 +474,9 @@ def _is_later_checkpoint(
 
 def _selected_fields(row: dict[str, object], metric: str) -> dict[str, Any]:
     selected: dict[str, Any] = {}
-    for field in [*SELECTED_FIELD_PRIORITY, metric, *HIGHER_IS_BETTER, *LOWER_IS_BETTER]:
-        if field in row and field not in selected and not _is_empty_value(row.get(field)):
-            selected[field] = _bounded_scalar(row[field])
+    for field in [metric, *SELECTED_FIELD_PRIORITY, *HIGHER_IS_BETTER, *LOWER_IS_BETTER]:
+        if field in row and field not in selected and _safe_selected_field_value(field, row.get(field)) is not None:
+            selected[field] = _safe_selected_field_value(field, row[field])
         if len(selected) >= MAX_SELECTED_FIELDS:
             return selected
     return selected
@@ -507,6 +507,23 @@ def _parse_number(value: object) -> float | None:
     if not math.isfinite(parsed):
         return None
     return parsed
+
+
+def _safe_selected_field_value(field: str, value: object) -> object | None:
+    if _is_empty_value(value):
+        return None
+    if _is_metric_like_field(field) and _parse_number(value) is None:
+        return None
+    return _bounded_scalar(value)
+
+
+def _is_metric_like_field(field: str) -> bool:
+    normalized = _normalized(field)
+    if normalized in HIGHER_IS_BETTER or normalized in LOWER_IS_BETTER:
+        return True
+    if any(hint in normalized for hint in HIGHER_IS_BETTER):
+        return True
+    return any(hint in normalized for hint in LOWER_IS_BETTER)
 
 
 def _has_numeric_value(rows: list[dict[str, object]], field: str) -> bool:
