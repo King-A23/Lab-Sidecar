@@ -6,9 +6,8 @@ examples, runs the simple demo, creates deliverable artifacts, and verifies the
 shareable package.
 
 Use a version that has a published GitHub release. The examples below use
-`0.1.5` because it is the latest published release verified during this
-implementation slice. After maintainers publish v0.1.6, replace `0.1.5` with
-`0.1.6`.
+`0.1.6`. If a newer release exists, replace `0.1.6` with the latest published
+version.
 
 PyPI is not the default install promise for this public-alpha line unless a
 maintainer publishes and announces it separately.
@@ -18,7 +17,7 @@ maintainer publishes and announces it separately.
 Create a workspace and virtual environment:
 
 ```bash
-VERSION=0.1.5
+VERSION=0.1.6
 mkdir lab-sidecar-first-run
 cd lab-sidecar-first-run
 python -m venv .venv
@@ -75,7 +74,7 @@ Replace `<printed_task_id>` with the id printed by `run`, such as
 Create a workspace and virtual environment:
 
 ```powershell
-$Version = "0.1.5"
+$Version = "0.1.6"
 New-Item -ItemType Directory -Path "lab-sidecar-first-run" | Out-Null
 Set-Location "lab-sidecar-first-run"
 py -3 -m venv .venv
