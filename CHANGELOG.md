@@ -2,6 +2,35 @@
 
 All notable user-facing changes should be recorded here. This project has not published a stable release yet; entries describe the current public-alpha baseline and pending changes.
 
+## [0.1.6] - 2026-06-25
+
+### Added
+
+- Added a first-user quickstart focused on installing a GitHub release wheel,
+  obtaining matching examples from the source archive, running the simple demo,
+  validating artifacts, packaging the result, and verifying the package.
+- Added a recipe gallery for local training runs, explicit messy CSV/JSON
+  ingest, and saved comparison packaging.
+- Added v0.1.6 onboarding plan and acceptance records for first-user
+  onboarding, recipe trust, and release asset evidence.
+
+### Changed
+
+- Slimmed README onboarding so the first path points to quickstart and recipes
+  instead of mixing release install, demo, advanced config, comparison, MCP, and
+  maintainer release checks in one long section.
+- Clarified that the GitHub release wheel is the install-smoked public-alpha
+  artifact, while matching source archives or clones provide examples and docs.
+- Kept PyPI outside the default public-alpha install promise unless maintainers
+  separately publish and announce it.
+
+### Validation
+
+- Real v0.1.5 GitHub release wheel smoke evidence is recorded separately from
+  local v0.1.6 build and wheel smoke validation.
+- No v0.1.6 tag, GitHub release, or PyPI publish was created in this
+  implementation slice.
+
 ## [0.1.5] - 2026-06-25
 
 ### Added

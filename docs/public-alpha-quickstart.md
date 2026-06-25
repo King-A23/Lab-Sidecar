@@ -1,12 +1,33 @@
 # Public Alpha Quickstart
 
-This is the 10-minute local path for Lab-Sidecar public alpha in AI-agent and
-research workflows. It uses built-in examples and does not require a browser
-app, HTTP service, AI services, animation, or a remote runner.
+This is the compact local path for Lab-Sidecar public alpha. For the fully
+copyable first-user install flow, start with
+[first-user-quickstart.md](first-user-quickstart.md). For scenario-specific
+commands, use [recipes.md](recipes.md).
+
+Lab-Sidecar is CLI-first, file-first, and local-first. This quickstart does not
+require a browser app, HTTP service, hosted service, AI services, animation, or
+a remote runner.
 
 ## Install
 
-From the repository root:
+For released v0.1.x artifacts, install the GitHub release wheel in a virtual
+environment:
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install lab_sidecar-<version>-py3-none-any.whl
+labsidecar --help
+```
+
+The wheel is the install-smoked release artifact. Use the matching source
+archive or a clone for `examples/` and docs. PyPI is not the default install
+promise for this public-alpha line unless a maintainer publishes and announces
+it separately.
+
+For development from a clone:
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -19,12 +40,12 @@ python -m lab_sidecar.cli.app --help
 ```
 
 On Windows PowerShell, use `py -3` instead of `python` if that is your
-configured launcher.
-
-If you plan to run the optional MCP smoke, install `.[dev,mcp]` instead of
-`.[dev]`.
+configured launcher. If you plan to run the optional MCP smoke, install
+`.[dev,mcp]` from a clone instead of `.[dev]`.
 
 ## Create A Workspace
+
+From a source checkout or extracted source archive:
 
 ```bash
 export LABSIDECAR_REPO="$(pwd)"
@@ -33,8 +54,8 @@ rm -rf "$LABSIDECAR_WS"
 mkdir -p "$LABSIDECAR_WS"
 cp -R "$LABSIDECAR_REPO/examples" "$LABSIDECAR_WS/examples"
 cd "$LABSIDECAR_WS"
-python -m lab_sidecar.cli.app init
-python -m lab_sidecar.cli.app doctor
+labsidecar init
+labsidecar doctor
 ```
 
 PowerShell equivalent:
@@ -46,41 +67,41 @@ Remove-Item -Recurse -Force $env:LABSIDECAR_WS -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Path $env:LABSIDECAR_WS | Out-Null
 Copy-Item -Recurse "$env:LABSIDECAR_REPO\examples" "$env:LABSIDECAR_WS\examples"
 Set-Location $env:LABSIDECAR_WS
-py -3 -m lab_sidecar.cli.app init
-py -3 -m lab_sidecar.cli.app doctor
+labsidecar init
+labsidecar doctor
 ```
 
 ## Run The First Experiment
 
 ```bash
-python -m lab_sidecar.cli.app run "python examples/simple-success/train.py --output metrics.csv"
+labsidecar run "python examples/simple-success/train.py --output metrics.csv"
 export TASK_ID=<printed_task_id>
-python -m lab_sidecar.cli.app collect "$TASK_ID"
-python -m lab_sidecar.cli.app figures "$TASK_ID"
-python -m lab_sidecar.cli.app report "$TASK_ID"
-python -m lab_sidecar.cli.app slides "$TASK_ID"
-python -m lab_sidecar.cli.app validate "$TASK_ID"
-python -m lab_sidecar.cli.app package "$TASK_ID" --output "lab-sidecar-package-$TASK_ID"
-python -m lab_sidecar.cli.app package-verify "lab-sidecar-package-$TASK_ID"
-python -m lab_sidecar.cli.app artifacts "$TASK_ID"
-python -m lab_sidecar.cli.app open "$TASK_ID"
+labsidecar collect "$TASK_ID"
+labsidecar figures "$TASK_ID"
+labsidecar report "$TASK_ID"
+labsidecar slides "$TASK_ID"
+labsidecar validate "$TASK_ID"
+labsidecar package "$TASK_ID" --output "lab-sidecar-package-$TASK_ID"
+labsidecar package-verify "lab-sidecar-package-$TASK_ID"
+labsidecar artifacts "$TASK_ID"
+labsidecar open "$TASK_ID"
 ```
 
 PowerShell:
 
 ```powershell
-py -3 -m lab_sidecar.cli.app run "py -3 examples/simple-success/train.py --output metrics.csv"
+labsidecar run "py -3 examples/simple-success/train.py --output metrics.csv"
 $env:TASK_ID = "<printed_task_id>"
-py -3 -m lab_sidecar.cli.app collect $env:TASK_ID
-py -3 -m lab_sidecar.cli.app figures $env:TASK_ID
-py -3 -m lab_sidecar.cli.app report $env:TASK_ID
-py -3 -m lab_sidecar.cli.app slides $env:TASK_ID
-py -3 -m lab_sidecar.cli.app validate $env:TASK_ID
+labsidecar collect $env:TASK_ID
+labsidecar figures $env:TASK_ID
+labsidecar report $env:TASK_ID
+labsidecar slides $env:TASK_ID
+labsidecar validate $env:TASK_ID
 $PACKAGE_DIR = "lab-sidecar-package-$($env:TASK_ID)"
-py -3 -m lab_sidecar.cli.app package $env:TASK_ID --output $PACKAGE_DIR
-py -3 -m lab_sidecar.cli.app package-verify $PACKAGE_DIR
-py -3 -m lab_sidecar.cli.app artifacts $env:TASK_ID
-py -3 -m lab_sidecar.cli.app open $env:TASK_ID
+labsidecar package $env:TASK_ID --output $PACKAGE_DIR
+labsidecar package-verify $PACKAGE_DIR
+labsidecar artifacts $env:TASK_ID
+labsidecar open $env:TASK_ID
 ```
 
 Replace `<printed_task_id>` with the id printed by `run`, for example
@@ -99,49 +120,20 @@ Key files:
 - `reports/report-fragment.md`
 - `slides/presentation-draft.pptx`
 - `slides/slides-summary.json`
+- `provenance/traceability.json`
 
 The package directory includes `package-summary.json`, `artifact-index.json`,
 `artifact-index.sha256`, and `redaction-notes.md`. `package-verify` checks the
 package index digest, indexed file hashes and sizes, and rejects unexpected
 files.
 
-## Ingest Existing Results
+## Existing Results And Comparisons
 
-For existing CSV/JSON result directories:
+For existing CSV/JSON result directories and saved comparison packages, use the
+recipe gallery:
 
-```bash
-python -m lab_sidecar.cli.app ingest examples/csv-comparison
-export TASK_ID=<printed_task_id>
-python -m lab_sidecar.cli.app collect "$TASK_ID"
-python -m lab_sidecar.cli.app figures "$TASK_ID"
-python -m lab_sidecar.cli.app report "$TASK_ID"
-python -m lab_sidecar.cli.app slides "$TASK_ID"
-```
-
-For a project presentation-style example:
-
-```bash
-python -m lab_sidecar.cli.app ingest examples/project-presentation-pack
-export TASK_ID=<printed_task_id>
-python -m lab_sidecar.cli.app collect "$TASK_ID"
-python -m lab_sidecar.cli.app figures "$TASK_ID"
-python -m lab_sidecar.cli.app report "$TASK_ID"
-python -m lab_sidecar.cli.app slides "$TASK_ID" --template zh-project
-```
-
-Use `python -m lab_sidecar.cli.app list` to find recent tasks, and
-`python -m lab_sidecar.cli.app open "$TASK_ID"` to print the artifact directory.
-
-## Save A Local Comparison
-
-After collecting two to five local tasks, save a descriptive comparison:
-
-```bash
-python -m lab_sidecar.cli.app compare <task_id_a> <task_id_b> --save --name "baseline-vs-model-a" --figures --report
-export COMPARISON_ID=<printed_comparison_id>
-python -m lab_sidecar.cli.app validate-comparison "$COMPARISON_ID" --require figures --require report --require package-ready
-python -m lab_sidecar.cli.app package-comparison "$COMPARISON_ID" --output "lab-sidecar-comparison-$COMPARISON_ID"
-python -m lab_sidecar.cli.app package-verify "lab-sidecar-comparison-$COMPARISON_ID"
+```text
+docs/recipes.md
 ```
 
 Saved comparison artifacts live under
@@ -151,7 +143,8 @@ schema expansion, or default AI analysis is added.
 
 ## MCP Smoke
 
-MCP support is experimental and local-first. Run the real stdio smoke with:
+MCP support is experimental and local-first. Run the real stdio smoke only when
+MCP behavior or packaging metadata is in scope:
 
 ```bash
 python "$LABSIDECAR_REPO/scripts/mcp_stdio_smoke.py" --workspace "${TMPDIR:-/tmp}/lab-sidecar-alpha-mcp-smoke"
@@ -183,8 +176,10 @@ If `collect` fails, open:
 Common cases:
 
 - No CSV/JSON candidates were found.
-- CSV/JSON candidates existed, but files were empty, malformed, or did not contain recognized metric columns.
-- The command wrote output outside the workspace or in a nested directory that `collect` does not scan.
+- CSV/JSON candidates existed, but files were empty, malformed, or did not
+  contain recognized metric columns.
+- The command wrote output outside the workspace or in a nested directory that
+  `collect` does not scan.
 
 If `figures` reports an unsupported chart type, deterministic figures may still
 be working as intended. Lab-Sidecar supports deterministic `line`, `bar`, and
@@ -192,7 +187,7 @@ be working as intended. Lab-Sidecar supports deterministic `line`, `bar`, and
 unsupported chart spec, run:
 
 ```bash
-python -m lab_sidecar.cli.app figures "$TASK_ID" --spec figure.yaml --fallback bounded
+labsidecar figures "$TASK_ID" --spec figure.yaml --fallback bounded
 ```
 
 Fallback is default-off. See

@@ -13,6 +13,17 @@ installation and adds local release verification scripts. The implementation
 slice does not create a v0.1.5 tag, create a GitHub release, or publish to
 PyPI; those remain maintainer-operated release steps.
 
+The v0.1.6 first-user onboarding slice makes the public release path easier to
+follow: release wheel install, matching source examples, demo run, validation,
+packaging, package verification, and recipe navigation. It does not create a
+v0.1.6 tag, create a GitHub release, or publish to PyPI in this implementation
+slice.
+
+After the v0.1.5 implementation slice, maintainers published
+[Lab-Sidecar v0.1.5](https://github.com/King-A23/Lab-Sidecar/releases/tag/v0.1.5)
+with wheel and sdist assets. v0.1.6 records a real network smoke of that
+published wheel as release-asset evidence for the current onboarding work.
+
 ## Summary
 
 Lab-Sidecar public alpha is a local-first, CLI-first research sidecar for AI agents and experiment workflows. It can run or ingest local experiment results, collect CSV/JSON metrics, generate static figures, write deterministic Markdown report fragments, and create editable static PPTX drafts.
